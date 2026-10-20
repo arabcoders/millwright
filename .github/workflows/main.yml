@@ -142,46 +142,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  changelog:
-    name: Publish commit history
-    needs: test
-    if: vars.REGISTRY == '' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: changelog-pages
-      cancel-in-progress: false
-    steps:
-      - name: Download frontend
-        uses: actions/download-artifact@v8
-        with:
-          name: frontend-build
-          path: frontend
-
-      - name: Prepare commit history
-        run: |
-          mkdir site
-          cp frontend/CHANGELOG.json site/CHANGELOG.json
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload commit history
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: site
-
-      - name: Publish commit history
-        id: deployment
-        uses: actions/deploy-pages@v4
-
   docker:
     name: Build image (amd64)
     needs: test

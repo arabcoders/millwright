@@ -128,7 +128,8 @@ class StagingService:
         from common.process import drain
 
         while self.tasks:
-            await drain(asyncio.gather(*tuple(self.tasks.values()), return_exceptions=True))
+            # Yield even for finished tasks so their removal callbacks can run.
+            await drain(asyncio.create_task(asyncio.wait(tuple(self.tasks.values()))))
         # Every staging entry point retains this lock until filesystem work drains.
         async with self._stage_lock:
             pass

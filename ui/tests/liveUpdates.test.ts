@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
+import * as realUtils from '../app/utils';
 
 const callbacks: Array<(event: ServerEvent) => void> = [];
 const reconnects: Array<() => void> = [];
@@ -19,6 +20,7 @@ let responseTotal: number | undefined;
 let actionStatus = 200;
 
 mock.module('~/utils', () => ({
+  ...realUtils,
   request: (url: string) => {
     calls.push(url);
     if (holdRequest)

@@ -2764,6 +2764,8 @@ async def test_capacity_allows_next(writer_env, monkeypatch):
     h, conn = hub(env), FakeConn([hello()])
     connection = await serve(h, conn)
     capacity = h.staging._capacity_warning
+    stage_job = h.staging.stage_job
+    completed, release = asyncio.Event(), asyncio.Event()
     checks = []
 
     async def limited(session, job_id, *args, **kwargs):
@@ -2772,10 +2774,23 @@ async def test_capacity_allows_next(writer_env, monkeypatch):
             return "Workspace capacity is unavailable."
         return await capacity(session, job_id, *args, **kwargs)
 
+    async def stage(job_id):
+        result = await stage_job(job_id)
+        if job_id == blocked:
+            await release.wait()
+            completed.set()
+        return result
+
     monkeypatch.setattr(h.staging, "_capacity_warning", limited)
+    monkeypatch.setattr(h.staging, "stage_job", stage)
     try:
         assert await h.dispatch_once() == 0
-        await asyncio.wait_for(h.staging.wait_idle(), 3)
+        release.set()
+        async with asyncio.timeout(3):
+            await completed.wait()
+            # Resume before the completed task's removal callback runs.
+            assert h.staging.tasks[blocked].done()
+            await h.staging.wait_idle()
         assert await h.dispatch_once() == 0
         await asyncio.wait_for(h.staging.wait_idle(), 3)
         assert await h.dispatch_once() == 1
@@ -2793,6 +2808,7 @@ async def test_capacity_allows_next(writer_env, monkeypatch):
         await asyncio.wait_for(h.staging.wait_idle(), 3)
         assert checks == [blocked, ready, blocked]
     finally:
+        release.set()
         await asyncio.wait_for(h.aclose(), 3)
         conn.disconnect()
         await asyncio.wait_for(connection, 3)
