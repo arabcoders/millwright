@@ -1,0 +1,17 @@
+id = "action.notify_external"
+kind = "action"
+description = "Refresh Radarr or Sonarr after verified publication. Optionally unmonitor the movie or associated episodes after refresh succeeds."
+name = "Notify external application"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.1.0"
+config_version = 2
+migrations = [
+  { from_version = 1, to_version = 2, changes = [
+    { type = "rename_plugin", from = "action.notify_media_manager", to = "action.notify_external" },
+    { type = "rename_action", from = "notify_media_manager", to = "notify_external" },
+    { type = "rename_event", from = "media_manager_notification", to = "external_notification" },
+    { type = "rename_field", scope = "event", from = "refresh", to = "progress" },
+    { type = "rename_target_prefix", from = "media-manager:", to = "external:" },
+  ] },
+]

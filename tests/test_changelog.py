@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[1] / ".github/scripts/generate_changelog.py"
+
+
+def git(repo: Path, *args: str, date: str = "2026-01-01T12:00:00+00:00") -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(repo), *args],
+        text=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "History Author",
+            "GIT_AUTHOR_EMAIL": "history@example.com",
+            "GIT_COMMITTER_NAME": "History Author",
+            "GIT_COMMITTER_EMAIL": "history@example.com",
+            "GIT_AUTHOR_DATE": date,
+            "GIT_COMMITTER_DATE": date,
+        },
+    ).strip()
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    git(tmp_path, "init", "--initial-branch=main")
+    return tmp_path
+
+
+def commit(repo: Path, message: str, date: str = "2026-01-01T12:00:00+00:00") -> str:
+    git(repo, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", message, date=date)
+    return git(repo, "rev-parse", "HEAD")
+
+
+def generate(repo: Path) -> list[dict]:
+    output = repo / "exported/CHANGELOG.json"
+    subprocess.run([sys.executable, str(SCRIPT), "--repo", str(repo), "--output", str(output)], check=True)
+    return json.loads(output.read_text())
+
+
+def test_untagged_root(repo: Path) -> None:
+    root = commit(repo, "Initial media support\n\n- Keep this list\n- Keep indentation\n\n```\n  example\n```")
+    head = commit(repo, "Add libraries", "2026-01-02T12:00:00+00:00")
+
+    groups = generate(repo)
+
+    assert [group["tag"] for group in groups] == ["Unreleased"]
+    assert groups[0]["full_sha"] == head
+    assert datetime.fromisoformat(groups[0]["date"]) == datetime(2026, 1, 2, 12, tzinfo=UTC)
+    assert [item["full_sha"] for item in groups[0]["commits"]] == [head, root]
+    initial = groups[0]["commits"][-1]
+    assert initial["message"] == git(repo, "show", "-s", "--format=%B", root)
+    assert initial["author"] == "History Author"
+    assert datetime.fromisoformat(initial["date"]) == datetime(2026, 1, 1, 12, tzinfo=UTC)
+
+
+def test_tagged_ranges(repo: Path) -> None:
+    root = commit(repo, "Start conversion", "2026-01-03T12:00:00+00:00")
+    git(repo, "-c", "tag.gpgsign=false", "tag", "-a", "v0.1.0-alpha.1", "-m", "Alpha")
+    second = commit(repo, "Add nodes", "2026-01-02T12:00:00+00:00")
+    git(repo, "tag", "v0.1.0-alpha.2")
+
+    groups = generate(repo)
+    assert [group["tag"] for group in groups] == ["v0.1.0-alpha.2", "v0.1.0-alpha.1"]
+    assert [[item["full_sha"] for item in group["commits"]] for group in groups] == [[second], [root]]
+
+    head = commit(repo, "Add playback")
+    groups = generate(repo)
+    assert [group["tag"] for group in groups] == ["Unreleased", "v0.1.0-alpha.2", "v0.1.0-alpha.1"]
+    assert [[item["full_sha"] for item in group["commits"]] for group in groups] == [[head], [second], [root]]
+
+
+def test_reachable_versions(repo: Path) -> None:
+    root = commit(repo, "Start conversion")
+    git(repo, "tag", "v0.1.0")
+    git(repo, "checkout", "-b", "other")
+    commit(repo, "Unmerged work")
+    git(repo, "tag", "v9.0.0")
+    git(repo, "checkout", "main")
+    head = commit(repo, "Add nodes")
+    git(repo, "tag", "checkpoint")
+
+    groups = generate(repo)
+
+    assert [group["tag"] for group in groups] == ["Unreleased", "v0.1.0"]
+    assert [[item["full_sha"] for item in group["commits"]] for group in groups] == [[head], [root]]

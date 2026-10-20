@@ -1,0 +1,56 @@
+{
+  "name": "millwright-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build --preset static",
+    "dev": "nuxt dev --public",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "format": "oxfmt --write app/ modules/",
+    "format:check": "oxfmt --check app/ modules/",
+    "lint": "eslint . --no-warn-ignored --max-warnings=0",
+    "lint:ci": "eslint . --no-warn-ignored --max-warnings=0",
+    "lint:fix": "eslint . --fix --no-warn-ignored --max-warnings=0",
+    "lint:tsc": "vue-tsc --noEmit"
+  },
+  "web-types": "./web-types.json",
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.131",
+    "@nuxt/eslint": "^1.17.0",
+    "@nuxt/eslint-config": "^1.17.0",
+    "@nuxt/icon": "^2.5.1",
+    "@nuxt/ui": "^4.11.1",
+    "@vue-flow/core": "^1.48.2",
+    "@vueuse/core": "^14.4.0",
+    "@vueuse/nuxt": "^14.4.0",
+    "assjs": "0.1.10",
+    "dompurify": "^3.4.17",
+    "hls.js": "^1.7.3",
+    "httpxy": "^0.5.5",
+    "marked": "^18.1.1",
+    "marked-alert": "^2.1.2",
+    "marked-gfm-heading-id": "^4.1.4",
+    "nuxt": "^4.5.2",
+    "tailwindcss": "^4.3.3",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "trustedDependencies": [
+    "esbuild",
+    "@parcel/watcher"
+  ],
+  "patchedDependencies": {
+    "assjs@0.1.10": "patches/assjs@0.1.10.patch"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "eslint": "^10.10.0",
+    "oxfmt": "^0.62.0",
+    "typescript": "^6.0.3",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.11"
+  }
+}

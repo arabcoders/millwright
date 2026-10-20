@@ -1,0 +1,183 @@
+[project]
+name = "millwright"
+version = "0.1.0"
+description = "Millwright is a self-hosted automation interface for for FFmpeg"
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+dependencies = [
+  "millwright-common",
+  "millwright-server",
+  "millwright-node",
+]
+
+[tool.uv.workspace]
+members = ["common", "server", "node"]
+
+[tool.uv.sources]
+millwright-common = { workspace = true }
+millwright-server = { workspace = true }
+millwright-node = { workspace = true }
+
+[tool.ruff]
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "vendor",
+  "venv",
+]
+
+line-length = 120
+indent-width = 4
+
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["ALL"]
+per-file-ignores = { "test_*.py" = [
+  "ALL",
+] }
+
+ignore = [
+  "ANN",
+  "COM",
+  "C90",
+  "DJ",
+  "EXE",
+  "T10",
+  "TID",
+  "PTH",
+  "D100",
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D105",
+  "D106",
+  "D107",
+  "D200",
+  "D205",
+  "D212",
+  "D400",
+  "D401",
+  "D415",
+  "E402",
+  "E501",
+  "EM101",
+  "TRY003",
+  "TD002",
+  "TD003",
+  "FIX002",
+  "N806",
+  "PGH003",
+  "D404",
+  "PLR0913",
+  "INP001",
+  "G004",
+  "SIM105",
+  "SIM300",
+  "BLE001",
+  "TRY400",
+  "S104",
+  "PLR2004",
+  "S110",
+  "N812",
+  "S108",
+  "RUF006",
+  "RUF012",
+  "RUF013",
+  "TRY002",
+  "TRY401",
+  "A001",
+  "A002",
+  "SLF001",
+  "FBT001",
+  "FBT002",
+  "TRY300",
+  "PLR0911",
+  "PLR0912",
+  "PLR0915",
+  "PLW2901",
+  "ERA001",
+  "S101",
+  "LOG015",
+  "PLC0415",
+  "S603",
+  "D203",
+  "TRY004",
+  "PT011",
+  "RUF001",
+  "S311",
+  "TC001",
+  "ASYNC240",
+  "UP042",
+  "FURB171",
+  "FURB110",
+  "PLW0108",
+  "CPY001",
+  "PLR0917",
+  "LOG004",
+]
+
+fixable = ["ALL"]
+unfixable = []
+
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+exclude = ["*.md"]
+
+[tool.ty.src]
+include = ["common/src/common", "server/src/server", "node/src/node", "plugins", "tests"]
+
+[tool.uv]
+link-mode = "copy"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q --tb=short -n 4 --dist worksteal"
+asyncio_default_fixture_loop_scope = "function"
+required_plugins = ["pytest-timeout>=2.4.0"]
+timeout = 30
+session_timeout = 300
+markers = ["slow: Opt-in tests using real media tools."]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.1.0",
+  "pytest-timeout>=2.4.0",
+  "pytest-xdist>=3.8.0",
+  "ruff>=0.13.0",
+  "ty>=0.0.53",
+  "watchfiles>=1.2.0",
+]

@@ -1,0 +1,7 @@
+id = "filter.always_match"
+kind = "filter"
+description = "Always returns a matching filter decision."
+name = "Always match"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

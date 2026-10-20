@@ -1,0 +1,26 @@
+{
+  "_type": "flow",
+  "_version": 1,
+  "name": "Starter - H.264 to HEVC",
+  "description": "Convert H.264/AVC to HEVC at about half the source bitrate. Other codecs skip.",
+  "route": "H.264 -> HEVC. Everything else -> Skip",
+  "concepts": ["Condition", "Transcode", "Skip"],
+  "definition": {
+    "entry": "codec",
+    "nodes": [
+      { "type": "condition", "id": "codec", "when": { "media.video.codec_family": "avc" } },
+      { "type": "plugin", "id": "transcode", "plugin": "transcode.video", "inputs": { "target": "hevc", "ratio": 0.5, "container": "mkv" } },
+      { "type": "terminal", "id": "done", "outcome": "done" },
+      { "type": "terminal", "id": "skip", "outcome": "skip" }
+    ],
+    "edges": [
+      { "src": "codec", "port": "true", "dst": "transcode" },
+      { "src": "codec", "port": "false", "dst": "skip" },
+      { "src": "transcode", "port": "plan", "dst": "done" },
+      { "src": "transcode", "port": "skip", "dst": "skip" }
+    ],
+    "actions": [],
+    "when": null,
+    "_ui": { "nodes": { "start": { "x": -200, "y": 120 }, "codec": { "x": 80, "y": 120 }, "transcode": { "x": 360, "y": 80 }, "done": { "x": 640, "y": 40 }, "skip": { "x": 640, "y": 200 } } }
+  }
+}

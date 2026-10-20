@@ -1,0 +1,26 @@
+{
+  "_type": "flow",
+  "_version": 1,
+  "name": "Starter - Remux to MKV",
+  "description": "Change the container without re-encoding video. Files already in MKV skip.",
+  "route": "Not MKV -> Remux. MKV -> Skip",
+  "concepts": ["Media fact", "Remux", "Skip"],
+  "definition": {
+    "entry": "container",
+    "nodes": [
+      { "type": "condition", "id": "container", "when": { "media.file.container": { "ne": "mkv" } } },
+      { "type": "plugin", "id": "remux", "plugin": "transcode.remux", "inputs": { "container": "mkv" } },
+      { "type": "terminal", "id": "done", "outcome": "done" },
+      { "type": "terminal", "id": "skip", "outcome": "skip" }
+    ],
+    "edges": [
+      { "src": "container", "port": "true", "dst": "remux" },
+      { "src": "container", "port": "false", "dst": "skip" },
+      { "src": "remux", "port": "plan", "dst": "done" },
+      { "src": "remux", "port": "skip", "dst": "skip" }
+    ],
+    "actions": [],
+    "when": null,
+    "_ui": { "nodes": { "start": { "x": -200, "y": 120 }, "container": { "x": 80, "y": 120 }, "remux": { "x": 360, "y": 80 }, "done": { "x": 640, "y": 40 }, "skip": { "x": 640, "y": 200 } } }
+  }
+}

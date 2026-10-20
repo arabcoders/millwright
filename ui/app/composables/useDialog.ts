@@ -1,0 +1,133 @@
+import { reactive, readonly } from 'vue';
+
+export type DialogResult<T = string | null> = { status: boolean; value: T };
+
+export type DialogOption = {
+  key: string;
+  label: string;
+  checked?: boolean;
+};
+
+type BaseOptions = {
+  title?: string;
+  message?: string;
+  confirmText?: string;
+  confirmColor?: 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral';
+  confirmIcon?: string;
+};
+
+export type PromptOptions = BaseOptions & {
+  initial?: string;
+  placeholder?: string;
+  validate?: (v: string) => true | string;
+};
+
+export type ConfirmOptions = BaseOptions & {
+  // Checkboxes included in the confirmation result.
+  options?: DialogOption[];
+};
+
+export type AlertOptions = BaseOptions & {};
+
+type QueueItem = {
+  type: 'prompt' | 'confirm' | 'alert';
+  opts: PromptOptions | ConfirmOptions | AlertOptions;
+  resolve: (r: DialogResult<any>) => void;
+};
+
+type DialogState = {
+  current: QueueItem | null;
+  queue: QueueItem[];
+  errorMsg: string | null;
+  input: string;
+};
+
+export const useDialog = () => {
+  const raw = useState<DialogState>('dialog:state', () =>
+    reactive({
+      current: null,
+      queue: [],
+      errorMsg: null,
+      input: '',
+    } as DialogState),
+  );
+
+  const state = raw.value;
+
+  const _dequeue = () => {
+    if (!state.current && state.queue.length) {
+      state.current = state.queue.shift()!;
+      state.errorMsg = null;
+      state.input =
+        state.current.type === 'prompt'
+          ? ((state.current.opts as PromptOptions).initial ?? '')
+          : '';
+    }
+  };
+
+  const promptDialog = (opts: PromptOptions) =>
+    new Promise<DialogResult<string>>((resolve) => {
+      state.queue.push({ type: 'prompt', opts, resolve });
+      _dequeue();
+    });
+
+  const confirmDialog = (opts: ConfirmOptions) =>
+    new Promise<DialogResult<Record<string, boolean> | null>>((resolve) => {
+      state.queue.push({ type: 'confirm', opts, resolve });
+      _dequeue();
+    });
+
+  const alertDialog = (opts: AlertOptions) =>
+    new Promise<DialogResult<null>>((resolve) => {
+      state.queue.push({ type: 'alert', opts, resolve });
+      _dequeue();
+    });
+
+  const confirm = (value?: string | Record<string, boolean>) => {
+    if (!state.current) return;
+    if (state.current.type === 'prompt') {
+      const val = 'string' === typeof value ? value : state.input;
+      const v = (state.current.opts as PromptOptions).validate?.(val);
+      if (v && v !== true) {
+        state.errorMsg = v;
+        return;
+      }
+      state.current.resolve({ status: true, value: val });
+    } else if (state.current.type === 'confirm') {
+      state.current.resolve({
+        status: true,
+        value: 'object' === typeof value && null !== value ? value : null,
+      });
+    } else {
+      state.current.resolve({ status: true, value: null });
+    }
+    state.current = null;
+    _dequeue();
+  };
+
+  const cancel = () => {
+    if (!state.current) return;
+    state.current.resolve({ status: false, value: null });
+    state.current = null;
+    _dequeue();
+  };
+
+  const cancelAll = () => {
+    const pending = [...(state.current ? [state.current] : []), ...state.queue];
+    state.current = null;
+    state.queue = [];
+    state.errorMsg = null;
+    state.input = '';
+    pending.forEach((item) => item.resolve({ status: false, value: null }));
+  };
+
+  return {
+    promptDialog,
+    confirmDialog,
+    alertDialog,
+    confirm,
+    cancel,
+    cancelAll,
+    state: readonly(state) as Readonly<DialogState>,
+  };
+};

@@ -1,0 +1,23 @@
+{
+  "_type": "flow",
+  "_version": 1,
+  "name": "Starter - Burn English subtitles",
+  "description": "Burn English subtitles from <video>.eng, <video>, or eng sidecars in srt, ass, ssa, or vtt format. Filename priority takes precedence over format. Files without a match skip.",
+  "route": "English subtitle sidecar -> Burn in. No match -> Skip",
+  "concepts": ["Subtitle sidecar", "Burn in", "Skip"],
+  "definition": {
+    "entry": "burn-subtitles",
+    "nodes": [
+      { "type": "plugin", "id": "burn-subtitles", "plugin": "transcode.burn_subtitles", "inputs": { "language": "eng", "name_priority": ["video_language", "video", "language"], "format_priority": ["srt", "ass", "ssa", "vtt"], "priority_order": "name_first", "on_multiple": "first_match", "on_missing": "skip", "container": "mkv", "encoder": "libx264", "quality": 23 } },
+      { "type": "terminal", "id": "done", "outcome": "done" },
+      { "type": "terminal", "id": "skip", "outcome": "skip" }
+    ],
+    "edges": [
+      { "src": "burn-subtitles", "port": "plan", "dst": "done" },
+      { "src": "burn-subtitles", "port": "skip", "dst": "skip" }
+    ],
+    "actions": [],
+    "when": null,
+    "_ui": { "nodes": { "start": { "x": -200, "y": 120 }, "burn-subtitles": { "x": 80, "y": 120 }, "done": { "x": 360, "y": 40 }, "skip": { "x": 360, "y": 200 } } }
+  }
+}

@@ -1,0 +1,14 @@
+id = "transcode.burn_subtitles"
+kind = "transcode"
+description = "Burn a matching sidecar subtitle into the video."
+help = """
+Place the sidecar beside the input and set its lowercase ISO-639-2 language code.
+Rank matching names and formats by the configured priorities (default formats: SRT, ASS, SSA, VTT).
+Skip files without video or with only cover art. Skip missing sidecars unless on_missing is error.
+Re-encode video with the selected encoder and quality (defaults: libx264 and 23).
+MP4 output drops embedded subtitle streams.
+"""
+name = "Burn subtitles"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"

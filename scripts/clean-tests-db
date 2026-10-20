@@ -1,0 +1,42 @@
+#!/usr/bin/env -S uv run python
+"""Remove leftover test schemas. Run only when tests are stopped."""
+
+# ruff: noqa: T201
+import os
+
+from common.secrets import resolve_secret
+from sqlalchemy import create_engine, make_url, text
+from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import DropSchema
+
+
+def main() -> None:
+    configured = os.environ.get("MW_TEST_DATABASE_URL")
+    if not configured:
+        raise SystemExit("Set MW_TEST_DATABASE_URL to the dedicated test database.")
+    url = make_url(resolve_secret(configured))
+    if url.get_backend_name() != "postgresql":
+        raise SystemExit("MW_TEST_DATABASE_URL must use PostgreSQL.")
+    # Override any inherited test search path. Catalog lookup never depends on it.
+    options = url.query.get("options", "")
+    url = url.set(drivername="postgresql+psycopg").update_query_dict(
+        {"options": f"{options} -c search_path=pg_catalog".strip()}
+    )
+    engine = create_engine(url, isolation_level="AUTOCOMMIT", poolclass=NullPool, connect_args={"connect_timeout": 5})
+    try:
+        with engine.connect() as connection:
+            names = connection.scalars(
+                text(
+                    "SELECT nspname FROM pg_catalog.pg_namespace "
+                    "WHERE nspname ~ '^mwtest_[a-z0-9_]{1,8}_[a-z0-9_]{1,12}_[0-9a-f]{32}$' ORDER BY nspname"
+                )
+            ).all()
+            for name in names:
+                connection.execute(DropSchema(name, cascade=True))
+                print(f"Dropped test schema {name}.")
+    finally:
+        engine.dispose()
+
+
+if __name__ == "__main__":
+    main()

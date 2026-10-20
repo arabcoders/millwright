@@ -1,0 +1,8 @@
+id = "inspector.audio_languages"
+kind = "inspector"
+description = "Find unexpected audio languages."
+name = "Audio language inspector"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"
+facets = { unexpected_languages = "list[str]" }

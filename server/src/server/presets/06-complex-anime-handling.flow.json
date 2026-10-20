@@ -1,0 +1,462 @@
+{
+  "_type": "flow",
+  "_version": 1,
+  "name": "Complex - Anime multi-step",
+  "description": "Clean audio and subtitle tracks, then choose remuxing or HEVC encoding with bit-depth and output-size checks. Configure the Sonarr API key before use.",
+  "route": "Track cleanup -> Size and bitrate checks -> Remux or HEVC -> Output check -> Sonarr",
+  "concepts": ["Multi-stage", "Bitrate estimate", "Bit depth", "Output check", "Sonarr"],
+  "definition": {
+    "entry": "keep-dates",
+    "nodes": [
+      {
+        "type": "plugin",
+        "id": "keep-dates",
+        "plugin": "action.keep_dates",
+        "inputs": {}
+      },
+      {
+        "type": "condition",
+        "id": "size",
+        "when": {
+          "media.file.size_bytes": {
+            "lte": 10000000000
+          }
+        }
+      },
+      {
+        "type": "condition",
+        "id": "bitrate",
+        "when": {
+          "bitrate_estimate.hevc_kbps": {
+            "gt": 2000
+          }
+        }
+      },
+      {
+        "type": "condition",
+        "id": "preserve-codec",
+        "when": {
+          "any": [
+            {
+              "media.video.codec_family": "hevc"
+            },
+            {
+              "media.video.codec_family": "vp9"
+            },
+            {
+              "media.video.codec_family": "av1"
+            }
+          ]
+        }
+      },
+      {
+        "type": "condition",
+        "id": "bit-depth",
+        "when": {
+          "media.video.bit_depth": {
+            "gte": 10
+          }
+        }
+      },
+      {
+        "type": "plugin",
+        "id": "remux",
+        "plugin": "transcode.remux",
+        "inputs": {
+          "audio_drop_descriptive": false,
+          "audio_keep_all_if_empty": true,
+          "audio_keep_forced": false,
+          "audio_keep_languages": [
+            "eng",
+            "jpn",
+            "kor",
+            "ara",
+            "und"
+          ],
+          "audio_when_codecs": [],
+          "container": "mkv",
+          "drop_cover_art": true,
+          "drop_data": true,
+          "size_ceiling_ratio": 1.1,
+          "subtitle_keep_forced": false,
+          "subtitle_keep_languages": [
+            "eng",
+            "jpn",
+            "ara",
+            "und"
+          ],
+          "subtitle_strip_all": false
+        }
+      },
+      {
+        "type": "plugin",
+        "id": "video-8bit",
+        "plugin": "transcode.video",
+        "inputs": {
+          "audio_drop_descriptive": false,
+          "audio_keep_all_if_empty": true,
+          "audio_keep_forced": false,
+          "audio_keep_languages": [
+            "eng",
+            "jpn",
+            "kor",
+            "ara",
+            "und"
+          ],
+          "audio_when_codecs": [],
+          "bitrate_source": "average",
+          "container": "mkv",
+          "drop_cover_art": true,
+          "drop_data": true,
+          "encoder_priority": [
+            "hevc_qsv",
+            "hevc_nvenc",
+            "libx265"
+          ],
+          "extras": [
+            "-max_muxing_queue_size",
+            "9999"
+          ],
+          "fix_timestamps": true,
+          "ratio": 0.5,
+          "size_ceiling_ratio": 1.1,
+          "subtitle_keep_forced": false,
+          "subtitle_keep_languages": [
+            "eng",
+            "jpn",
+            "ara",
+            "und"
+          ],
+          "subtitle_strip_all": false,
+          "target": "hevc",
+          "ten_bit": false,
+          "rate_control": "bitrate"
+        }
+      },
+      {
+        "type": "plugin",
+        "id": "video-10bit",
+        "plugin": "transcode.video",
+        "inputs": {
+          "audio_drop_descriptive": false,
+          "audio_keep_all_if_empty": true,
+          "audio_keep_forced": false,
+          "audio_keep_languages": [
+            "eng",
+            "jpn",
+            "kor",
+            "ara",
+            "und"
+          ],
+          "audio_when_codecs": [],
+          "bitrate_source": "average",
+          "container": "mkv",
+          "drop_cover_art": true,
+          "drop_data": true,
+          "encoder_priority": [
+            "hevc_qsv",
+            "hevc_nvenc",
+            "libx265"
+          ],
+          "extras": [
+            "-max_muxing_queue_size",
+            "9999"
+          ],
+          "fix_timestamps": true,
+          "ratio": 0.5,
+          "size_ceiling_ratio": 1.1,
+          "subtitle_keep_forced": false,
+          "subtitle_keep_languages": [
+            "eng",
+            "jpn",
+            "ara",
+            "und"
+          ],
+          "subtitle_strip_all": false,
+          "target": "hevc",
+          "ten_bit": true,
+          "rate_control": "bitrate"
+        }
+      },
+      {
+        "type": "terminal",
+        "id": "done",
+        "outcome": "done"
+      },
+      {
+        "type": "terminal",
+        "id": "skip",
+        "outcome": "skip"
+      },
+      {
+        "type": "plugin",
+        "id": "cleanup",
+        "plugin": "transcode.remux",
+        "inputs": {
+          "audio_drop_descriptive": false,
+          "audio_keep_all_if_empty": true,
+          "audio_keep_forced": false,
+          "audio_keep_languages": [
+            "eng",
+            "jpn",
+            "kor",
+            "ara",
+            "und"
+          ],
+          "audio_when_codecs": [],
+          "container": "original",
+          "drop_cover_art": false,
+          "drop_data": false,
+          "size_ceiling_ratio": 1.1,
+          "subtitle_keep_forced": false,
+          "subtitle_keep_languages": [
+            "eng",
+            "jpn",
+            "ara",
+            "und"
+          ],
+          "subtitle_strip_all": false
+        }
+      },
+      {
+        "type": "plugin",
+        "id": "estimate-bitrate",
+        "plugin": "inspector.bitrate_estimate",
+        "inputs": {
+          "av1_ratio": 0.45,
+          "avc_ratio": 0.75,
+          "hevc_ratio": 0.5,
+          "source": "average"
+        }
+      },
+      {
+        "type": "condition",
+        "id": "container",
+        "when": {
+          "media.file.container": {
+            "ne": "mkv"
+          }
+        }
+      },
+      {
+        "type": "plugin",
+        "id": "output-size",
+        "plugin": "inspector.output_ratio",
+        "inputs": {
+          "metric": "size",
+          "min_ratio": 0.4
+        }
+      },
+      {
+        "type": "terminal",
+        "id": "reject-output",
+        "outcome": "veto"
+      },
+      {
+        "type": "plugin",
+        "id": "cleanup-first",
+        "plugin": "transcode.remux",
+        "inputs": {
+          "audio_drop_descriptive": false,
+          "audio_keep_all_if_empty": true,
+          "audio_keep_forced": false,
+          "audio_keep_languages": [
+            "eng",
+            "jpn",
+            "kor",
+            "ara",
+            "und"
+          ],
+          "audio_when_codecs": [],
+          "container": "original",
+          "drop_cover_art": false,
+          "drop_data": false,
+          "size_ceiling_ratio": 1.1,
+          "subtitle_keep_forced": false,
+          "subtitle_keep_languages": [
+            "eng",
+            "jpn",
+            "ara",
+            "und"
+          ],
+          "subtitle_strip_all": false
+        }
+      },
+      {
+        "type": "condition",
+        "id": "cleaned-size",
+        "when": {
+          "media.file.size_bytes": {
+            "gte": 2097152000
+          }
+        }
+      },
+      {
+        "type": "plugin",
+        "id": "node-44",
+        "plugin": "action.notify_external",
+        "inputs": {
+          "application": "sonarr",
+          "url": "http://sonarr:8989",
+          "api_key": "YOUR_SONARR_API_KEY"
+        },
+        "config_version": 2
+      }
+    ],
+    "edges": [
+      {
+        "src": "keep-dates",
+        "port": "next",
+        "dst": "size"
+      },
+      {
+        "src": "size",
+        "port": "true",
+        "dst": "cleanup-first"
+      },
+      {
+        "src": "bitrate",
+        "port": "false",
+        "dst": "cleanup"
+      },
+      {
+        "src": "bitrate",
+        "port": "true",
+        "dst": "preserve-codec"
+      },
+      {
+        "src": "preserve-codec",
+        "port": "true",
+        "dst": "container"
+      },
+      {
+        "src": "preserve-codec",
+        "port": "false",
+        "dst": "bit-depth"
+      },
+      {
+        "src": "bit-depth",
+        "port": "true",
+        "dst": "video-10bit"
+      },
+      {
+        "src": "bit-depth",
+        "port": "false",
+        "dst": "video-8bit"
+      },
+      {
+        "src": "remux",
+        "port": "plan",
+        "dst": "output-size"
+      },
+      {
+        "src": "remux",
+        "port": "skip",
+        "dst": "skip"
+      },
+      {
+        "src": "video-8bit",
+        "port": "plan",
+        "dst": "output-size"
+      },
+      {
+        "src": "video-8bit",
+        "port": "skip",
+        "dst": "skip"
+      },
+      {
+        "src": "video-10bit",
+        "port": "plan",
+        "dst": "output-size"
+      },
+      {
+        "src": "video-10bit",
+        "port": "skip",
+        "dst": "skip"
+      },
+      {
+        "src": "size",
+        "port": "false",
+        "dst": "cleanup"
+      },
+      {
+        "src": "estimate-bitrate",
+        "port": "match",
+        "dst": "bitrate"
+      },
+      {
+        "src": "estimate-bitrate",
+        "port": "skip",
+        "dst": "cleanup"
+      },
+      {
+        "src": "container",
+        "port": "true",
+        "dst": "remux"
+      },
+      {
+        "src": "container",
+        "port": "false",
+        "dst": "cleanup"
+      },
+      {
+        "src": "cleanup",
+        "port": "plan",
+        "dst": "output-size"
+      },
+      {
+        "src": "cleanup",
+        "port": "skip",
+        "dst": "skip"
+      },
+      {
+        "src": "output-size",
+        "port": "skip",
+        "dst": "reject-output"
+      },
+      {
+        "src": "output-size",
+        "port": "veto",
+        "dst": "reject-output"
+      },
+      {
+        "src": "cleanup-first",
+        "port": "plan",
+        "dst": "cleaned-size"
+      },
+      {
+        "src": "cleanup-first",
+        "port": "skip",
+        "dst": "cleaned-size"
+      },
+      {
+        "src": "cleaned-size",
+        "port": "true",
+        "dst": "estimate-bitrate"
+      },
+      {
+        "src": "cleaned-size",
+        "port": "false",
+        "dst": "done"
+      },
+      {
+        "src": "output-size",
+        "port": "match",
+        "dst": "node-44"
+      },
+      {
+        "src": "node-44",
+        "port": "next",
+        "dst": "done"
+      }
+    ],
+    "actions": [],
+    "when": {
+      "media.video.count": {
+        "gt": 0
+      }
+    },
+    "_ui": { "nodes": { "start": { "x": 520, "y": 40 }, "keep-dates": { "x": 520, "y": 220 }, "size": { "x": 520, "y": 400 }, "bitrate": { "x": 520, "y": 1120 }, "preserve-codec": { "x": 520, "y": 1300 }, "container": { "x": 360, "y": 1480 }, "bit-depth": { "x": 680, "y": 1480 }, "cleanup": { "x": 40, "y": 1660 }, "video-10bit": { "x": 360, "y": 1660 }, "video-8bit": { "x": 680, "y": 1660 }, "remux": { "x": 1000, "y": 1660 }, "done": { "x": 520, "y": 2200 }, "output-size": { "x": 360, "y": 1840 }, "skip": { "x": 680, "y": 1840 }, "estimate-bitrate": { "x": 520, "y": 940 }, "reject-output": { "x": 360, "y": 2020 }, "node-44": { "x": 680, "y": 2020 }, "cleanup-first": { "x": 520, "y": 580 }, "cleaned-size": { "x": 520, "y": 760 } }
+    }
+  }
+}

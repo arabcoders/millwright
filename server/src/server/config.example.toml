@@ -1,0 +1,71 @@
+# Uncomment settings to override defaults.
+# First startup creates ~/.config/millwright/config.toml and its secret files.
+# Let the server create those files before using the file: references below.
+# MW_CONFIG_PATH sets the directory. --config sets the file or directory.
+# Environment values override TOML. Use MW_<UPPERCASE_FIELD_PATH>, with underscores
+# for nested fields, such as MW_AUTH_OIDC_ISSUER. Lists use JSON arrays.
+# Operational settings are managed through Settings in the UI or /api/settings.
+
+# PostgreSQL URL for the server and maintenance commands. Uses the psycopg driver.
+# MW_DATABASE_URL overrides this setting.
+# database_url = "postgresql+psycopg://millwright:millwright@127.0.0.1:55432/millwright"
+# Store the URL in a private file instead. Relative file: paths use this config
+# file's directory, including references supplied through MW_DATABASE_URL.
+# database_url = "file:secrets/database_url"
+
+# Create your Millwright account in the web interface.
+# Instance API key for CLI commands and password resets. Keep it private.
+api_key = "file:secrets/api_key"
+
+# Node enrollment secret. It does not grant API access. Keep it separate from api_key.
+node_enrollment_token = "file:secrets/node_enrollment_token"
+
+# IANA timezone for schedules, calendar statistics, and displayed dates.
+# Defaults to $TZ, then UTC.
+# tz = "Asia/Kuwait"
+
+# Log HTTP requests and WebSocket connections to console and NDJSON history. Default is true.
+# Set false when a reverse proxy already logs requests. Request IDs and errors remain.
+# access_log = true
+
+# Skip startup recovery and background services for inspection. API controls remain
+# available, including pending-job cancellation. Node connections are blocked.
+# Restart with this false to resume. MW_DISABLE_JOBS=true overrides this setting.
+# disable_jobs = false
+
+# Enable /api/docs, /api/redoc, and the schema at /api/openapi.json.
+# Set true and restart the server to enable it. MW_ENABLE_DOCS=true overrides this setting.
+# enable_docs = false
+
+# Shared node storage for staged files and attempt logs. Defaults under the state directory.
+# workspace_dir = "/srv/millwright-workspace"
+
+# Store replaced originals here. Defaults under the state directory.
+# trash_dir = "/srv/millwright-trash"
+
+# Uploaded plugin directory. Defaults under the state directory.
+# uploaded_plugins_dir = "/srv/millwright-plugins"
+
+# OIDC sign-in.
+# [auth.oidc]
+
+# Millwright account used for OIDC sign-in.
+# username = "operator"
+
+# OIDC provider URL for discovery and authentication.
+# issuer = "https://sso.example.com/realms/main"
+
+# Client ID issued by the provider.
+# client_id = "millwright"
+
+# OAuth client secret. Store it in a private file using a file: path.
+# secret = "file:secrets/oidc_client_secret"
+
+# Server callback URL registered with the provider.
+# redirect_uri = "https://millwright.example.com/api/auth/oidc/callback"
+
+# Page to open after signing in. Defaults to /.
+# post_login_url = "https://millwright.example.com/"
+
+# Identity scopes requested from the provider.
+# scopes = ["openid", "profile", "email"]

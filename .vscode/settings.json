@@ -1,0 +1,46 @@
+{
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.venv": true
+  },
+  "editor.rulers": [
+    120
+  ],
+  "cSpell.enabled": false,
+  "css.styleSheets": [
+    "ui/app/assets/css/*.css"
+  ],
+  "search.exclude": {
+    "ui/.nuxt": true,
+    "ui/.output": true,
+    "ui/dist": true,
+    "ui/exported": true,
+    "ui/node_modules": true,
+    "ui/.out": true,
+    "**/.venv": true
+  },
+  "eslint.format.enable": false,
+  "eslint.ignoreUntitled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "oxc.path.oxfmt": "./ui/node_modules/.bin/oxfmt",
+  "oxc.fmt.configPath": "./ui/.oxfmtrc.json",
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file"
+  },
+  "[vue]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file"
+  },
+  "files.associations": {
+    "*.css": "tailwindcss"
+  }
+}

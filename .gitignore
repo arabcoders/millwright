@@ -1,0 +1,52 @@
+# Build output
+dist
+build
+**/node_modules/*
+**/.nuxt/*
+
+# IDEs and editors
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# VS Code
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/settings.json
+.history/*
+
+# Python
+__pycache__
+*.py[oc]
+wheels/
+*.egg-info
+.venv
+.idea
+.pytest_cache
+.ruff_cache
+.ty
+
+# Local agent guidance. Never commit.
+AGENTS.md
+
+# Read-only reference material. Never commit.
+vendor/
+
+# Nuxt UI build artifacts
+ui/node_modules/
+ui/.nuxt/
+ui/.output/
+ui/dist/
+ui/exported/
+ui/.data/
+ui/wrangler.toml
+
+# Server config with secrets
+config.toml
+data/
+.oc-docker.yml

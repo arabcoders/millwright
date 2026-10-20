@@ -1,0 +1,7 @@
+id = "filter.typed"
+kind = "filter"
+description = "Exercises typed plugin inputs."
+name = "Typed inputs"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

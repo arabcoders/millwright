@@ -1,0 +1,11 @@
+id = "transcode.remux"
+kind = "transcode"
+description = "Change container or stream settings without re-encoding video."
+help = """
+Choose MKV (default), MP4, or the original container. Apply stream selection and optional
+audio encoding. Skip files already matching the container, stream, and audio settings.
+"""
+name = "Remux"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"

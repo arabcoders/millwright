@@ -1,0 +1,7 @@
+id = "action.notify"
+kind = "action"
+description = "Select success, failure, and cancellation notification targets. Place before transcoding."
+name = "Notify"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"

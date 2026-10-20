@@ -1,0 +1,7 @@
+id = "filter.slow"
+kind = "filter"
+description = "Delays its decision for timeout tests."
+name = "Slow decide"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

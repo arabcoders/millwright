@@ -1,0 +1,13 @@
+id = "inspector.bitrate_estimate"
+kind = "inspector"
+description = "Estimate AVC, HEVC, and AV1 bitrate and size."
+help = """
+Apply codec ratios to the selected bitrate source to estimate bitrate and size.
+Video bitrate falls back to file size and duration. Skip files without video or
+a derivable bitrate.
+"""
+name = "Bitrate estimate"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"
+facets = { avc_kbps = "int", avc_size_bytes = "int", hevc_kbps = "int", hevc_size_bytes = "int", av1_kbps = "int", av1_size_bytes = "int" }

@@ -1,0 +1,7 @@
+id = "filter.garbage"
+kind = "filter"
+description = "Returns an invalid decision for host tests."
+name = "Garbage decision"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

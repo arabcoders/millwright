@@ -1,0 +1,8 @@
+id = "transcode.nvenc"
+kind = "transcode"
+description = "Provides a hardware encoder requirement test fixture."
+name = "NVENC HEVC transcode"
+version = "1.0.0"
+requires_encoders = ["hevc_nvenc"]
+author = "Test"
+url = "https://example.com/plugins"

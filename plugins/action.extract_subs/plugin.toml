@@ -1,0 +1,11 @@
+id = "action.extract_subs"
+kind = "action"
+description = "Extract selected subtitle tracks beside converted media."
+help = """
+Select formats and languages. The default is English SRT.
+Extracted files are written beside the converted media.
+"""
+name = "Extract subtitles"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"

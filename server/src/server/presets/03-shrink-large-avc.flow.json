@@ -1,0 +1,26 @@
+{
+  "_type": "flow",
+  "_version": 1,
+  "name": "Starter - Shrink large H.264",
+  "description": "Convert only AVC files at least 2 GB. All other files skip.",
+  "route": "Large H.264 -> HEVC. Everything else -> Skip",
+  "concepts": ["Compound condition", "Transcode", "Skip"],
+  "definition": {
+    "entry": "large-avc",
+    "nodes": [
+      { "type": "condition", "id": "large-avc", "when": { "all": [ { "media.file.size_bytes": { "gte": 2147483648 } }, { "media.video.codec_family": "avc" } ] } },
+      { "type": "plugin", "id": "transcode", "plugin": "transcode.video", "inputs": { "target": "hevc", "ratio": 0.5, "container": "mkv" } },
+      { "type": "terminal", "id": "done", "outcome": "done" },
+      { "type": "terminal", "id": "skip", "outcome": "skip" }
+    ],
+    "edges": [
+      { "src": "large-avc", "port": "true", "dst": "transcode" },
+      { "src": "large-avc", "port": "false", "dst": "skip" },
+      { "src": "transcode", "port": "plan", "dst": "done" },
+      { "src": "transcode", "port": "skip", "dst": "skip" }
+    ],
+    "actions": [],
+    "when": null,
+    "_ui": { "nodes": { "start": { "x": -200, "y": 120 }, "large-avc": { "x": 80, "y": 120 }, "transcode": { "x": 360, "y": 80 }, "done": { "x": 640, "y": 40 }, "skip": { "x": 640, "y": 200 } } }
+  }
+}

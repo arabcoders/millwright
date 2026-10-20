@@ -1,0 +1,7 @@
+id = "filter.die"
+kind = "filter"
+description = "Terminates its runner process during execution."
+name = "Runner process death"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

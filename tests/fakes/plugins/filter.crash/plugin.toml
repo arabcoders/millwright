@@ -1,0 +1,7 @@
+id = "filter.crash"
+kind = "filter"
+description = "Raises an exception while deciding."
+name = "Decide raises"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

@@ -1,0 +1,46 @@
+# Copy to ~/.config/millwright/node.toml or choose a path with --config.
+# Config precedence: --config, $MW_NODE_CONFIG, $MW_CONFIG_PATH/node.toml,
+# then $XDG_CONFIG_HOME/millwright/node.toml (default: ~/.config/millwright/node.toml).
+# MW_NODE_<UPPERCASE_NAME> overrides each field. Lists use JSON arrays.
+# The server assigns an ID and credential. State directory precedence:
+# $MW_NODE_STATE_PATH, $MW_STATE_PATH, then $XDG_STATE_HOME/millwright
+# (default: ~/.local/state/millwright).
+# enrollment_token accepts file:<path> in config and environment values.
+# Unknown keys are ignored with a warning.
+
+# Required for enrollment and re-enrollment.
+enrollment_token = "change-me"
+# enrollment_token = "file:/run/secrets/node_token"
+
+# Required. Server URL. HTTP becomes WS, HTTPS becomes WSS, and /api/hub is added.
+# A full ws:// or wss:// endpoint ending in /api/hub also works.
+server_url = "http://localhost:8000"
+
+# Workspace for job attempts and logs.
+workspace_dir = "/var/lib/millwright/workspace"
+
+# Resolved on PATH at startup. Probe failures abort the node.
+ffmpeg_bin = "ffmpeg"
+ffprobe_bin = "ffprobe"
+
+# Additional cpu|gpu tags. Startup always adds cpu and adds gpu for usable
+# hardware encoders (nvenc, qsv, vaapi, videotoolbox, amf, vulkan).
+# Encoders, decoders, hwaccels, and FFmpeg version are probed, not configured.
+worker_tags = ["cpu"]
+
+# Node and server limits both apply. The stricter limit wins.
+# Refuse jobs when workspace free space drops below this many GB.
+min_free_gb = 10.0
+
+# Output above this source-size ratio fails the job. The source stays untouched.
+hard_size_ceiling = 1.25
+
+# No FFmpeg progress for this many seconds stops the job and reports it stalled.
+stall_timeout_s = 600.0
+
+# Heartbeat interval in seconds. The hub can override it.
+heartbeat_s = 15.0
+
+# Reconnect backoff grows from base to max after failed handshakes.
+backoff_base_s = 1.0
+backoff_max_s = 60.0

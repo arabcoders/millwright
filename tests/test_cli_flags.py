@@ -1,0 +1,125 @@
+import pytest
+
+from server import cli
+
+
+@pytest.mark.parametrize(
+    ("long_args", "short_args"),
+    [
+        (
+            ["--url", "http://example", "--token", "fixture", "--json", "system"],
+            ["-u", "http://example", "-k", "fixture", "system", "-j"],
+        ),
+        (
+            ["jobs", "list", "--status", "running", "--limit", "5", "--sort-by", "id", "--sort-dir", "asc"],
+            ["jobs", "list", "-s", "running", "-n", "5", "-b", "id", "-d", "asc"],
+        ),
+        (["jobs", "watch", "3", "--timeout", "4"], ["jobs", "watch", "3", "-t", "4"]),
+        (["jobs", "log", "3", "--attempt", "2", "--complete"], ["jobs", "log", "3", "-a", "2", "-c"]),
+        (
+            [
+                "files",
+                "list",
+                "--query",
+                "movie",
+                "--transcode-status",
+                "pending",
+                "--health-status",
+                "ok",
+                "--library-id",
+                "2",
+                "--limit",
+                "5",
+                "--offset",
+                "3",
+                "--sort-by",
+                "path",
+                "--sort-dir",
+                "asc",
+            ],
+            [
+                "files",
+                "list",
+                "-q",
+                "movie",
+                "-s",
+                "pending",
+                "-H",
+                "ok",
+                "-l",
+                "2",
+                "-n",
+                "5",
+                "-o",
+                "3",
+                "-b",
+                "path",
+                "-d",
+                "asc",
+            ],
+        ),
+        (["api", "POST", "/api/test", "--data", "{}"], ["api", "POST", "/api/test", "-d", "{}"]),
+        (["api", "POST", "/api/test", "--data-file", "body.json"], ["api", "POST", "/api/test", "-f", "body.json"]),
+        (
+            ["trash", "restore", "abc", "--replace-existing", "--move-to-trash", "--no-sync-to-disk"],
+            ["trash", "restore", "abc", "-r", "-m", "-S"],
+        ),
+        (
+            [
+                "libraries",
+                "create",
+                "Movies",
+                "/media",
+                "--cooldown-s",
+                "2",
+                "--watch",
+                "--scan-on-start",
+                "--scan-interval-s",
+                "3600",
+                "--mkv-stats",
+                "--healthcheck-enabled",
+                "--trash-mode",
+                "all",
+                "--trash-retention-days",
+                "14",
+            ],
+            [
+                "libraries",
+                "create",
+                "Movies",
+                "/media",
+                "-c",
+                "2",
+                "-w",
+                "-s",
+                "-i",
+                "3600",
+                "-m",
+                "-H",
+                "-T",
+                "all",
+                "-r",
+                "14",
+            ],
+        ),
+        (["libraries", "update", "2", "--data", "{}"], ["libraries", "update", "2", "-d", "{}"]),
+        (["libraries", "update", "2", "--data-file", "body.json"], ["libraries", "update", "2", "-f", "body.json"]),
+        (
+            ["flows", "save", "demo", "flow.json", "--expected-version", "1"],
+            ["flows", "save", "demo", "flow.json", "-v", "1"],
+        ),
+        (
+            ["flows", "rename", "demo", "new", "flow.json", "--expected-version", "1"],
+            ["flows", "rename", "demo", "new", "flow.json", "-v", "1"],
+        ),
+        (["flows", "delete", "demo", "--expected-version", "1"], ["flows", "delete", "demo", "-v", "1"]),
+        (["flows", "dry-run", "movie.mkv", "--flow", "demo"], ["flows", "dry-run", "movie.mkv", "-f", "demo"]),
+        (["db", "query", "SELECT 1", "--write"], ["db", "query", "SELECT 1", "-w"]),
+        (["db", "revision", "--message", "change"], ["db", "revision", "-m", "change"]),
+    ],
+)
+def test_short_flag_contract(long_args, short_args):
+    parser = cli._parser()
+    assert vars(parser.parse_args(cli._normalize_json_flag(short_args))) == vars(
+        parser.parse_args(cli._normalize_json_flag(long_args))
+    )

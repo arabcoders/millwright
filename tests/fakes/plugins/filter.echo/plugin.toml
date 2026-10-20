@@ -1,0 +1,7 @@
+id = "filter.echo"
+kind = "filter"
+description = "Emits a facet containing the requested mode."
+name = "Echo mode facet"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

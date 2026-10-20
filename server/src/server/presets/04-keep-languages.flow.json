@@ -1,0 +1,23 @@
+{
+  "_type": "flow",
+  "_version": 1,
+  "name": "Starter - Keep English and Japanese",
+  "description": "Remux to MKV and remove other audio and subtitle languages while preserving untagged tracks.",
+  "route": "All files -> Keep eng/jpn/und. Already satisfied -> Skip",
+  "concepts": ["Stream policy", "Remux", "Skip"],
+  "definition": {
+    "entry": "remux",
+    "nodes": [
+      { "type": "plugin", "id": "remux", "plugin": "transcode.remux", "inputs": { "container": "mkv", "audio_keep_languages": [ "eng", "jpn", "und" ], "subtitle_keep_languages": [ "eng", "jpn", "und" ] } },
+      { "type": "terminal", "id": "done", "outcome": "done" },
+      { "type": "terminal", "id": "skip", "outcome": "skip" }
+    ],
+    "edges": [
+      { "src": "remux", "port": "plan", "dst": "done" },
+      { "src": "remux", "port": "skip", "dst": "skip" }
+    ],
+    "actions": [],
+    "when": null,
+    "_ui": { "nodes": { "start": { "x": -200, "y": 120 }, "remux": { "x": 80, "y": 120 }, "done": { "x": 360, "y": 60 }, "skip": { "x": 360, "y": 180 } } }
+  }
+}

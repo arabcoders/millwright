@@ -1,0 +1,19 @@
+[project]
+name = "millwright-node"
+version = "0.1.0"
+description = "Transcode node agent."
+requires-python = ">=3.14"
+dependencies = ["millwright-common", "pydantic>=2.12", "websockets>=14.0"]
+
+[project.scripts]
+millwright-node = "node.cli:main"
+
+[build-system]
+requires = ["uv-build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+millwright-common = { workspace = true }
+
+[tool.uv.build-backend]
+module-name = "node"

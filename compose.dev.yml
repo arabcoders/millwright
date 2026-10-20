@@ -1,0 +1,74 @@
+# Keep development containers and volumes separate from the deployment in compose.yml.
+name: millwright-dev
+
+services:
+  # Local development only. PostgreSQL data is lost when this container stops.
+  # Mount the PostgreSQL 18 volume root so Docker creates no anonymous data volume.
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: millwright
+      POSTGRES_PASSWORD: millwright
+      POSTGRES_DB: millwright
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql:uid=999,gid=999,mode=0700
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "millwright", "-d", "millwright"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  postgres-test:
+    image: postgres:18
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: mw_ci
+      POSTGRES_PASSWORD: mw_ci
+      POSTGRES_DB: mw_ci
+    ports:
+      - "127.0.0.1:55433:5432"
+    tmpfs:
+      - /var/lib/postgresql:uid=999,gid=999,mode=0700
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mw_ci", "-d", "mw_ci"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  all-in-one:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: millwright:local
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${MW_PORT:-8000}:${MW_PORT:-8000}"
+    environment:
+      MW_ROLE: all
+      UMASK: ${UMASK:-0002}
+      MW_PORT: ${MW_PORT:-8000}
+      MW_DISABLE_JOBS: ${MW_DISABLE_JOBS:-false}
+      MW_DATABASE_URL: ${MW_DATABASE_URL:-postgresql+psycopg://millwright:millwright@postgres:5432/millwright}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - aio-data:/data
+      - aio-config:/config
+    # Intel GPU access requires the host's video and render group IDs.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - "${VIDEO_GID:-44}"
+    #   - "${RENDER_GID:-105}"
+    # Intel utilization monitoring also needs performance-counter access.
+    # cap_add:
+    #   - PERFMON
+    restart: unless-stopped
+
+volumes:
+  aio-data:
+  aio-config:

@@ -1,0 +1,20 @@
+name: delete-builds
+
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  delete-builds:
+    runs-on: ubuntu-latest
+    if: vars.REGISTRY == ''
+    steps:
+      - name: Delete old untagged images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: millwright
+          package-type: container
+          min-versions-to-keep: 20
+          delete-only-untagged-versions: true

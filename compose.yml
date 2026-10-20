@@ -1,0 +1,60 @@
+# Deployment setup. See docs/installation.md for first startup.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: millwright
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: millwright
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "millwright", "-d", "millwright"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  server:
+    image: ghcr.io/arabcoders/millwright:latest
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      MW_ROLE: server
+      MW_DATABASE_URL: postgresql+psycopg://millwright:${POSTGRES_PASSWORD}@postgres:5432/millwright
+      MW_WORKSPACE_DIR: /workspace
+      UMASK: ${UMASK:-0002}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./config:/config
+      - ./server-data:/data
+      - "${MEDIA_DIR:?Set MEDIA_DIR in .env}:/media"
+      - ./workspace:/workspace
+    restart: unless-stopped
+
+  node:
+    image: ghcr.io/arabcoders/millwright:latest
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      MW_ROLE: node
+      MW_NODE_SERVER_URL: http://server:8000
+      MW_NODE_ENROLLMENT_TOKEN: file:/run/node_enrollment_token
+      MW_NODE_WORKSPACE_DIR: /workspace
+      UMASK: ${UMASK:-0002}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./node-config:/config
+      - ./node-data:/data
+      - ./workspace:/workspace
+      - ./config/millwright/secrets/node_enrollment_token:/run/node_enrollment_token:ro
+    restart: unless-stopped
+
+volumes:
+  db-data:

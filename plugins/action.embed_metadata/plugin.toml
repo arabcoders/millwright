@@ -1,0 +1,7 @@
+id = "action.embed_metadata"
+kind = "action"
+description = "Embed metadata from sidecar files during processing."
+name = "Embed sidecar metadata"
+author = "Millwright"
+url = "https://github.com/arabcoders/millwright"
+version = "1.0.0"

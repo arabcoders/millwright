@@ -1,0 +1,7 @@
+id = "action.ctx_echo"
+kind = "action"
+description = "Echoes context values for action host tests."
+name = "Ctx echo"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"

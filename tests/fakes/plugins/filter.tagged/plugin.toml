@@ -1,0 +1,8 @@
+id = "filter.tagged"
+kind = "filter"
+description = "Matches only when the required worker tag is available."
+name = "Tagged match"
+version = "1.0.0"
+requires = ["gpu"]
+author = "Test"
+url = "https://example.com/plugins"

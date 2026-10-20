@@ -1,0 +1,121 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  echo "usage: pre-commit [--unstaged | --all]" >&2
+  echo "  (no args)  check staged files" >&2
+  echo "  --unstaged check unstaged and untracked files instead" >&2
+  echo "  --all      check all tracked files" >&2
+}
+
+case "${1:-}" in
+  "")
+    selected_files=$(git diff --cached --name-only --diff-filter=ACMR)
+    mode_label="staged"
+    ;;
+  --unstaged)
+    selected_files=$(git diff --name-only --diff-filter=ACMR)
+    selected_files="$selected_files
+$(git ls-files --others --exclude-standard)"
+    mode_label="unstaged"
+    ;;
+  --all)
+    selected_files=$(git ls-files)
+    mode_label="all"
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT" || exit 1
+
+TMP_ROOT=${TMPDIR:-/tmp}/tests-millwright
+mkdir -p "$TMP_ROOT"
+PIDS_FILE=$(mktemp "$TMP_ROOT/millwright-precommit.XXXXXX")
+trap 'rm -f "$PIDS_FILE"' EXIT
+
+export CI=1
+checks_started=0
+run_step() {
+  local label="$1"
+  shift
+  checks_started=1
+  echo "Starting $label..." >&2
+  (
+    if ! "$@"; then
+      echo "[$label] failed. $mode_label run failed." >&2
+      exit 1
+    else
+      echo "[$label] passed." >&2
+    fi
+  ) &
+  echo $! >>"$PIDS_FILE"
+}
+
+run_extra_dir() {
+  local scope="$1"
+  local dir="$2"
+  for step in "$dir"/*; do
+    [ -f "$step" ] && [ -x "$step" ] || continue
+    run_step "Extra ($scope): $(basename "$step")" "$step"
+  done
+}
+
+echo "Running pre-commit checks ($mode_label)... ${REPO_ROOT}" >&2
+python_changed=0
+
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  case "$path" in
+    common/src/* | node/src/* | server/src/* | plugins/* | tests/* | pyproject.toml | common/pyproject.toml | server/pyproject.toml | node/pyproject.toml | uv.lock)
+      python_changed=1
+      ;;
+    .editorconfig)
+      python_changed=1
+      ;;
+  esac
+done <<EOF
+$selected_files
+EOF
+
+if [ "$python_changed" -eq 1 ]; then
+  run_step "Python: Formatter" uv run ruff format --check .
+  run_step "Python: Linter" uv run ruff check .
+  py_files=$(git ls-files --cached --others --exclude-standard -- '*.py' |
+    while IFS= read -r path; do
+      [ -f "$path" ] && printf '%s\n' "$path"
+    done)
+  if [ -n "$py_files" ]; then
+    # shellcheck disable=SC2086
+    run_step "Python: TY Linter" uv run ty check $py_files
+  fi
+  if [ -d tests ]; then
+    run_step "Python: Tests" uv run pytest -q
+  fi
+fi
+
+extra_dir=$(git rev-parse --git-path hooks)/pre-commit.d
+run_extra_dir "Global" "$extra_dir"
+
+if [ "$checks_started" -eq 0 ]; then
+  echo "No checks apply to the $mode_label files."
+  exit 0
+fi
+
+fail=0
+while read -r pid; do
+  if ! wait "$pid"; then
+    fail=1
+  fi
+done <"$PIDS_FILE"
+
+if [ "$fail" -eq 1 ]; then
+  echo "[X] One or more checks failed. $mode_label run failed." >&2
+  exit 1
+fi
+
+echo "All checks passed."
+exit 0

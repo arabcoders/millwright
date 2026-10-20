@@ -1,0 +1,7 @@
+id = "myplugin.foo"
+kind = "filter"
+description = "Fixture with an invalid plugin identifier."
+name = "Broken id"
+version = "1.0.0"
+author = "Test"
+url = "https://example.com/plugins"
