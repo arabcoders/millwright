@@ -1,8 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import {
   filterChangelog,
+  formatCommitMessage,
+  initialChangelogReleases,
   loadChangelog,
-  splitCommitMessage,
   type ChangelogGroup,
 } from '../app/utils/changelog';
 
@@ -116,15 +117,52 @@ describe('commit history filtering', () => {
     expect(filterChangelog(groups, 'alpha.1')).toEqual([groups[1]!]);
     expect(filterChangelog(groups, '  ')).toEqual(groups);
   });
+
+  test('limits visible releases', () => {
+    const history = Array.from({ length: 11 }, (_, index) => ({
+      ...groups[0]!,
+      tag: `v0.1.${10 - index}`,
+    }));
+    const visible = filterChangelog(history, '');
+    expect(visible).toHaveLength(10);
+    expect(visible.at(-1)?.tag).toBe('v0.1.1');
+    expect(filterChangelog(history, 'v0.1.0')).toEqual([]);
+  });
 });
 
-test('preserves Markdown body', () => {
+test('opens installed releases', () => {
+  expect(initialChangelogReleases(groups, 'dev', '11223344')).toEqual(['Unreleased']);
+  expect(initialChangelogReleases(groups, 'v0.1.0-alpha.1', 'abcdef')).toEqual([
+    'Unreleased',
+    'v0.1.0-alpha.1',
+  ]);
+});
+
+test('uses version fallback', () => {
+  const history = [
+    groups[0]!,
+    ...['v0.1.10', 'v0.1.9', 'v0.1.8'].map((tag) => ({ ...groups[1]!, tag })),
+  ];
+  expect(initialChangelogReleases(history, 'v0.1.9', '')).toEqual(['v0.1.10', 'v0.1.9']);
+  expect(initialChangelogReleases(history, 'dev', '')).toEqual([
+    'Unreleased',
+    'v0.1.10',
+    'v0.1.9',
+    'v0.1.8',
+  ]);
+});
+
+test('formats commit messages', () => {
   expect(
-    splitCommitMessage(
-      'fix: preserve text.\r\n\r\n    indented code\r\n\r\n- First\r\n  - Nested\r\n\r\n```\r\n  code\r\n```\r\n',
+    formatCommitMessage(
+      '\r\nfix: preserve text.\r\n\r\n    indented code\r\n\r\n- First\r\n  - Nested\r\n\r\n```\r\n  code\r\n```\r\n',
     ),
   ).toEqual({
-    title: 'fix: preserve text.',
-    description: '    indented code\n\n- First\n  - Nested\n\n```\n  code\n```',
+    title: 'Fix: preserve text.',
+    description: ['indented code', '- First', '- Nested', '```', 'code', '```'],
+  });
+  expect(formatCommitMessage('feat: add libraries')).toEqual({
+    title: 'Feat: add libraries.',
+    description: [],
   });
 });
