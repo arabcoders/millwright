@@ -217,6 +217,17 @@
         color="neutral"
         variant="outline"
         size="sm"
+        icon="i-lucide-monitor-play"
+        :disabled="busy"
+        @click="$emit('play')"
+      >
+        Play
+      </UButton>
+      <UButton
+        v-if="job.file"
+        color="neutral"
+        variant="outline"
+        size="sm"
         icon="i-lucide-file-video"
         :loading="fileLoading"
         @click="$emit('open-file', job.file.id)"
@@ -311,6 +322,7 @@ const props = withDefaults(
 );
 defineEmits<{
   open: [];
+  play: [];
   'open-file': [id: number];
   select: [value: boolean | 'indeterminate'];
   cancel: [];
