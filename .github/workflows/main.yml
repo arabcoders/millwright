@@ -78,12 +78,6 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --frozen --all-packages --dev
 
-      - name: Check Python
-        env:
-          # The full suite can exceed five minutes on hosted runners.
-          PYTEST_ADDOPTS: "--session-timeout=900"
-        run: .githooks/pre-commit --all
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -104,21 +98,11 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
-      - name: Check frontend formatting
-        working-directory: ui
-        run: bun run format:check
-
-      - name: Lint frontend
-        working-directory: ui
-        run: bun run lint:ci
-
-      - name: Check frontend types
-        working-directory: ui
-        run: bun run lint:tsc
-
-      - name: Test frontend
-        working-directory: ui
-        run: bun test
+      - name: Pre-commit checks
+        env:
+          # The full suite can exceed five minutes on hosted runners.
+          PYTEST_ADDOPTS: "--session-timeout=900"
+        run: .githooks/pre-commit --all
 
       - name: Build frontend
         working-directory: ui
