@@ -39,15 +39,19 @@ def commit(repo: Path, message: str, date: str = "2026-01-01T12:00:00+00:00") ->
     return git(repo, "rev-parse", "HEAD")
 
 
-def generate(repo: Path) -> list[dict]:
+def generate(repo: Path, *args: str) -> list[dict]:
     output = repo / "exported/CHANGELOG.json"
-    subprocess.run([sys.executable, str(SCRIPT), "--repo", str(repo), "--output", str(output)], check=True)
+    subprocess.run([sys.executable, str(SCRIPT), "--repo", str(repo), "--output", str(output), *args], check=True)
     return json.loads(output.read_text())
 
 
 def test_untagged_root(repo: Path) -> None:
     root = commit(repo, "Initial media support\n\n- Keep this list\n- Keep indentation\n\n```\n  example\n```")
-    head = commit(repo, "Add libraries", "2026-01-02T12:00:00+00:00")
+    head = commit(
+        repo,
+        "Add libraries\n\nCo-authored-by: Another Author <author@example.test>\nCO-AUTHORED-BY: Other <other@example.test>",
+        "2026-01-02T12:00:00+00:00",
+    )
 
     groups = generate(repo)
 
@@ -55,6 +59,7 @@ def test_untagged_root(repo: Path) -> None:
     assert groups[0]["full_sha"] == head
     assert datetime.fromisoformat(groups[0]["date"]) == datetime(2026, 1, 2, 12, tzinfo=UTC)
     assert [item["full_sha"] for item in groups[0]["commits"]] == [head, root]
+    assert groups[0]["commits"][0]["message"] == "Add libraries"
     initial = groups[0]["commits"][-1]
     assert initial["message"] == git(repo, "show", "-s", "--format=%B", root)
     assert initial["author"] == "History Author"
@@ -70,6 +75,8 @@ def test_tagged_ranges(repo: Path) -> None:
     groups = generate(repo)
     assert [group["tag"] for group in groups] == ["v0.1.0-alpha.2", "v0.1.0-alpha.1"]
     assert [[item["full_sha"] for item in group["commits"]] for group in groups] == [[second], [root]]
+    git(repo, "branch", "dev")
+    assert generate(repo, "--include-ref", "dev") == groups
 
     head = commit(repo, "Add playback")
     groups = generate(repo)
@@ -91,3 +98,41 @@ def test_reachable_versions(repo: Path) -> None:
 
     assert [group["tag"] for group in groups] == ["Unreleased", "v0.1.0"]
     assert [[item["full_sha"] for item in group["commits"]] for group in groups] == [[head], [root]]
+
+
+def test_development_after_release(repo: Path) -> None:
+    root = commit(repo, "Start conversion")
+    git(repo, "tag", "v0.1.0")
+    git(repo, "checkout", "-b", "dev")
+    development = commit(repo, "Development branch change")
+
+    groups = generate(repo, "--ref", "main", "--include-ref", "dev")
+
+    assert [group["tag"] for group in groups] == ["Unreleased", "v0.1.0"]
+    assert [[item["full_sha"] for item in group["commits"]] for group in groups] == [[development], [root]]
+
+
+@pytest.mark.parametrize("tagged", [False, True])
+def test_combined_branches(repo: Path, tagged: bool) -> None:
+    root = commit(repo, "Start conversion")
+    if tagged:
+        git(repo, "tag", "v0.1.0")
+    shared = commit(repo, "Shared development")
+    git(repo, "branch", "dev")
+    primary = commit(repo, "Primary branch change")
+    git(repo, "update-ref", "refs/remotes/origin/master", primary)
+    git(repo, "checkout", "dev")
+    development = commit(repo, "Development branch change")
+    git(repo, "tag", "v9.0.0")
+    git(repo, "update-ref", "refs/remotes/origin/dev", development)
+
+    groups = generate(repo, "--ref", "origin/master", "--include-ref", "origin/dev")
+
+    assert [group["tag"] for group in groups] == (["Unreleased", "v0.1.0"] if tagged else ["Unreleased"])
+    assert groups[0]["full_sha"] == development
+    commits = [item["full_sha"] for item in groups[0]["commits"]]
+    expected = {development, primary, shared} if tagged else {development, primary, shared, root}
+    assert set(commits) == expected
+    assert len(commits) == len(expected)
+    if tagged:
+        assert [item["full_sha"] for item in groups[1]["commits"]] == [root]
