@@ -211,7 +211,7 @@ const NavItems: Array<NavDefinition> = [
     section: 'documentation',
     group: 'documentation',
     label: 'Changelog',
-    description: 'Commit history grouped by release, with the installed build marked.',
+    description: 'Latest project changes',
     icon: 'i-lucide-history',
     to: '/changelog',
   },

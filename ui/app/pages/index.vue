@@ -300,6 +300,7 @@
               :compact="compact"
               :busy="processingLoading || actionLoading.has(job.id)"
               @open="openDetail(job.id)"
+              @play="job.file && openFilePlayer(job.file)"
               @open-file="openRecentFile({ id: $event })"
               @cancel="cancelProcessingJob(job)"
             />
@@ -640,7 +641,7 @@ const openDetailDryRun = (): void => {
   }
   void openFileDryRun(fileDetail.value);
 };
-const openFilePlayer = (file: MediaFileRow): void => {
+const openFilePlayer = (file: Pick<MediaFileRow, 'id' | 'path'>): void => {
   if (disposed || fileActionBusy.value || healthChecking.value || transcoding.value) return;
   playerModal?.close();
   playerModalFileId.value = file.id;

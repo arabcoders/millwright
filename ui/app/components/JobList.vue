@@ -166,6 +166,7 @@
             :busy="loading || bulkBusy"
             :file-loading="fileLoadingId === job.file?.id"
             @open="openDetail(job)"
+            @play="job.file && openPlayer(job.file)"
             @open-file="openFile"
             @select="toggleSelection(job.id, $event)"
             @cancel="cancelJob(job)"
@@ -213,6 +214,7 @@ import { useLibraries } from '~/composables/useLibraries';
 import { useJobs, type BulkJobAction } from '~/composables/useJobs';
 import { useFiles } from '~/composables/useFiles';
 import FileDetailModal from '~/components/FileDetailModal.vue';
+import MediaPlayerModal from '~/components/MediaPlayerModal.vue';
 import { validJobExport } from '~/utils/jobExport';
 import {
   JOB_FILTER_ALL,
@@ -227,7 +229,7 @@ import {
   remainingJobSelection,
   updateJobRoute,
 } from '~/utils/jobList';
-import type { JobDetail, JobRow } from '~/types/api';
+import type { JobDetail, JobFile, JobRow } from '~/types/api';
 
 const props = defineProps<{ dashboard?: boolean; compact?: boolean }>();
 const statusOptions = props.dashboard ? dashboardJobStatusOptions : jobStatusOptions;
@@ -268,7 +270,26 @@ const { loadDetail: loadFileDetail } = useFiles();
 const overlay = useOverlay();
 const fileLoadingId = ref<number | null>(null);
 let fileModal: ReturnType<typeof overlay.create<typeof FileDetailModal>> | null = null;
+let playerModal: ReturnType<typeof overlay.create<typeof MediaPlayerModal>> | null = null;
+const playerModalFileId = ref<number | null>(null);
 let disposed = false;
+
+const openPlayer = (file: JobFile): void => {
+  if (disposed) return;
+  playerModal?.close();
+  playerModalFileId.value = file.id;
+  playerModal = overlay.create(MediaPlayerModal, {
+    props: { open: true, fileId: file.id, title: file.path.split(/[\\/]/).at(-1) || file.path },
+    destroyOnClose: true,
+  });
+  const modal = playerModal;
+  void modal.open().result.then(() => {
+    if (playerModal === modal) {
+      playerModal = null;
+      playerModalFileId.value = null;
+    }
+  });
+};
 
 const openFile = async (id: number): Promise<void> => {
   if (disposed || fileLoadingId.value !== null) return;
@@ -303,9 +324,23 @@ const openFile = async (id: number): Promise<void> => {
   }
 };
 
+const { on } = useEvents();
+const stopEvents = on((event) => {
+  if (
+    event.type === 'file.status' &&
+    event.payload.media_file_id === playerModalFileId.value &&
+    (event.payload.action === 'deleted' || event.payload.action === 'pruned')
+  ) {
+    playerModal?.close();
+    playerModalFileId.value = null;
+  }
+});
+
 onBeforeUnmount(() => {
   disposed = true;
+  stopEvents();
   fileModal?.close();
+  playerModal?.close();
 });
 
 const selectedIds = ref<Set<number>>(new Set());

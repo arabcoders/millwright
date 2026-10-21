@@ -7,6 +7,25 @@ individual files or let Millwright handle new files automatically.
 > [!WARNING]
 > Millwright is still in alpha phase and may have bugs or incomplete features.
 
+### If you like my work, you might also like my other projects:
+
+* [YTPTube](https://github.com/arabcoders/ytptube): Media download manager, automation interface, and media library preparation layer for yt-dlp.
+* [WatchState](https://github.com/arabcoders/watchstate): Self-hosted service to sync your media servers without relying on 3rd-party external services.
+
+## Screenshots
+
+Dashboard:
+
+![Dashboard](ui/public/images/screenshots/dashbaord.jpg)
+
+Statistics:
+
+![Statistics](ui/public/images/screenshots/stats.jpg)
+
+Job details:
+
+![Job details and flow decisions](ui/public/images/screenshots/job-view.jpg)
+
 ## How it works
 
 1. Add your media folders as a **Library**.

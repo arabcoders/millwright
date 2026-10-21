@@ -66,6 +66,7 @@ run_extra_dir() {
 
 echo "Running pre-commit checks ($mode_label)... ${REPO_ROOT}" >&2
 python_changed=0
+frontend_changed=0
 
 while IFS= read -r path; do
   [ -n "$path" ] || continue
@@ -75,11 +76,21 @@ while IFS= read -r path; do
       ;;
     .editorconfig)
       python_changed=1
+      frontend_changed=1
+      ;;
+    ui/*)
+      frontend_changed=1
       ;;
   esac
 done <<EOF
 $selected_files
 EOF
+
+if [ "$frontend_changed" -eq 1 ]; then
+  echo "Preparing frontend..." >&2
+  NODE_ENV=development bun --cwd=./ui run nuxt prepare --envName=development
+  echo "Frontend preparation passed." >&2
+fi
 
 if [ "$python_changed" -eq 1 ]; then
   run_step "Python: Formatter" uv run ruff format --check .
@@ -97,8 +108,21 @@ if [ "$python_changed" -eq 1 ]; then
   fi
 fi
 
+if [ "$frontend_changed" -eq 1 ]; then
+  run_step "Frontend: Formatter" bun --cwd=./ui run format:check
+  run_step "Frontend: Linter" bun --cwd=./ui run lint:ci
+  run_step "Frontend: Tests" bun --cwd=./ui test
+  run_step "Frontend: TSC" bun --cwd=./ui run lint:tsc
+fi
+
 extra_dir=$(git rev-parse --git-path hooks)/pre-commit.d
 run_extra_dir "Global" "$extra_dir"
+if [ "$python_changed" -eq 1 ]; then
+  run_extra_dir "Backend" "$extra_dir/backend"
+fi
+if [ "$frontend_changed" -eq 1 ]; then
+  run_extra_dir "Frontend" "$extra_dir/frontend"
+fi
 
 if [ "$checks_started" -eq 0 ]; then
   echo "No checks apply to the $mode_label files."
