@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import ts from 'typescript';
 import type {
   BatchDryRunReport,
@@ -160,8 +160,20 @@ const setup = () => {
     tick: async () => {
       const [id, timer] = [...timers.entries()][0]!;
       timers.delete(id);
-      timer.callback();
-      for (let turn = 0; turn < 20 && store.loading.value; turn++) await Promise.resolve();
+      const completed = Promise.withResolvers<undefined>();
+      const stop = watch(
+        store.loading,
+        (loading) => {
+          if (!loading) completed.resolve(undefined);
+        },
+        { flush: 'sync' },
+      );
+      try {
+        timer.callback();
+        if (store.loading.value) await completed.promise;
+      } finally {
+        stop();
+      }
       expect(store.loading.value).toBe(false);
     },
   };

@@ -8,10 +8,18 @@ from pydantic import ValidationError
 from common.config import apply_env_overrides
 from common.enums import JobStatus
 from server.api.app import create_app
-from server.core.config import ServerConfig, ensure_config, is_oidc_ready, load_config
+from server.core.config import ENV_OVERRIDES, ServerConfig, ensure_config, is_oidc_ready, load_config
 from server.settings import OperationalSettings
 from tests.helpers import database_context, make_test_temp_dir
 from tests.test_staging import add_job, get_job
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for variable in ENV_OVERRIDES.values():
+        if variable != "MW_DATABASE_URL":
+            monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("TZ", "UTC")
 
 
 @pytest.mark.parametrize("field", ["max_probes", "max_mkv_stats"])

@@ -1,5 +1,10 @@
-import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import * as Vue from 'vue';
+import ts from 'typescript';
 import * as realUtils from '../app/utils';
+import * as stateHelpers from '../app/composables/stateHelpers';
+import * as jobList from '../app/utils/jobList';
+import * as statusUtils from '../app/utils/status';
 
 const callbacks: Array<(event: ServerEvent) => void> = [];
 const reconnects: Array<() => void> = [];
@@ -19,7 +24,7 @@ let responseBulk:
 let responseTotal: number | undefined;
 let actionStatus = 200;
 
-mock.module('~/utils', () => ({
+const transport = {
   ...realUtils,
   request: (url: string) => {
     calls.push(url);
@@ -34,19 +39,13 @@ mock.module('~/utils', () => ({
     return Promise.resolve(response(url));
   },
   parse_api_error: async (body: { detail?: string } | null) => body?.detail ?? null,
-}));
-mock.module('~/composables/useApiErrorMessage', () => ({
-  useApiErrorMessage: () => ({ messageFor: () => '' }),
-}));
-mock.module('../app/composables/useEvents', () => ({
+};
+const events = {
   useEvents: () => ({
     on: (callback: (event: ServerEvent) => void) => callbacks.push(callback),
     onReconnect: (callback: () => void) => reconnects.push(callback),
   }),
-}));
-mock.module('../app/composables/useTranscodeFlow', () => ({
-  useTranscodeFlow: () => ({ pick: async () => null }),
-}));
+};
 
 type ServerEvent = import('../app/composables/useEvents').ServerEvent;
 type JobRow = import('../app/types/api').JobRow;
@@ -170,22 +169,86 @@ const releaseAll = () => {
   for (const finish of releases.keys()) finish();
 };
 
-beforeAll(() => {
-  Bun.plugin({
-    name: 'browser-composables',
-    setup(build) {
-      build.onLoad({ filter: /use(Jobs|Files)\.ts$/ }, async (args) => ({
-        contents: (await Bun.file(args.path).text()).replaceAll('import.meta.client', 'true'),
-        loader: 'ts',
-      }));
+const compiled = new Map<string, string>();
+for (const name of ['useJobs', 'useFiles']) {
+  const source = await Bun.file(new URL(`../app/composables/${name}.ts`, import.meta.url)).text();
+  compiled.set(
+    name,
+    ts.transpileModule(source.replaceAll('import.meta.client', 'true'), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText,
+  );
+}
+// Failed assertions can leave held loads running until teardown.
+const pendingLoads = new Set<Promise<unknown>>();
+const track = <T>(pending: Promise<T>): Promise<T> => {
+  pendingLoads.add(pending);
+  void pending.then(
+    () => pendingLoads.delete(pending),
+    () => pendingLoads.delete(pending),
+  );
+  return pending;
+};
+let composables: {
+  useJobs: typeof import('../app/composables/useJobs');
+  useFiles: typeof import('../app/composables/useFiles');
+};
+beforeEach(() => {
+  const modules: Record<string, unknown> = {
+    vue: Vue,
+    '~/utils': transport,
+    '~/utils/jobList': jobList,
+    '~/utils/status': statusUtils,
+    './stateHelpers': stateHelpers,
+    './useEvents': events,
+    './useTranscodeFlow': { useTranscodeFlow: () => ({ pick: async () => null }) },
+    '~/composables/useApiErrorMessage': {
+      useApiErrorMessage: () => ({ messageFor: () => '' }),
     },
-  });
+  };
+  const load = <T>(name: string): T => {
+    const exports = {};
+    new Function('require', 'exports', compiled.get(name)!)(
+      (name: string) => modules[name] ?? {},
+      exports,
+    );
+    return exports as T;
+  };
+  const jobs = load<typeof import('../app/composables/useJobs')>('useJobs');
+  const files = load<typeof import('../app/composables/useFiles')>('useFiles');
+  composables = {
+    useJobs: {
+      ...jobs,
+      useJobs: () => {
+        const store = jobs.useJobs();
+        return {
+          ...store,
+          load: (filters) => track(store.load(filters)),
+          loadProcessing: () => track(store.loadProcessing()),
+        };
+      },
+    },
+    useFiles: {
+      ...files,
+      useFiles: () => {
+        const store = files.useFiles();
+        return {
+          ...store,
+          load: (filters) => track(store.load(filters)),
+          loadRecent: () => track(store.loadRecent()),
+        };
+      },
+    },
+  };
 });
 
-afterEach(() => {
-  releaseAll();
-  calls.length = 0;
+afterEach(async () => {
   holdRequest = false;
+  releaseAll();
+  await Promise.allSettled([...pendingLoads]);
+  callbacks.length = 0;
+  reconnects.length = 0;
+  calls.length = 0;
   responseJob = undefined;
   responseJobs = undefined;
   responseFiles = undefined;
@@ -199,7 +262,7 @@ afterEach(() => {
 
 describe('live updates', () => {
   test('retry acknowledges promptly', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = { ...job(1, 100), status: 'failed' };
     await jobs.load(filters);
@@ -216,7 +279,7 @@ describe('live updates', () => {
   });
 
   test.each(['retry', 'delete'] as const)('bulk %s acknowledges', async (action) => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJobs = [job(1, 0), job(2, 0)];
     responseTotal = 2;
@@ -242,7 +305,7 @@ describe('live updates', () => {
   });
 
   test('delete acknowledges promptly', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     await jobs.load(filters);
     calls.length = 0;
@@ -266,7 +329,7 @@ describe('live updates', () => {
   });
 
   test.each(['single', 'bulk'] as const)('refresh accepts %s', async (mode) => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     await jobs.load(filters);
     holdRequest = true;
@@ -292,7 +355,7 @@ describe('live updates', () => {
   });
 
   test('delete retains rejection', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     await jobs.load(filters);
     calls.length = 0;
@@ -306,7 +369,7 @@ describe('live updates', () => {
   });
 
   test('pending stays listed', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     const subscriptions = callbacks.length;
     useJobs();
@@ -355,7 +418,7 @@ describe('live updates', () => {
     ['pending', 'transcode'],
     ['queued', 'healthcheck'],
   ] as const)('file status %s', async (queuedStatus, kind) => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [
       {
@@ -389,7 +452,7 @@ describe('live updates', () => {
   });
 
   test('queued status updates', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = {
       ...job(1, 0),
@@ -432,7 +495,7 @@ describe('live updates', () => {
   });
 
   test('pending snapshots normalize', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = {
       ...job(1, 100),
@@ -495,7 +558,7 @@ describe('live updates', () => {
     ['pending', 901],
     ['queued', 902],
   ] as const)('terminal rejects %s', async (queuedStatus, id) => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     const catalogue = {
       ...file(id),
@@ -575,7 +638,7 @@ describe('live updates', () => {
   });
 
   test.each(['cancel', 'bump'] as const)('bulk refreshes %s', async (action) => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     const selectedFilters = {
       ...filters,
@@ -604,7 +667,7 @@ describe('live updates', () => {
   });
 
   test('bulk partial refresh', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJobs = [job(1, 0), job(2, 0)];
     responseTotal = 2;
@@ -624,7 +687,7 @@ describe('live updates', () => {
   });
 
   test.each(['cancel', 'bump'] as const)('action refreshes %s', async (action) => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     await jobs.load(filters);
     const listUrl = calls.at(-1)!;
@@ -637,7 +700,7 @@ describe('live updates', () => {
   });
 
   test.each(['cancel', 'delete'] as const)('bulk %s rejection', async (action) => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     await jobs.load(filters);
     calls.length = 0;
@@ -650,7 +713,7 @@ describe('live updates', () => {
   });
 
   test('bulk refresh failure', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     await jobs.load(filters);
     failedList = 'jobs';
@@ -664,7 +727,7 @@ describe('live updates', () => {
   });
 
   test('files retain full page', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = Array.from({ length: 999 }, (_, index) => file(index + 1));
     responseTotal = 1000;
@@ -677,7 +740,7 @@ describe('live updates', () => {
   });
 
   test('recent isolates filters', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     const retained = { ...file(9, 'retained.mkv'), library_id: 2 };
     responseFiles = [retained];
@@ -709,7 +772,7 @@ describe('live updates', () => {
   });
 
   test('recent stays bounded', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = Array.from({ length: 6 }, (_, index) => ({
       ...file(index + 1),
@@ -732,7 +795,7 @@ describe('live updates', () => {
   });
 
   test('recent deletion merge', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = Array.from({ length: 6 }, (_, index) => file(index + 1));
     for (const overlap of [false, true]) {
@@ -759,7 +822,7 @@ describe('live updates', () => {
   });
 
   test.each(['deleted', 'pruned'] as const)('removed file lists %s', async (action) => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [file(1), file(2)];
     responseTotal = 2;
@@ -774,7 +837,7 @@ describe('live updates', () => {
   });
 
   test('file deletion merge', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [file(1), file(2)];
     responseTotal = 2;
@@ -801,7 +864,7 @@ describe('live updates', () => {
   });
 
   test('recent failure retention', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [file(2)];
     await files.loadRecent();
@@ -819,7 +882,7 @@ describe('live updates', () => {
   });
 
   test('recent progress overlaps', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     const active = {
       ...file(1),
@@ -858,7 +921,7 @@ describe('live updates', () => {
   });
 
   test('separates file states', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     await files.load({ ...fileFilters, transcode_status: 'pending' });
     calls.length = 0;
@@ -897,7 +960,7 @@ describe('live updates', () => {
   });
 
   test('file progress updates', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     const active = {
       ...file(1),
@@ -942,7 +1005,7 @@ describe('live updates', () => {
   });
 
   test('file progress overlaps', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     const active = {
       ...file(1),
@@ -974,7 +1037,7 @@ describe('live updates', () => {
   });
 
   test('file terminal overlaps', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [
       {
@@ -1007,7 +1070,7 @@ describe('live updates', () => {
   });
 
   test('file job replacement', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [
       {
@@ -1038,7 +1101,7 @@ describe('live updates', () => {
   });
 
   test('jobs isolate filters', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     const view = { ...filters, query: 'failed-jobs' };
     failedList = 'jobs';
@@ -1077,7 +1140,7 @@ describe('live updates', () => {
   });
 
   test('files isolate filters', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     const view = { ...fileFilters, query: 'failed-files' };
     failedList = 'files';
@@ -1113,8 +1176,8 @@ describe('live updates', () => {
   });
 
   test('late failures obsolete', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useJobs } = composables.useJobs;
+    const { useFiles } = composables.useFiles;
     const jobs = useJobs();
     const files = useFiles();
     holdRequest = true;
@@ -1143,7 +1206,7 @@ describe('live updates', () => {
   });
 
   test('initial overlaps show rows', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = running(1, 0, stamps[0]!);
     holdRequest = true;
@@ -1162,8 +1225,8 @@ describe('live updates', () => {
   });
 
   test('events do not reload loaded lists', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useJobs } = composables.useJobs;
+    const { useFiles } = composables.useFiles;
     const jobs = useJobs();
     const files = useFiles();
     await jobs.load(filters);
@@ -1240,8 +1303,8 @@ describe('live updates', () => {
   });
 
   test('manual loads request once', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useJobs } = composables.useJobs;
+    const { useFiles } = composables.useFiles;
     await useJobs().load(filters);
     await useFiles().load(fileFilters);
     await useJobs().loadProcessing();
@@ -1254,7 +1317,7 @@ describe('live updates', () => {
   });
 
   test('refresh removes inactive', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     for (const reconnect of [false, true]) {
       for (const missed of ['deleted', 'terminal']) {
@@ -1293,7 +1356,7 @@ describe('live updates', () => {
   });
 
   test('processing failure visible', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = running(1, 0, stamps[0]!);
     await jobs.loadProcessing();
@@ -1309,7 +1372,7 @@ describe('live updates', () => {
   });
 
   test('processing order stays', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJobs = [3, 1, 2].map((id) => ({ ...job(id, 0), status: 'running' }));
     responseTotal = 3;
@@ -1347,7 +1410,7 @@ describe('live updates', () => {
   });
 
   test('cancellation retains jobs', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     for (const terminal of ['cancelled', 'succeeded'] as const) {
       holdRequest = false;
@@ -1384,7 +1447,7 @@ describe('live updates', () => {
   });
 
   test('dashboard splits jobs', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const { dashboardJobStatusOptions, processingJobStatuses } =
       await import('../app/utils/jobList');
     const jobs = useJobs();
@@ -1435,7 +1498,7 @@ describe('live updates', () => {
   });
 
   test('split preserves attempts', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const { dashboardJobStatusOptions } = await import('../app/utils/jobList');
     const jobs = useJobs();
     responseJob = running(2, 0, stamps[1]!);
@@ -1463,7 +1526,7 @@ describe('live updates', () => {
   });
 
   test('fetches job details', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     responseDetail = {
       id: 1,
       attempts: [
@@ -1481,8 +1544,8 @@ describe('live updates', () => {
   });
 
   test('list totals update', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useJobs } = composables.useJobs;
+    const { useFiles } = composables.useFiles;
     const jobs = useJobs();
     const files = useFiles();
     await jobs.load(filters);
@@ -1502,8 +1565,8 @@ describe('live updates', () => {
   });
 
   test('search changes become snapshots', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useJobs } = composables.useJobs;
+    const { useFiles } = composables.useFiles;
     const jobs = useJobs();
     const files = useFiles();
     await jobs.load({ ...filters, query: 'file' });
@@ -1526,8 +1589,8 @@ describe('live updates', () => {
   });
 
   test('partial pages keep snapshots', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useJobs } = composables.useJobs;
+    const { useFiles } = composables.useFiles;
     const jobs = useJobs();
     const files = useFiles();
     await jobs.load({ ...filters, limit: 1 });
@@ -1551,7 +1614,7 @@ describe('live updates', () => {
   });
 
   test('file statuses combine', async () => {
-    const { useFiles } = await import('../app/composables/useFiles');
+    const { useFiles } = composables.useFiles;
     const files = useFiles();
     responseFiles = [
       file(1),
@@ -1623,7 +1686,7 @@ describe('live updates', () => {
   });
 
   test('multiple statuses filter', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJobs = [
       job(1, 0),
@@ -1649,7 +1712,7 @@ describe('live updates', () => {
   });
 
   test('updates preserve view choices', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     const choices = {
       ...filters,
@@ -1672,7 +1735,7 @@ describe('live updates', () => {
   });
 
   test('overlaps preserve live views', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = running(1, 0, stamps[0]!);
     const view = { ...filters, status: 'running' };
@@ -1696,7 +1759,7 @@ describe('live updates', () => {
   });
 
   test('changed filters accept snapshots', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = running(1, 0, stamps[0]!);
     await jobs.load(filters);
@@ -1714,7 +1777,7 @@ describe('live updates', () => {
   });
 
   test('missed updates invalidate loads', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     for (const reconnect of [false, true]) {
       holdRequest = false;
@@ -1740,7 +1803,7 @@ describe('live updates', () => {
   });
 
   test('updates respect attempt boundaries', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = running(1, 0, stamps[0]!);
     await jobs.load(filters);
@@ -1785,7 +1848,7 @@ describe('live updates', () => {
   });
 
   test('late responses exclude deletions', async () => {
-    const { useJobs } = await import('../app/composables/useJobs');
+    const { useJobs } = composables.useJobs;
     const jobs = useJobs();
     responseJob = running(1, 0, stamps[0]!);
     await jobs.load(filters);

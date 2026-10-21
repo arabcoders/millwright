@@ -147,7 +147,7 @@ def pytest_configure(config) -> None:
     if getattr(config.option, "basetemp", None) is None or hasattr(config, "workerinput"):
         config.option.basetemp = str(run_root / "pytest")
 
-    # Keep eager plugin-dir mkdirs under the per-run root, not the real XDG state home.
+    os.environ["MW_CONFIG_PATH"] = str(run_root / "config")
     os.environ["MW_STATE_PATH"] = str(run_root / "state")
     os.environ["MW_CACHE_PATH"] = str(run_root / "cache")
 

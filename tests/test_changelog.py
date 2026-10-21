@@ -16,6 +16,7 @@ def git(repo: Path, *args: str, date: str = "2026-01-01T12:00:00+00:00") -> str:
     return subprocess.check_output(
         ["git", "-C", str(repo), *args],
         text=True,
+        timeout=5,
         env={
             **os.environ,
             "GIT_AUTHOR_NAME": "History Author",
@@ -29,7 +30,9 @@ def git(repo: Path, *args: str, date: str = "2026-01-01T12:00:00+00:00") -> str:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Path:
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     git(tmp_path, "init", "--initial-branch=main")
     return tmp_path
 
@@ -41,7 +44,9 @@ def commit(repo: Path, message: str, date: str = "2026-01-01T12:00:00+00:00") ->
 
 def generate(repo: Path, *args: str) -> list[dict]:
     output = repo / "exported/CHANGELOG.json"
-    subprocess.run([sys.executable, str(SCRIPT), "--repo", str(repo), "--output", str(output), *args], check=True)
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "--repo", str(repo), "--output", str(output), *args], check=True, timeout=10
+    )
     return json.loads(output.read_text())
 
 

@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Literal
 from unittest.mock import AsyncMock
 
@@ -101,7 +102,8 @@ class ApiEnv:
 
 
 @asynccontextmanager
-async def api_context(*, background: bool = False) -> AsyncIterator[ApiEnv]:
+async def api_context(monkeypatch: pytest.MonkeyPatch, *, background: bool = False) -> AsyncIterator[ApiEnv]:
+    monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
     lib_dir = make_test_temp_dir("api-lib")
     async with database_context("api") as factory:
         app = create_app(
@@ -174,9 +176,9 @@ async def api_context(*, background: bool = False) -> AsyncIterator[ApiEnv]:
 
 
 @pytest_asyncio.fixture
-async def api_env(request: pytest.FixtureRequest) -> AsyncIterator[ApiEnv]:
+async def api_env(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[ApiEnv]:
     # Only background integration tests start service loops.
-    async with api_context(background=getattr(request, "param", False)) as env:
+    async with api_context(monkeypatch, background=getattr(request, "param", False)) as env:
         yield env
 
 
@@ -234,7 +236,7 @@ async def requeue_outcome(env: ApiEnv, job_id: int, *, event_type: str = "requeu
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ["complete", "failure", "cancel"])
 async def test_cleanup_joins_scans(monkeypatch: pytest.MonkeyPatch, outcome: str) -> None:
-    context = api_context()
+    context = api_context(monkeypatch)
     env = await context.__aenter__()
     started, closing_started, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     order: list[str] = []
@@ -442,7 +444,7 @@ async def test_queue_rotation(api_env: ApiEnv, monkeypatch) -> None:
     )
     h.entries[entry.name] = entry
     async with api_env.factory() as session:
-        before_jobs = [dict(row) for row in (await session.execute(select(Job.__table__))).mappings()]
+        before_jobs = [dict(row) for row in (await session.execute(select(Job.__table__).order_by(Job.id))).mappings()]
         before_node = dict((await session.execute(select(NodeRow.__table__))).mappings().one())
         before_events = await session.scalar(select(func.count(JobEvent.id)))
     h._wake.clear()
@@ -471,7 +473,9 @@ async def test_queue_rotation(api_env: ApiEnv, monkeypatch) -> None:
     assert "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY" in statements
     assert not any(statement.startswith(("INSERT", "UPDATE", "DELETE")) for statement in statements)
     async with api_env.factory() as session:
-        assert [dict(row) for row in (await session.execute(select(Job.__table__))).mappings()] == before_jobs
+        assert [
+            dict(row) for row in (await session.execute(select(Job.__table__).order_by(Job.id))).mappings()
+        ] == before_jobs
         assert dict((await session.execute(select(NodeRow.__table__))).mappings().one()) == before_node
         assert await session.scalar(select(func.count(JobEvent.id))) == before_events
 
@@ -3589,7 +3593,13 @@ async def test_attempt_history_and(api_env: ApiEnv) -> None:
             ]
         )
         await session.flush()
-        attempts = list((await session.execute(select(JobAttempt).where(JobAttempt.job_id == job.id))).scalars())
+        attempts = list(
+            (
+                await session.execute(
+                    select(JobAttempt).where(JobAttempt.job_id == job.id).order_by(JobAttempt.attempt_number)
+                )
+            ).scalars()
+        )
         session.add(JobEvent(job_id=job.id, attempt_id=attempts[1].id, type="finished", payload={}))
         await session.commit()
         job_id, first_id, second_id, third_id = job.id, attempts[0].id, attempts[1].id, attempts[2].id
@@ -3844,7 +3854,9 @@ async def test_system_timezone(api_env: ApiEnv, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_stats_overview_scope(api_env: ApiEnv) -> None:
-    now = datetime.now(UTC)
+    now = T0
+    api_env.app.state.stats.clock = lambda: now
+    api_env.app.state.cache.clock = lambda: now
     async with api_env.factory() as session:
         libraries = [Library(name=f"overview-{uuid.uuid4().hex}", roots=[str(api_env.lib_dir)]) for _ in range(3)]
         session.add_all(libraries)

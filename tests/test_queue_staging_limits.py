@@ -283,15 +283,16 @@ async def test_bulk_metadata_order(api_env: ApiEnv, monkeypatch) -> None:
                 for index in range(150)
             ],
         )
-        identifiers = list(
+        identifiers = sorted(
             await session.scalars(
                 insert(Job).returning(Job.id),
                 [
                     {"library_id": library.id, "media_file_id": media_id, "kind": "healthcheck", "status": "failed"}
                     for media_id in media_ids
                 ],
-            )
-        )[::-1]
+            ),
+            reverse=True,
+        )
         for identifier in (identifiers[0], identifiers[-1]):
             job = await session.get(Job, identifier)
             assert job is not None

@@ -651,9 +651,7 @@ test('transcode stale retry', async () => {
         : Response.json({ job_id: 10, kind: 'transcode', status: 'pending' }, { status: 202 }),
   });
   expect(await state.queueTranscode(file(1))).toBe(false);
-  expect(state.messages).toEqual([
-    { kind: 'error', text: 'Flow changed. Reload and try again.' },
-  ]);
+  expect(state.messages).toEqual([{ kind: 'error', text: 'Flow changed. Reload and try again.' }]);
   expect(state.calls).toHaveLength(1);
   expect(state.actionBusy.value).toBe(false);
   state.flows.value = [savedFlow(2, 5)];
@@ -681,6 +679,9 @@ test('single override warning', async () => {
   const state = await handler({ libraries: [library(1, false)] });
   expect(await state.queueHealthCheck(file(1))).toBe(true);
   expect(state.dialogs).toHaveLength(1);
+  expect(state.dialogs[0]?.message).toBe(
+    'Automatic health checks are disabled for Library 1 (1 file).',
+  );
 });
 
 test('override cancellation', async () => {
@@ -700,6 +701,9 @@ test('mixed batch warning', async () => {
   });
   await state.queueBulk('healthcheck', [file(1), file(2), file(3, 2), file(4, 3)]);
   expect(state.dialogs).toHaveLength(1);
+  expect(state.dialogs[0]?.message).toBe(
+    'Automatic health checks are disabled for Library 1 (2 files), Library 3 (1 file).',
+  );
   expect(state.calls).toEqual([
     {
       url: '/api/files/bulk',
@@ -755,7 +759,9 @@ test('batch summarizes acceptance', async () => {
   };
   const state = await handler({ result });
   expect(await state.queueBulk('transcode', [file(1), file(2), file(3)])).toEqual(result);
-  expect(state.messages.map(({ kind }) => kind)).toEqual(['error']);
+  expect(state.messages).toEqual([
+    { kind: 'error', text: '2 transcode requests accepted, 1 rejected. #3: active job' },
+  ]);
 });
 
 test('batch acceptance summary', async () => {
@@ -766,7 +772,9 @@ test('batch acceptance summary', async () => {
     },
   });
   await state.queueBulk('transcode', [file(1)]);
-  expect(state.messages.map(({ kind }) => kind)).toEqual(['success']);
+  expect(state.messages).toEqual([
+    { kind: 'success', text: '1 transcode request accepted, 0 rejected.' },
+  ]);
 });
 
 test('batch rejection summary', async () => {
@@ -776,7 +784,9 @@ test('batch rejection summary', async () => {
   };
   const state = await handler({ result });
   expect(await state.queueBulk('transcode', [file(1)])).toEqual(result);
-  expect(state.messages.map(({ kind }) => kind)).toEqual(['error']);
+  expect(state.messages).toEqual([
+    { kind: 'error', text: '0 transcode requests accepted, 1 rejected. #1: Source missing.' },
+  ]);
 });
 
 test('settings unavailable blocks', async () => {
@@ -855,9 +865,7 @@ test('transcode selection snapshot', async () => {
     state.flows.value[1]!.version = 8;
     state.flows.value[1]!.definition.entry = 'changed';
     await state.picker().onDryRun();
-    expect(state.previewCalls).toEqual([
-      { fileId: 1, definition: savedFlow(3, 7).definition },
-    ]);
+    expect(state.previewCalls).toEqual([{ fileId: 1, definition: savedFlow(3, 7).definition }]);
     expect(state.preview().props.flows.map(({ id }) => id)).toEqual([3]);
     expect(state.preview().props.filePath).toBe('/media/1.mkv');
     expect(state.preview().props.facts).toContain('1920×1080');

@@ -32,6 +32,6 @@ describe('shared state ordering', () => {
       { id: 2, priority: 1, progress: 0 },
       { id: 1, priority: 0, progress: 0 },
     ]);
-    expect(snapshot[0]?.progress).toBe(0);
+    expect(snapshot.map((item) => item.id)).toEqual([1, 2]);
   });
 });

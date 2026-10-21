@@ -26,12 +26,6 @@ import type {
 } from '../app/types/api';
 import type { formatBytes, ensure_api_success } from '../app/utils';
 
-const flush = async () => {
-  for (let i = 0; i < 8; i++) {
-    await Promise.resolve();
-    await Vue.nextTick();
-  }
-};
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -565,6 +559,15 @@ test('search reloads and cancels', async () => {
       clearTimeout: (id: number) => timers.delete(id),
     },
   );
+  const lookupJob =
+    exported.lookupJob as typeof import('../app/composables/useGlobalSearch').lookupJob;
+  const lookups: ReturnType<typeof lookupJob>[] = [];
+  // The debounced watcher doesn't return its lookup promises.
+  exported.lookupJob = (...args: Parameters<typeof lookupJob>) => {
+    const pending = lookupJob(...args);
+    lookups.push(pending);
+    return pending;
+  };
   const scope = Vue.effectScope();
   const search = scope.run(() => (exported.useGlobalSearch as typeof useGlobalSearch)())!;
   try {
@@ -574,40 +577,41 @@ test('search reloads and cancels', async () => {
     await search.openSearch();
     expect(calls).toBe(6);
     search.searchTerm.value = '12';
-    await flush();
+    await Vue.nextTick();
     timers.get(timerId)!();
-    await flush();
     search.searchTerm.value = '13';
-    await flush();
+    await Vue.nextTick();
     expect(signals.at(-1)!.aborted).toBe(true);
     jobs[0]!.resolve(Response.json({ id: 12 }));
+    await lookups[0];
     timers.get(timerId)!();
-    await flush();
     jobs[1]!.resolve(new Response(null, { status: 503 }));
-    await flush();
+    await expect(lookups[1]!).rejects.toThrow('HTTP 503');
     expect(search.matchedJob.value).toBeNull();
-    expect(search.jobError.value).not.toBeNull();
+    expect(search.jobError.value).toBe('Could not look up this job. Change the query to retry.');
     search.searchTerm.value = '14';
-    await flush();
+    await Vue.nextTick();
     timers.get(timerId)!();
-    await flush();
     scope.stop();
     expect(signals.at(-1)!.aborted).toBe(true);
     jobs[2]!.resolve(Response.json({ id: 14 }));
-    await flush();
+    await lookups[2];
     expect(search.matchedJob.value).toBeNull();
     failList = true;
     const nextScope = Vue.effectScope();
     try {
       const next = nextScope.run(() => (exported.useGlobalSearch as typeof useGlobalSearch)())!;
       await next.openSearch();
-      expect(next.listError.value).not.toBeNull();
+      expect(next.listError.value).toBe(
+        'Could not load search data. Close and reopen search to retry.',
+      );
     } finally {
       nextScope.stop();
     }
   } finally {
     jobs.forEach((job) => job.resolve(Response.json({ id: 0 })));
     scope.stop();
+    await Promise.allSettled(lookups);
   }
 });
 
@@ -1199,10 +1203,15 @@ test('batch scans summarize outcomes', async () => {
       options: { method: 'POST', body: JSON.stringify({ library_ids: [1, 2, 3] }) },
     },
   ]);
-  expect(feedback.map(({ level }) => level)).toEqual(['success']);
+  expect(feedback).toEqual([
+    { level: 'success', message: '1 queued, 2 already queued or running, 0 suspended, 0 failed.' },
+  ]);
   response = Response.json({ outcomes: [{ library_id: 1, status: 'suspended' }] });
   await libraries.scanMany([1]);
-  expect(feedback.at(-1)?.level).toBe('info');
+  expect(feedback.at(-1)).toEqual({
+    level: 'info',
+    message: '0 queued, 0 already queued or running, 1 suspended, 0 failed.',
+  });
   response = Response.json({
     outcomes: [
       { library_id: 1, status: 'stopped' },
@@ -1210,7 +1219,10 @@ test('batch scans summarize outcomes', async () => {
     ],
   });
   await libraries.scanMany([1, 2]);
-  expect(feedback.at(-1)?.level).toBe('error');
+  expect(feedback.at(-1)).toEqual({
+    level: 'error',
+    message: '0 queued, 0 already queued or running, 0 suspended, 2 failed.',
+  });
   response = Response.json({ detail: 'Scanner is paused.' }, { status: 409 });
   await libraries.scanMany([1]);
   expect(feedback.at(-1)).toEqual({ level: 'error', message: 'Scanner is paused.' });

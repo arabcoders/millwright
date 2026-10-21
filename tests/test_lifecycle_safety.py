@@ -188,11 +188,11 @@ async def test_flow_close_drain(lifecycle_app: FastAPI, monkeypatch: pytest.Monk
     monkeypatch.setattr(service, "_pass", blocked_pass)
     monkeypatch.setattr(service, "start", type(service).start.__get__(service))
     monkeypatch.setattr(service, "close", type(service).close.__get__(service))
-    await service.start()
-    await asyncio.wait_for(started.wait(), 2)
-    first = asyncio.create_task(service.close())
-    second = None
+    first = second = None
     try:
+        await service.start()
+        await asyncio.wait_for(started.wait(), 2)
+        first = asyncio.create_task(service.close())
         await asyncio.wait_for(stopping.wait(), 2)
         second = asyncio.create_task(service.close())
         checkpoint = asyncio.Event()
@@ -205,6 +205,7 @@ async def test_flow_close_drain(lifecycle_app: FastAPI, monkeypatch: pytest.Monk
     finally:
         release.set()
         await asyncio.wait_for(asyncio.gather(*(task for task in (first, second) if task is not None)), 2)
+        await asyncio.wait_for(service.close(), 2)
 
 
 @pytest.mark.asyncio

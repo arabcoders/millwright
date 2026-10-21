@@ -2,6 +2,7 @@
 services:
   postgres:
     image: postgres:18
+    container_name: millwright-postgres
     environment:
       POSTGRES_USER: millwright
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -16,6 +17,7 @@ services:
     restart: unless-stopped
 
   server:
+    container_name: millwright-server
     image: ghcr.io/arabcoders/millwright:latest
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -37,6 +39,7 @@ services:
     restart: unless-stopped
 
   node:
+    container_name: millwright-node
     image: ghcr.io/arabcoders/millwright:latest
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:

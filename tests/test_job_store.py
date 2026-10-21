@@ -665,7 +665,11 @@ async def test_claims_interrupted_healthcheck(db: async_sessionmaker[AsyncSessio
 
     assert claimed is not None and claimed.status == JobStatus.CLAIMED
     async with db() as session:
-        attempts = list((await session.scalars(select(JobAttempt).where(JobAttempt.job_id == job.id))).all())
+        attempts = list(
+            await session.scalars(
+                select(JobAttempt).where(JobAttempt.job_id == job.id).order_by(JobAttempt.attempt_number)
+            )
+        )
     assert [(attempt.attempt_number, attempt.status, attempt.result) for attempt in attempts] == [
         (1, JobStatus.FAILED.value, "interrupted"),
         (2, JobStatus.CLAIMED.value, None),

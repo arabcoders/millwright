@@ -43,6 +43,11 @@ from tests.test_workspace import stage_source
 from tests.helpers import request_retry, database_context, make_test_disk_path, make_test_temp_dir
 
 
+@pytest.fixture(autouse=True)
+def workspace_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
+
+
 @pytest_asyncio.fixture
 async def db() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     # Parallel staging jobs need independent database transactions.

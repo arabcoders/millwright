@@ -1542,7 +1542,11 @@ async def test_recovery_batches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
             assert [job.status for job in jobs] == ["finalizing", *(["failed"] * 4)]
             journals = (await session.scalars(select(FinalizationJournal).order_by(FinalizationJournal.id))).all()
             assert [row.state for row in journals] == ["discard_prepared", *(["discard_rolled_back"] * 4)]
-            events = (await session.scalars(select(JobEvent).where(JobEvent.type == "finalization_rolled_back"))).all()
+            events = (
+                await session.scalars(
+                    select(JobEvent).where(JobEvent.type == "finalization_rolled_back").order_by(JobEvent.job_id)
+                )
+            ).all()
             assert [event.job_id for event in events] == job_ids[1:]
         assert all((tmp_path / f"source-{index}.mkv").read_bytes() == b"original" for index in range(5))
 

@@ -11,7 +11,7 @@ Run this in the directory where you want to keep Millwright:
 bash <(curl -fsSL https://raw.githubusercontent.com/arabcoders/millwright/HEAD/install.sh)
 ```
 
-Enter your media folder when prompted. The installer starts PostgreSQL, the server, and a node.
+Enter your media folder when prompted. The installer asks before starting compose file. Press Enter to skip startup.
 Rerunning it keeps your existing configuration and credentials.
 
 Open `http://YOUR_SERVER_IP:8000` and create your account. Use your server's IP address, or

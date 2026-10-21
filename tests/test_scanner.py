@@ -1330,7 +1330,7 @@ async def test_prune_removal_events(scan_env: ScanEnv, monkeypatch: pytest.Monke
         else:
             payload = {"action": "pruned", "media_file_id": media.id, "library_id": scan_env.library_id}
             assert removals == [(payload, f"file.status:file:{media.id}")]
-            assert job_removals == job_ids
+            assert sorted(job_removals) == sorted(job_ids)
             events = []
             while subscription.backlog:
                 events.append(await asyncio.wait_for(subscription.next(), 1))

@@ -287,7 +287,11 @@ async def test_continuation_lock_order(tmp_path: Path, monkeypatch: pytest.Monke
                 job = await session.get(Job, job_id)
                 assert job is not None and job.status == JobStatus.RUNNING
                 stages = list(
-                    (await session.scalars(select(JobEvent).where(JobEvent.job_id == job_id, JobEvent.type == "stage")))
+                    await session.scalars(
+                        select(JobEvent)
+                        .where(JobEvent.job_id == job_id, JobEvent.type == "stage")
+                        .order_by(JobEvent.id)
+                    )
                 )
                 assert len(stages) == 2 and stages[-1].payload["plan"] == plan.model_dump(mode="json")
         finally:

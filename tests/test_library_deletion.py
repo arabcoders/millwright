@@ -341,10 +341,11 @@ async def test_restart_request(runtime: Runtime, monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(runtime.service.scanner, "drain_library", held)
     monkeypatch.setattr(runtime.service, "_close", closing)
-    await runtime.service.request(library_id)
-    await asyncio.wait_for(started.wait(), 1)
-    stopping = asyncio.create_task(runtime.service.close())
+    stopping = None
     try:
+        await runtime.service.request(library_id)
+        await asyncio.wait_for(started.wait(), 1)
+        stopping = asyncio.create_task(runtime.service.close())
         await asyncio.wait_for(closing_started.wait(), 1)
         assert not stopping.done()
         release.set()
@@ -359,7 +360,8 @@ async def test_restart_request(runtime: Runtime, monkeypatch: pytest.MonkeyPatch
             assert await session.get(Library, library_id) is None
     finally:
         release.set()
-        await asyncio.gather(stopping, return_exceptions=True)
+        if stopping is not None:
+            await asyncio.wait_for(asyncio.gather(stopping, return_exceptions=True), 5)
 
 
 @pytest.mark.asyncio

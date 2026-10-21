@@ -45,9 +45,14 @@ for name in api_key node_enrollment_token; do
   fi
 done
 
-docker compose -f compose.yml up -d --pull always --wait
-
-printf '\nMillwright is ready on port 8000.\n'
-printf 'Open http://<server-ip>:8000\n'
-printf 'Installation directory: %s\n' "$PWD"
-printf 'Create your account, then add /media as a library.\n'
+printf '\nInstallation directory: %s\n' "$PWD"
+if IFS= read -r -p 'Start Millwright containers now? [y/N] ' answer && [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+  docker compose -f compose.yml up -d --pull always --wait
+  printf '\nMillwright is ready on port 8000.\n'
+  printf 'Open http://<server-ip>:8000\n'
+  printf 'Create your account, then add /media as a library.\n'
+else
+  printf '\nContainers were not started.\n'
+  printf 'To start them, run this from the installation directory:\n'
+  printf 'docker compose -f compose.yml up -d --pull always --wait\n'
+fi
