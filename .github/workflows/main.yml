@@ -79,6 +79,9 @@ jobs:
         run: uv sync --frozen --all-packages --dev
 
       - name: Check Python
+        env:
+          # The full suite can exceed five minutes on hosted runners.
+          PYTEST_ADDOPTS: "--session-timeout=900"
         run: .githooks/pre-commit --all
 
       - name: Set up Node.js
