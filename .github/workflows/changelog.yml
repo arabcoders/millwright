@@ -29,8 +29,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # Publish current history even when an older commit or tag triggers the run.
-          ref: master
           fetch-depth: 0
 
       - name: Set up Python
