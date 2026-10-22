@@ -12,16 +12,13 @@ if TYPE_CHECKING:
 class Inputs(BaseModel):
     metric: Literal["size", "bitrate"] = Field(
         default="size",
-        description=(
-            "Compare output and source by file size or bitrate. Bitrate uses the first video stream's reported value, "
-            "or whole-file average bitrate when unavailable."
-        ),
+        description="Compare the output and input by file size or bitrate.",
     )
     min_ratio: float = Field(
         default=0.5,
         ge=0.01,
         le=100.0,
-        description="Minimum output-to-source ratio. 0.5 permits output values down to half the source.",
+        description="Require output to be at least this fraction of the input. For example, 0.5 means half.",
     )
 
 
@@ -41,15 +38,15 @@ def metric_value(metric: str, probe: ProbeData) -> float | None:
 
 def decide(ctx: PluginContext, inputs: Inputs) -> dict[str, Any]:
     if ctx.source_probe is None:
-        return {"type": "skip", "reason": "no source probe"}
+        return {"type": "skip", "reason": "Input file information is unavailable for this check."}
     output = metric_value(inputs.metric, ctx.probe)
     source = metric_value(inputs.metric, ctx.source_probe)
     if output is None or source is None or source == 0:
-        return {"type": "veto", "reason": f"cannot determine {inputs.metric} for guard comparison"}
+        return {"type": "veto", "reason": f"Cannot compare input and output {inputs.metric}."}
     ratio = output / source
     if ratio < inputs.min_ratio:
         return {
             "type": "veto",
-            "reason": f"output {inputs.metric} is {ratio:.2f}x of source, minimum is {inputs.min_ratio:.2f}x",
+            "reason": f"Output {inputs.metric} is {ratio:.2f} times the input, below the minimum of {inputs.min_ratio:.2f}.",
         }
     return {"type": "match"}

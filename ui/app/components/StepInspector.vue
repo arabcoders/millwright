@@ -155,7 +155,7 @@
           class="w-full"
           @update:model-value="pick(String($event))" /></UFormField
       ><UFormField
-        v-for="field in fields"
+        v-for="field in editableFields"
         :key="field.name"
         :label="fieldLabel(field)"
         :help="field.help ?? undefined"
@@ -195,7 +195,7 @@
           :model-value="String(node.inputs[field.name] ?? '')"
           :items="field.values"
           class="w-full"
-          @update:model-value="node.inputs[field.name] = String($event)"
+          @update:model-value="setChoice(field, String($event))"
         /><UInput
           v-else-if="field.type === 'int' || field.type === 'float'"
           :model-value="String(node.inputs[field.name] ?? '')"
@@ -216,6 +216,54 @@
           class="w-full"
           @update:model-value="node.inputs[field.name] = String($event)"
         />
+        <div v-else-if="field.type === 'path_mappings'" class="space-y-2">
+          <div
+            v-for="(mapping, index) in selectedMappings(field)"
+            :key="index"
+            class="flex items-end gap-2"
+          >
+            <UFormField label="Millwright path" class="min-w-0 flex-1">
+              <UInput
+                :model-value="mapping.source"
+                :aria-label="`Millwright path ${index + 1}`"
+                class="w-full"
+                @update:model-value="mapping.source = String($event)"
+              />
+            </UFormField>
+            <UFormField label="Application path" class="min-w-0 flex-1">
+              <UInput
+                :model-value="mapping.destination"
+                :aria-label="`Application path ${index + 1}`"
+                class="w-full"
+                @update:model-value="mapping.destination = String($event)"
+              />
+            </UFormField>
+            <UButton
+              type="button"
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-trash-2"
+              :aria-label="`Remove mapping ${index + 1}`"
+              @click="
+                node.inputs[field.name] = selectedMappings(field).filter((_, i) => i !== index)
+              "
+            />
+          </div>
+          <UButton
+            type="button"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            icon="i-lucide-plus"
+            @click="
+              node.inputs[field.name] = [
+                ...selectedMappings(field),
+                { source: '', destination: '' },
+              ]
+            "
+            >Add mapping</UButton
+          >
+        </div>
         <div v-else-if="field.type === 'strings'" class="space-y-2">
           <div v-for="(value, index) in selectedValues(field)" :key="index" class="flex gap-2">
             <UInput
@@ -291,7 +339,14 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { CodecOptions, FlowFact, PluginInputField, PluginRow, WhenFacets } from '~/types/api';
+import type {
+  CodecOptions,
+  FlowFact,
+  PathMapping,
+  PluginInputField,
+  PluginRow,
+  WhenFacets,
+} from '~/types/api';
 import type { DraftNode } from '~/utils/stepDraft';
 import { initializeInputs } from '~/utils/stepDraft';
 import { conditionRule, emptyCondition, type DraftCondition } from '~/utils/condition';
@@ -341,8 +396,15 @@ watch(
 );
 const readable = (name: string) =>
   name.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const fieldLabel = (field: PluginInputField) =>
-  'label' in field && typeof field.label === 'string' ? field.label : readable(field.name);
+const fieldLabel = (field: PluginInputField) => {
+  if (
+    node.value?.kind === 'plugin' &&
+    node.value.plugin === 'action.notify_external' &&
+    field.name === 'api_key'
+  )
+    return 'API key / token';
+  return 'label' in field && typeof field.label === 'string' ? field.label : readable(field.name);
+};
 const encoderOptions = (field: PluginInputField): string[] | null => {
   if (field.name === 'audio_codec') return props.codecOptions.audioEncoders;
   if (
@@ -356,6 +418,16 @@ const encoderOptions = (field: PluginInputField): string[] | null => {
 const fields = computed<PluginInputField[]>(() =>
   node.value?.kind === 'plugin' ? (row(node.value.plugin)?.inputs ?? []) : [],
 );
+const editableFields = computed(() => {
+  if (node.value?.kind !== 'plugin' || node.value.plugin !== 'action.notify_external')
+    return fields.value;
+  const application = node.value.inputs.application;
+  return fields.value.filter((field) => {
+    if (field.name === 'unmonitor_after_refresh')
+      return application === 'radarr' || application === 'sonarr';
+    return true;
+  });
+});
 const readonlyFields = computed(() => {
   if (node.value?.kind !== 'plugin') return [];
   const values = node.value.rawInputs;
@@ -396,9 +468,27 @@ const isNotificationTargets = (field: PluginInputField) =>
   node.value?.kind === 'plugin' &&
   node.value.plugin === 'action.notify' &&
   field.name === 'targets';
+const setChoice = (field: PluginInputField, value: string) => {
+  const selected = node.value;
+  if (selected?.kind !== 'plugin' || selected.inputs[field.name] === value) return;
+  selected.inputs[field.name] = value;
+  if (selected.plugin !== 'action.notify_external' || field.name !== 'application') return;
+  if (value === 'plex' || value === 'jellyfin' || value === 'emby') {
+    selected.inputs.unmonitor_after_refresh = false;
+    selected.rawInputs.unmonitor_after_refresh = false;
+  }
+};
 const selectedValues = (field: PluginInputField): string[] => {
   const value = node.value?.kind === 'plugin' ? node.value.inputs[field.name] : undefined;
-  return Array.isArray(value) ? value : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+};
+const selectedMappings = (field: PluginInputField): PathMapping[] => {
+  const value = node.value?.kind === 'plugin' ? node.value.inputs[field.name] : undefined;
+  return Array.isArray(value)
+    ? value.filter((item): item is PathMapping => typeof item !== 'string')
+    : [];
 };
 const setValues = (field: PluginInputField, values: unknown) => {
   if (node.value?.kind === 'plugin')

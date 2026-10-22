@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from common.media.language import normalize_language
 from common.metadata import MetadataValues
@@ -55,15 +56,39 @@ class Notify(PluginAction):
     on: list[Literal["job.succeeded", "job.failed", "job.cancelled"]] = Field(min_length=1)
 
 
+class PathMapping(BaseModel):
+    source: str = Field(min_length=1, description="Path used by Millwright.")
+    destination: str = Field(min_length=1, description="Path used by the application.")
+
+    @model_validator(mode="after")
+    def check_paths(self) -> PathMapping:
+        source = PurePath(self.source)
+        destination = (
+            PureWindowsPath(self.destination)
+            if PureWindowsPath(self.destination).is_absolute()
+            else PurePosixPath(self.destination)
+        )
+        if not source.is_absolute() or not destination.is_absolute():
+            raise ValueError("Use absolute paths in mappings.")
+        if ".." in source.parts or ".." in destination.parts:
+            raise ValueError("Mapping paths can't contain '..'.")
+        return self
+
+
 class ExternalNotificationConfig(BaseModel):
-    application: Literal["radarr", "sonarr"]
+    application: Literal["radarr", "sonarr", "plex", "jellyfin", "emby"]
     url: HttpUrl = Field(description="Application URL, including any URL base.")
     api_key: str = Field(
-        min_length=1, repr=False, description="Application API key.", json_schema_extra={"ui": "password"}
+        min_length=1, repr=False, description="Application API key or token.", json_schema_extra={"ui": "password"}
     )
     unmonitor_after_refresh: bool = Field(
         default=False,
         description="Disable future automatic upgrades for the movie or associated episodes after refresh succeeds.",
+    )
+    path_mappings: list[PathMapping] = Field(
+        default=[],
+        description="Add mappings if an application uses different paths for your files.",
+        json_schema_extra={"ui": "path_mappings"},
     )
 
     @field_validator("url")
@@ -72,6 +97,15 @@ class ExternalNotificationConfig(BaseModel):
         if value.username or value.password or value.query or value.fragment:
             raise ValueError("Use an application URL without credentials, a query, or a fragment.")
         return value
+
+    @model_validator(mode="after")
+    def check_options(self) -> ExternalNotificationConfig:
+        if self.application not in {"radarr", "sonarr"} and self.unmonitor_after_refresh:
+            raise ValueError("Unmonitor after refresh is only supported for Radarr and Sonarr.")
+        sources = [PurePath(mapping.source) for mapping in self.path_mappings]
+        if len(sources) != len(set(sources)):
+            raise ValueError("Each Millwright path can appear only once.")
+        return self
 
 
 class NotifyExternal(ExternalNotificationConfig, PluginAction):

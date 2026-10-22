@@ -11,17 +11,19 @@ if TYPE_CHECKING:
 
 
 class Inputs(BaseModel):
-    min_audio: int = Field(default=1, ge=0, description="Minimum number of audio streams. Zero disables the check.")
+    min_audio: int = Field(
+        default=1, ge=0, description="Require at least this many audio streams. Set to zero to disable."
+    )
     min_subtitles: int = Field(
-        default=0, ge=0, description="Minimum number of subtitle streams. Zero disables the check."
+        default=0, ge=0, description="Require at least this many subtitle streams. Set to zero to disable."
     )
     audio_languages: list[str] = Field(
         default=[],
-        description="Comma-separated ISO-639-2 audio languages. Blank counts all, and und includes missing tags.",
+        description=("Count these audio language codes. Leave empty to count all. Use und for untagged tracks."),
     )
     subtitle_languages: list[str] = Field(
         default=[],
-        description="Comma-separated ISO-639-2 subtitle languages. Blank counts all, and und includes missing tags.",
+        description=("Count these subtitle language codes. Leave empty to count all. Use und for untagged tracks."),
     )
 
 
@@ -35,18 +37,18 @@ def _count(streams: list[ProbeStream], languages: list[str]) -> int:
 
 def decide(ctx: PluginContext, inputs: Inputs) -> dict[str, Any]:
     if ctx.source_probe is None:
-        return {"type": "skip", "reason": "no source probe"}
+        return {"type": "skip", "reason": "Input file information is unavailable for this check."}
 
     audio = _count(ctx.probe.audio, inputs.audio_languages)
     subtitles = _count(ctx.probe.subtitle, inputs.subtitle_languages)
     if audio < inputs.min_audio:
-        reason = f"audio streams {audio} below minimum {inputs.min_audio}"
+        reason = f"Audio stream count is {audio}, below the minimum of {inputs.min_audio}"
         if inputs.audio_languages:
             reason += f" (languages: {', '.join(inputs.audio_languages)})"
-        return {"type": "veto", "reason": reason}
+        return {"type": "veto", "reason": reason + "."}
     if inputs.min_subtitles and subtitles < inputs.min_subtitles:
-        reason = f"subtitle streams {subtitles} below minimum {inputs.min_subtitles}"
+        reason = f"Subtitle stream count is {subtitles}, below the minimum of {inputs.min_subtitles}"
         if inputs.subtitle_languages:
             reason += f" (languages: {', '.join(inputs.subtitle_languages)})"
-        return {"type": "veto", "reason": reason}
+        return {"type": "veto", "reason": reason + "."}
     return {"type": "match"}

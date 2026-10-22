@@ -10,16 +10,16 @@ if TYPE_CHECKING:
 
 class Inputs(BaseModel):
     source: Literal["video", "container", "average"] = Field(
-        default="video", description="Bitrate source: video, container, or their average when both are available"
+        default="video", description="Choose video bitrate, whole-file bitrate, or their average."
     )
     avc_ratio: float = Field(
-        default=0.75, ge=0.05, le=1.0, description="AVC bitrate estimate as a source bitrate ratio."
+        default=0.75, ge=0.05, le=1.0, description="Estimate AVC bitrate as this fraction of the source bitrate."
     )
     hevc_ratio: float = Field(
-        default=0.5, ge=0.05, le=1.0, description="HEVC bitrate estimate as a source bitrate ratio."
+        default=0.5, ge=0.05, le=1.0, description="Estimate HEVC bitrate as this fraction of the source bitrate."
     )
     av1_ratio: float = Field(
-        default=0.45, ge=0.05, le=1.0, description="AV1 bitrate estimate as a source bitrate ratio."
+        default=0.45, ge=0.05, le=1.0, description="Estimate AV1 bitrate as this fraction of the source bitrate."
     )
 
 
@@ -29,9 +29,9 @@ INPUTS = Inputs
 def decide(ctx: PluginContext, inputs: Inputs) -> dict[str, Any]:
     video = next(iter(ctx.probe.real_video), None)
     if video is None:
-        return {"type": "skip", "reason": "no video stream"}
+        return {"type": "skip", "reason": "No video stream found."}
     if ctx.probe.target_bitrate_kbps(inputs.source, 1) is None:
-        return {"type": "skip", "reason": "no derivable video bitrate"}
+        return {"type": "skip", "reason": "Cannot determine the source bitrate."}
     ratios = {"avc": inputs.avc_ratio, "hevc": inputs.hevc_ratio, "av1": inputs.av1_ratio}
     targets = ["avc", "hevc", "av1"]
     facets: dict[str, int] = {}

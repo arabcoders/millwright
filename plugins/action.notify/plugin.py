@@ -12,11 +12,11 @@ if TYPE_CHECKING:
 class Inputs(BaseModel):
     enabled: bool = Field(
         default=True,
-        description="Enable notifications from this flow step. When off, this step adds no notification actions.",
+        description="Enable notifications from this step.",
     )
-    targets: list[str] = Field(default=[], description="Notification target identifiers. Required when enabled.")
+    targets: list[str] = Field(default=[], description="Choose at least one notification target when enabled.")
     on: list[Literal["job.succeeded", "job.failed", "job.cancelled"]] = Field(
-        default=[], description="Job events that trigger notifications. Required when enabled."
+        default=[], description="Choose at least one job event to notify on when enabled."
     )
 
     @model_validator(mode="after")

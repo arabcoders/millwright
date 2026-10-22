@@ -274,13 +274,13 @@ return {
 }
 ```
 
-| Action                | Result                                                                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `extract_subtitles`   | Extract selected subtitles and publish sidecars beside the final media                                                       |
-| `notify`              | Send selected job outcomes to named notification targets                                                                     |
-| `notify_external`     | Notify a configured external application after replacement. Supports Radarr and Sonarr refreshes, with optional unmonitoring |
-| `preserve_timestamps` | Preserve the file times captured for processing                                                                              |
-| `embed_metadata`      | Apply sidecar metadata during planning                                                                                       |
+| Action                | Result                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| `extract_subtitles`   | Extract selected subtitles and publish sidecars beside the final media |
+| `notify`              | Send selected job outcomes to named notification targets               |
+| `notify_external`     | Notify a configured external application after replacement             |
+| `preserve_timestamps` | Preserve the file times captured for processing                        |
+| `embed_metadata`      | Apply sidecar metadata during planning                                 |
 
 Required subtitle extraction happens before encoding. If removed tracks would otherwise be lost when
 discarding the original, their sidecars must be saved first. A collision leaves the original protected.

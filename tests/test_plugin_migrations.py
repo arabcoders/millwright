@@ -200,7 +200,13 @@ async def test_legacy_flow_http() -> None:
                 assert canonical["nodes"][0]["config_version"] == 2
                 assert canonical["nodes"][0]["inputs"] == inputs
                 assert canonical["actions"] == [
-                    {**action, "kind": "notify_external", "plugin_id": "action.notify_external", "config_version": 2}
+                    {
+                        **action,
+                        "kind": "notify_external",
+                        "plugin_id": "action.notify_external",
+                        "config_version": 2,
+                        "path_mappings": [],
+                    }
                 ]
                 assert canonical["_ui"] == raw["_ui"]
                 async with factory() as session:

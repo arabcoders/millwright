@@ -190,8 +190,7 @@ describe files still in the library, and deleting history can change earlier siz
 - Create an Apprise target under **Notifications** and add a [notification step](recipes.md#job-notifications)
   to the flows you want to hear about.
 - Use [incoming webhooks](webhooks.md) to receive imports and renames from other applications.
-- Use [Notify external applications](recipes.md#notify-external-applications) to tell Radarr or Sonarr
-  when a converted file is ready.
+- [Notify applications after conversion](recipes.md#notify-external-applications).
 
 ## Command-line and API access
 

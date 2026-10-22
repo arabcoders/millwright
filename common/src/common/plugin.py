@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 TextField = Annotated[str, Field(json_schema_extra={"ui": "text"})]
 
-FieldType = Literal["int", "float", "bool", "str", "text", "password", "enum", "strings"]
+FieldType = Literal["int", "float", "bool", "str", "text", "password", "enum", "strings", "path_mappings"]
 
 
 def input_fields(model: type[BaseModel]) -> list[dict[str, Any]]:
@@ -56,6 +56,9 @@ def _field_type(info: FieldInfo) -> FieldType:
     if get_origin(annotation) is Literal:
         return "enum"
     if get_origin(annotation) is list:
+        extra = info.json_schema_extra
+        if isinstance(extra, dict) and extra.get("ui") == "path_mappings":
+            return "path_mappings"
         return "strings"
     if annotation is bool:
         return "bool"

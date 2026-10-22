@@ -57,24 +57,28 @@ class StreamPolicy(BaseModel):
 
 class StreamPolicyInputs(BaseModel):
     audio_keep_languages: list[str] = Field(
-        default=[], description="Comma-separated ISO-639-2 audio languages (eng, jpn). Empty keeps all"
+        default=[], description="Keep audio in these languages, such as eng or jpn. Leave empty to keep all languages."
     )
-    audio_drop_descriptive: bool = Field(default=False, description="Drop commentary/description audio tracks")
-    audio_keep_forced: bool = Field(default=True, description="Keep forced audio tracks regardless of language")
+    audio_drop_descriptive: bool = Field(default=False, description="Remove commentary and descriptive audio tracks.")
+    audio_keep_forced: bool = Field(
+        default=True, description="Keep forced audio tracks even if their language isn't selected."
+    )
     audio_keep_all_if_empty: bool = Field(
-        default=False, description="Keep all audio if the language policy would remove every track"
+        default=False, description="Keep all audio tracks if the other audio filters would remove them all."
     )
     audio_max_per_language: int | None = Field(
-        default=None, ge=1, description="Keep at most this many audio tracks per language. Blank keeps all"
+        default=None, ge=1, description="Limit audio tracks per language. Leave empty for no limit."
     )
     subtitle_keep_languages: list[str] = Field(
         default=[],
-        description="Comma-separated ISO-639-2 subtitle languages. Empty leaves subtitles untouched",
+        description="Keep subtitles in these languages, such as eng or jpn. Leave empty to keep all languages.",
     )
-    subtitle_strip_all: bool = Field(default=False, description="Drop all subtitles except retained forced tracks")
-    subtitle_keep_forced: bool = Field(default=True, description="Keep forced subtitles regardless of language")
-    drop_data: bool = Field(default=False, description="Drop all data streams")
-    drop_cover_art: bool = Field(default=False, description="Drop embedded picture video streams")
+    subtitle_strip_all: bool = Field(default=False, description="Remove subtitles, keeping forced tracks if enabled.")
+    subtitle_keep_forced: bool = Field(
+        default=True, description="Keep forced subtitles even if their language isn't selected."
+    )
+    drop_data: bool = Field(default=False, description="Remove data streams.")
+    drop_cover_art: bool = Field(default=False, description="Remove embedded cover art.")
 
     def stream_policy(self) -> StreamPolicy | None:
         audio = None
@@ -101,10 +105,11 @@ class StreamPolicyInputs(BaseModel):
 
 
 class AudioPlanInputs(StreamPolicyInputs):
-    audio_codec: str | None = Field(default=None, description="Codec for re-encoding matching audio tracks")
-    audio_bitrate: str | None = Field(default=None, description="Target bitrate for re-encoded audio tracks")
+    audio_codec: str | None = Field(default=None, description="Choose the output audio codec.")
+    audio_bitrate: str | None = Field(default=None, description="Set the output audio bitrate, such as 192k.")
     audio_when_codecs: list[str] = Field(
-        default=[], description="Re-encode audio with these source codecs. Empty matches all"
+        default=[],
+        description="Convert audio tracks with these source codecs. Leave empty to convert all selected tracks.",
     )
 
     @field_validator("audio_codec", "audio_bitrate", mode="before")

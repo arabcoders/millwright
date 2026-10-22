@@ -652,7 +652,9 @@ export type PluginInputType =
   | 'text'
   | 'password'
   | 'enum'
-  | 'strings';
+  | 'strings'
+  | 'path_mappings';
+export type PathMapping = { source: string; destination: string };
 export type FlowFact = { key: string; type: string };
 export type CodecOptions = {
   videoEncoders: string[];
@@ -665,7 +667,7 @@ export type PluginInputField = {
   nullable: boolean;
   name: string;
   type: PluginInputType;
-  default: string | number | boolean | string[] | null;
+  default: string | number | boolean | string[] | PathMapping[] | null;
   min: number | null;
   max: number | null;
   values: string[] | null;
