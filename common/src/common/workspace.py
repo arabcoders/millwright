@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from common.fs.acquire import directory_fd
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
 DEFAULT_MIN_FREE_GB = 10.0
 DEFAULT_HARD_SIZE_CEILING = 1.25
@@ -41,7 +41,7 @@ def open_workspace_lock(path: Path, *, exclusive: bool = False) -> int:
 
 
 @contextmanager
-def workspace_lock(path: Path, *, exclusive: bool = False) -> Iterator[int]:
+def workspace_lock(path: Path, *, exclusive: bool = False) -> Generator[int]:
     fd = open_workspace_lock(path, exclusive=exclusive)
     try:
         # Cleanup can take the exclusive lock only after all writers release theirs.

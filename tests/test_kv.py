@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from pydantic import JsonValue
 from sqlalchemy import event, func, select
 
 from server.kv import KeyValueStore
@@ -25,7 +26,7 @@ async def test_store_crud() -> None:
         assert not await store.delete("activity_paused")
         assert await store.get("activity_paused", default=True) is True
 
-        value = {"enabled": True, "counts": [1, 2], "label": "example"}
+        value: JsonValue = {"enabled": True, "counts": [1, 2], "label": "example"}
         await store.put("example", value)
         assert await store.get("example") == value
         await store.put("empty", None)

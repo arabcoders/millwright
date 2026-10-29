@@ -5,7 +5,7 @@ import contextlib
 import json
 import logging
 import os
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass
@@ -244,7 +244,7 @@ async def test_close_shares_drain(env: AgentEnv, monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(agent_module, "execute", execute)
     monkeypatch.setattr(agent_module, "run_actions", actions)
-    incoming = []
+    incoming: list[dict | None] = []
     if phase != "hello":
         incoming.append(Welcome(timezone="UTC", active_attempts=[]).model_dump(mode="json"))
         if phase == "job":
@@ -964,7 +964,7 @@ async def wait_until(predicate: Callable[[], object], wake: asyncio.Event, timeo
 
 
 @asynccontextmanager
-async def driven_session(agent: Agent, conn: FakeHubConn) -> AsyncIterator[asyncio.Task]:
+async def driven_session(agent: Agent, conn: FakeHubConn) -> AsyncGenerator[asyncio.Task]:
     task = asyncio.create_task(agent._session(conn))
     try:
         yield task

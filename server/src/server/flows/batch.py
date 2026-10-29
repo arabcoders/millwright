@@ -30,7 +30,7 @@ from server.serialize import iso_utc
 from server.workspace import wait_workspace_io
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncGenerator, Callable
 
     from common.media.probe import ProbeData
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -557,7 +557,7 @@ class BatchDryRuns:
             await _drain(report.task)
 
     @asynccontextmanager
-    async def pause(self) -> AsyncIterator[None]:
+    async def pause(self) -> AsyncGenerator[None]:
         self._paused += 1
         try:
             if self.active is not None:

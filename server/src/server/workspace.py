@@ -24,7 +24,7 @@ from common.workspace import resolve_workspace_path, workspace_lock
 
 if TYPE_CHECKING:
     import threading
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Generator
     from typing import BinaryIO
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,7 +106,7 @@ def inspect_directory(jobs_fd: int, job_id: int, stopped: threading.Event) -> di
     }
 
 
-def post_action_jobs(*, scoped: bool = False) -> Select[tuple[int]]:
+def post_action_jobs(*, scoped: bool = False) -> Select[int]:
     from sqlalchemy import select
 
     from server.models import Job
@@ -184,7 +184,7 @@ def _post_action_pending(*, scoped: bool) -> ColumnElement[bool]:
 
 def recovery_jobs(
     *, include_actions: bool = True, include_artifact_checks: bool = True, scoped: bool = False
-) -> Select[tuple[int]]:
+) -> Select[int]:
     from common.enums import JobStatus
     from sqlalchemy import and_, exists, or_, select
     from sqlalchemy.orm import aliased
@@ -269,7 +269,7 @@ def recovery_jobs(
     )
 
 
-def unread_log_jobs() -> Select[tuple[int]]:
+def unread_log_jobs() -> Select[int]:
     from sqlalchemy import and_, exists, select
     from sqlalchemy.orm import aliased
 
@@ -385,7 +385,7 @@ def _check_directory(path: Path, error: str) -> None:
 
 
 @contextmanager
-def _file(directory: int, name: str) -> Iterator[BinaryIO]:
+def _file(directory: int, name: str) -> Generator[BinaryIO]:
     with os.fdopen(os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory), "rb") as handle:
         info = os.fstat(handle.fileno())
         if not stat.S_ISREG(info.st_mode):
@@ -622,7 +622,7 @@ def create_attempt_layout(root: Path, job_id: int, attempt_number: int, destinat
 
 
 @contextmanager
-def lock_job(root: Path, job_id: int) -> Iterator[int]:
+def lock_job(root: Path, job_id: int) -> Generator[int]:
     if type(job_id) is not int or job_id < 0:
         raise ValueError("invalid job workspace")
     resolve_workspace_path(root, f"jobs/{job_id}")
@@ -803,7 +803,7 @@ def read_attempt_log(root: Path, relative_path: str) -> bytes:
 
 
 @contextmanager
-def _detached_directory(name: str, directory: int) -> Iterator[int]:
+def _detached_directory(name: str, directory: int) -> Generator[int]:
     parent_fd = os.dup(directory)
     private = f".{secrets.token_hex(8)}.cleanup"
     try:

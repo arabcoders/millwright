@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from server.plugins.host import PluginHost
+from server.plugins.host import EvaluatedDecision, PluginHost
 from server.plugins import host as plugin_host_module
 from server.plugins import upload as plugin_upload
 from server.plugins.upload import UploadError, install_plugin
@@ -97,6 +97,7 @@ async def test_waiter_obeys_lifecycle(
             if describe:
                 assert result is None
             else:
+                assert isinstance(result, EvaluatedDecision)
                 assert result.type == "error"
                 assert result.error is not None
         if operation == "close":

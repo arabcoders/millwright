@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
   "millwright-common",
   "pydantic>=2.12",
-  "sqlalchemy>=2.0.45",
+  "sqlalchemy[asyncio]>=2.1",
   "psycopg[binary]>=3.3",
   "watchfiles>=1.2.0",
   "fastapi>=0.115",

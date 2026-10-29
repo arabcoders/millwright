@@ -895,7 +895,7 @@ class NodeHub:
             self.staging.busy_jobs.discard(job_id)
 
     @asynccontextmanager
-    async def _dispatch_candidates(self) -> AsyncIterator[AsyncIterator[int]]:
+    async def _dispatch_candidates(self) -> AsyncGenerator[AsyncIterator[int]]:
         async with self.sessionmaker() as session:
             upper = await session.scalar(select(func.max(Job.id))) or 0
         eligible = (
@@ -3372,7 +3372,7 @@ class NodeHub:
         self._wake.set()
 
     @asynccontextmanager
-    async def pause_for_reset(self) -> AsyncIterator[None]:
+    async def pause_for_reset(self) -> AsyncGenerator[None]:
         async with self.dispatch_lock:
             if self._close_task is not None:
                 raise ValueError("server is shutting down")

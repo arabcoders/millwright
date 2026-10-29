@@ -434,7 +434,8 @@ async def restore_data(session: AsyncSession, data: dict, selection: dict) -> No
             raw = next(item for item in _items(data, "libraries") if item.get("name") == name)
             flow_name = raw.get("flow_name")
             flow_row = flow_rows[flow_name] if flow_name else None
-            fields = body.model_dump(exclude={"name"}) | {"flow_id": flow_row.id if flow_row else None}
+            fields = body.model_dump(exclude={"name"})
+            fields["flow_id"] = flow_row.id if flow_row else None
             if name in existing_libraries:
                 await update_library(session, existing_libraries[name].id, fields)
             else:

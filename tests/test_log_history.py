@@ -12,12 +12,12 @@ import structlog
 from server.core.log_history import install_log_file, query_logs
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from logging.handlers import RotatingFileHandler
 
 
 @contextmanager
-def file_logs(path: Path, *, max_bytes: int = 10_000_000) -> Iterator[RotatingFileHandler]:
+def file_logs(path: Path, *, max_bytes: int = 10_000_000) -> Generator[RotatingFileHandler]:
     handler = install_log_file(path, max_bytes=max_bytes)
     try:
         yield handler

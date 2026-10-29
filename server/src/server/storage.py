@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from common.process import drain
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncGenerator, Callable
 
 _ACTIVE_POOL: ContextVar[ProcessPoolExecutor | None] = ContextVar("storage_pool", default=None)
 _OPERATION = Lock()
@@ -41,7 +41,7 @@ def _operate[T, **P](operation: Callable[P, T], /, *args: P.args, **kwargs: P.kw
 
 
 @asynccontextmanager
-async def storage_scope() -> AsyncIterator[ProcessPoolExecutor]:
+async def storage_scope() -> AsyncGenerator[ProcessPoolExecutor]:
     if (pool := _ACTIVE_POOL.get()) is not None:
         yield pool
         return

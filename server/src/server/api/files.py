@@ -8,7 +8,7 @@ from common.media.probe import ProbeData
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 from sqlalchemy import case, delete, or_, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, distinct_on
 from sqlalchemy.orm import load_only, with_expression
 
 from server.api.auth import PrincipalDep, current_principal
@@ -220,7 +220,7 @@ async def get_files(
                     Job.kind == "transcode",
                     JobAttempt.result == "succeeded",
                 )
-                .distinct(Job.media_file_id)
+                .ext(distinct_on(Job.media_file_id))
                 .order_by(Job.media_file_id, JobAttempt.id.desc())
                 .options(
                     load_only(

@@ -8,7 +8,7 @@ import os
 import re
 import uuid
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -102,7 +102,7 @@ class ApiEnv:
 
 
 @asynccontextmanager
-async def api_context(monkeypatch: pytest.MonkeyPatch, *, background: bool = False) -> AsyncIterator[ApiEnv]:
+async def api_context(monkeypatch: pytest.MonkeyPatch, *, background: bool = False) -> AsyncGenerator[ApiEnv]:
     monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
     lib_dir = make_test_temp_dir("api-lib")
     async with database_context("api") as factory:
@@ -4818,7 +4818,7 @@ async def test_manual_flow_snapshot(api_env: ApiEnv, skipped: bool, binding: str
 
     response = await api_env.client.post(
         f"/api/files/{media_id}/transcode",
-        **({"json": {"flow_id": flow["id"], "expected_version": flow["version"]}} if binding != "default" else {}),
+        json={"flow_id": flow["id"], "expected_version": flow["version"]} if binding != "default" else None,
     )
     assert response.status_code == 202
     outcome = await requeue_outcome(api_env, response.json()["job_id"], event_type="request_result")
@@ -4951,7 +4951,7 @@ async def test_manual_flow_retries(
         (api_env.lib_dir / "movie.avi").write_bytes(b"changed before preparation")
     response = await api_env.client.post(
         f"/api/files/{media_id}/transcode",
-        **({"json": {"flow_id": flow["id"], "expected_version": flow["version"]}} if selected_flow else {}),
+        json={"flow_id": flow["id"], "expected_version": flow["version"]} if selected_flow else None,
         params={"refresh": scenario == "unprepared"},
     )
     assert response.status_code == 202, response.text

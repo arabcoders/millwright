@@ -7,7 +7,7 @@ import os
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 T0 = datetime(2026, 1, 1, 12, tzinfo=UTC)
@@ -211,7 +211,7 @@ async def test_catalog_cancel_drains(db, tmp_path: Path, monkeypatch: pytest.Mon
 
 
 @asynccontextmanager
-async def subscribed() -> AsyncIterator[tuple[EventBus, Subscription]]:
+async def subscribed() -> AsyncGenerator[tuple[EventBus, Subscription]]:
     bus = EventBus()
     sub = bus.subscribe()
     try:

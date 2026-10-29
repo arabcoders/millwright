@@ -607,7 +607,7 @@ async def test_startup_requeues_batches(db: async_sessionmaker[AsyncSession], mo
         assert await requeue_startup(session, after(5)) == 5
         await session.commit()
     async with db() as session:
-        statuses = dict((await session.execute(select(Job.id, Job.status))).tuples().all())
+        statuses = dict((await session.execute(select(Job.id, Job.status))).all())
         assert all(statuses[job_id] == "queued" for job_id in jobs)
         assert statuses[transcode.id] == "claimed"
         assert statuses[remote.id] == "claimed"

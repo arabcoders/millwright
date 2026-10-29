@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from common.fs.effects import publish
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from pathlib import Path
     from typing import BinaryIO
 
@@ -47,7 +47,7 @@ def check_free_space(path: Path, min_free_gb: float) -> None:
 
 
 @contextmanager
-def partial_output(path: Path) -> Iterator[_Output]:
+def partial_output(path: Path) -> Generator[_Output]:
     if path.exists():
         raise ValueError("subtitle artifact already exists")
     output = create_output(path.with_name(path.name + ".partial"))

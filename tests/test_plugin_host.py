@@ -7,7 +7,7 @@ import logging
 import os
 import shutil
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -188,7 +188,7 @@ async def test_cancelled_runner_replaced(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 
 @contextlib.asynccontextmanager
-async def host_for(roots: list[Path], **kwargs: Any) -> AsyncIterator[PluginHost]:
+async def host_for(roots: list[Path], **kwargs: Any) -> AsyncGenerator[PluginHost]:
     host = PluginHost(roots, **kwargs)
     try:
         yield host

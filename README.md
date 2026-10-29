@@ -5,7 +5,11 @@ media processing tasks, such as changing video codecs, containers, audio tracks,
 individual files or let Millwright handle new files automatically.
 
 > [!WARNING]
-> Millwright is still in alpha phase and may have bugs or incomplete features.
+> Millwright is in beta testing phase and may have bugs or incomplete features.
+> 
+> I personally tested the app on my own library and it worked as expected at least for nvidia, qsv and software encoders.
+> Unfortunately, I cannot guarantee that it will work perfectly for all setups or encoders without actual testing on
+> those setups. **AMD** encoders may also work, but I haven't tested them as i dont have the necessary hardware.
 
 ### If you like my work, you might also like my other projects:
 

@@ -30,7 +30,7 @@ from server.models import (
 from server.workspace import wait_workspace_io
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
     from apprise import Apprise
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -143,7 +143,7 @@ def _url_secrets(url: str) -> tuple[str, ...]:
 
 
 @contextmanager
-def _provider_call(url: str) -> Iterator[None]:
+def _provider_call(url: str) -> Generator[None]:
     tokens = (
         _PROVIDER_CALL.set(True),
         _PROVIDER_SECRETS.set(_url_secrets(url)),

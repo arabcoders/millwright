@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterator
+    from collections.abc import Awaitable, Callable, Generator
     from pathlib import Path
 
 _TERM_GRACE_S = 10.0
@@ -24,7 +24,7 @@ _POLICY: ContextVar[
 @contextmanager
 def process_policy(
     *, create: Callable[..., Awaitable[asyncio.subprocess.Process]], stop: Callable[..., Awaitable[int]]
-) -> Iterator[None]:
+) -> Generator[None]:
     token = _POLICY.set((create, stop))
     try:
         yield

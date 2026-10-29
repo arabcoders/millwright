@@ -19,7 +19,7 @@ from node.files import create_output
 from node.process import spawn_tool, stop_tool
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, Collection
+    from collections.abc import AsyncGenerator, Callable, Collection
 
     from common.capabilities import MkvTools
 
@@ -48,7 +48,7 @@ async def prepare_input(
     log: Callable[[str], None],
     min_free_gb: float = 0,
     timeout_s: float = 600,
-) -> AsyncIterator[PreparedInput]:
+) -> AsyncGenerator[PreparedInput]:
     ratio = mkv_repair_ratio(probe)
     if not ratio:
         yield PreparedInput(path=source, probe=probe)
