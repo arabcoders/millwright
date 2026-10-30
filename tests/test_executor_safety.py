@@ -699,13 +699,16 @@ async def test_log_fsync_preserves(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     job = spec(tmp_path, min_free_gb=0)
     logs: list[_Log] = []
     opening, syncing = _Log.__init__, os.fsync
+    fsync_failed = False
 
     def open_log(log, path):
         opening(log, path)
         logs.append(log)
 
     def failed_fsync(fd):
+        nonlocal fsync_failed
         if logs and not logs[0].file.closed and fd == logs[0].file.fileno():
+            fsync_failed = True
             raise OSError("NFS log fsync rejected")
         return syncing(fd)
 
@@ -737,5 +740,6 @@ async def test_log_fsync_preserves(tmp_path: Path, monkeypatch: pytest.MonkeyPat
             assert result.output_path == job.dst and result.output_probe is not None
         elif outcome == "aborted":
             assert result.error and "src.mkv" in result.error
+    assert fsync_failed
     assert logs and logs[0].file.closed
     assert Path(job.dst).exists() == (outcome in {"succeeded", "unreaped"})

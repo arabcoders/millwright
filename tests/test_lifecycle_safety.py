@@ -188,11 +188,11 @@ async def test_flow_close_drain(lifecycle_app: FastAPI, monkeypatch: pytest.Monk
     monkeypatch.setattr(service, "_pass", blocked_pass)
     monkeypatch.setattr(service, "start", type(service).start.__get__(service))
     monkeypatch.setattr(service, "close", type(service).close.__get__(service))
-    await service.start()
-    await asyncio.wait_for(started.wait(), 2)
-    first = asyncio.create_task(service.close())
-    second = None
+    first = second = None
     try:
+        await service.start()
+        await asyncio.wait_for(started.wait(), 2)
+        first = asyncio.create_task(service.close())
         await asyncio.wait_for(stopping.wait(), 2)
         second = asyncio.create_task(service.close())
         checkpoint = asyncio.Event()
@@ -205,6 +205,7 @@ async def test_flow_close_drain(lifecycle_app: FastAPI, monkeypatch: pytest.Monk
     finally:
         release.set()
         await asyncio.wait_for(asyncio.gather(*(task for task in (first, second) if task is not None)), 2)
+        await asyncio.wait_for(service.close(), 2)
 
 
 @pytest.mark.asyncio
@@ -471,7 +472,7 @@ def test_launcher_stop_cleanup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     server, node = ExitedServer("server"), Node("node")
     children = iter((server, node))
     monkeypatch.setenv("MW_CONFIG_PATH", str(tmp_path))
-    (tmp_path / "config.toml").write_text('node_enrollment_token = "test-token"\n')
+    (tmp_path / "config.toml").write_text('api_key = "test-key"\n')
     monkeypatch.setattr(run, "resolve_bin", lambda name: name)
     monkeypatch.setattr(run.subprocess, "Popen", lambda *_args, **_kwargs: next(children))
     monkeypatch.setattr(run, "wait_healthy", lambda _port, *, stopped=None: True)

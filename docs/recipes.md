@@ -15,9 +15,8 @@ To convert video to HEVC in an MKV container:
 3. Connect its `plan` output to a **Done** result and `skip` to **Skip**.
 4. Save the flow and preview it against a few files.
 
-With no encoder selected, HEVC uses `libx265`. AVC and AV1 use `libx264` and `libsvtav1`. Quality mode
-lets the encoder choose the bitrate. Try a sample to judge both quality and file size rather than
-expecting a fixed percentage saving.
+Leave the encoder unset to use `libx265` for HEVC, `libx264` for AVC, or `libsvtav1` for AV1. Use quality
+mode to choose quality without a fixed bitrate. Try a sample to judge the quality and file size.
 
 <details>
 <summary>Import this example as JSON</summary>
@@ -48,9 +47,8 @@ Save this as a JSON file and choose **Flows -> Import flow**:
 
 ### Target a source bitrate ratio
 
-If you prefer a bitrate target, select bitrate mode and set a ratio. With the video bitrate source,
-`0.5` targets half the reported video bitrate. If that bitrate is unavailable, it uses the whole-file
-average, including audio and container data. The ratio doesn't halve the output file size.
+Select bitrate mode and set a ratio. A ratio of `0.5` targets half the source bitrate, not half the file
+size.
 
 The step inputs are:
 
@@ -58,8 +56,7 @@ The step inputs are:
 {"target": "hevc", "rate_control": "bitrate", "ratio": 0.5, "bitrate_source": "video"}
 ```
 
-Use quality mode when the required source bitrate is unavailable. Quality and bitrate modes are
-alternative ways of choosing the encoding target.
+Use quality mode if the source bitrate is unavailable.
 
 ### Prefer a hardware encoder
 
@@ -70,9 +67,9 @@ use this priority list:
 {"target": "hevc", "encoder_priority": ["hevc_qsv", "libx265"]}
 ```
 
-The choice is made before processing begins. It doesn't switch encoders halfway through a failed job.
-A fixed encoder setting overrides the priority list. See [GPU access](installation.md#hardware-acceleration)
-if your preferred encoder isn't available.
+The first available encoder is used. A fixed encoder overrides this list. Failed encodes aren't retried
+with another encoder. See [GPU access](installation.md#hardware-acceleration) if your preferred encoder
+isn't available.
 
 ## Route by size, codec, or language
 
@@ -106,8 +103,7 @@ Connect `plan` to **Done** and `skip` to **Skip**, as in the video example. Leav
 empty to convert all selected audio. Use the language and commentary options if you also want to narrow
 the track selection.
 
-Audio re-encoding counts as transcoding for the library's original-retention setting, even though the
-video is copied.
+The [`transcode` trash mode](recovery.md#retain-originals) keeps the original when audio is re-encoded.
 
 ## Reject an output that shrinks too far
 
@@ -123,25 +119,22 @@ This checks size, not visual quality. Rejected output doesn't replace your origi
 
 ## Embed sidecar metadata
 
-Use **Embed sidecar metadata** to copy titles, descriptions, dates, and genres from Kodi NFO or yt-dlp
-JSON files into MKV or MP4 media. Episode NFOs can also provide the show name, season, and episode number.
-yt-dlp JSON can provide the artist from its channel or uploader.
+Use **Embed sidecar metadata** to copy metadata from Kodi NFO or yt-dlp JSON files into MKV or MP4 files.
 
 For `Example.mkv`, put `Example.nfo` or `Example.info.json` beside it. Add **Embed sidecar metadata**
-before the remux or video step, and connect its `next` output to that step. Millwright reads the
-sidecars without changing them.
+before the remux or video step, and connect its `next` output to that step.
 
 The step offers these settings:
 
 | Setting                 | Default                | Choice                                                                |
 | ----------------------- | ---------------------- | --------------------------------------------------------------------- |
-| `existing_tags`         | `fill_missing`         | Fill absent fields, or use `overwrite` to replace supplied fields     |
-| `source_priority`       | `["nfo", "info_json"]` | The first source with a value wins for each field                     |
-| `when_no_media_changes` | `skip`                 | Use `remux` to allow tag changes without an audio or video conversion |
+| `existing_tags`         | `fill_missing`         | Fill missing tags, or use `overwrite` to replace supplied fields      |
+| `source_priority`       | `["nfo", "info_json"]` | Prefer NFO or JSON when both supply a tag                             |
+| `when_no_media_changes` | `skip`                 | Use `remux` to update tags without re-encoding                        |
 
 NFO files must describe a Kodi movie or episode. JSON must describe one yt-dlp video, not a playlist or
-channel. Missing sidecars are allowed. If tags aren't added, check the job log for sidecar errors and
-confirm that the step runs before conversion. Matching tags don't trigger another conversion.
+channel. Missing sidecars are allowed. If tags aren't added, check the job log and confirm that the step
+runs before conversion.
 
 MP4 tag support varies by player. Try a file in your player before applying this to a library.
 
@@ -157,29 +150,34 @@ Choose the target and the outcomes you want to receive. For success, failure, an
 {"targets": ["ops"], "on": ["job.succeeded", "job.failed", "job.cancelled"]}
 ```
 
-Putting Notify before the conversion means it's already selected if that conversion fails. Disable the
-step to stop notifications without deleting it. A notification can occasionally be delivered more than once.
+Turn off **Enabled** to stop notifications without removing the step. Notifications can occasionally
+arrive more than once.
 
 ## Notify external applications
 
 Use **Notify external application** to tell another application when Millwright replaces a file.
-The supported applications are Radarr and Sonarr, which rescan the published media. This is useful when
-a conversion changes the extension or media information the application last saw.
+Supported applications are Radarr, Sonarr, Plex, Jellyfin, and Emby.
 
-Add the step to the flow's successful path. Select the application, enter its base URL and API key, and
-save the flow. Include any URL base, such as `https://example.org/sonarr`, but don't append `/api/v3`.
+1. Add the step to the flow's successful path.
+2. Select the application and enter its URL and API key or token.
+3. Add **Path mappings** if the application uses different paths for your files.
+4. Save the flow.
 
-Millwright sends the refresh only after the converted file has replaced the original. It doesn't send
-one for dry runs, skips, or failed conversions. Delivery status and errors appear under the job's
-**Notification deliveries**. A notification failure doesn't mark the conversion itself as failed.
+Use the application's base URL, such as `https://example.org/sonarr`, without an API endpoint. Add a
+separate step for each application.
 
-Enable **Unmonitor after refresh** only if you want to stop future automatic upgrades. Radarr unmonitors
-the movie. Sonarr unmonitors the episodes in that file, not the whole season or series.
+Each mapping pairs a **Millwright path** with an **Application path**. For example:
 
-If lookup fails, check whether the media manager can recognize the published path and filename. Radarr
-can use `{imdb-...}` or `{tmdb-...}` identifiers in the path or filename before trying its filename parser.
+| Millwright path     | Application path |
+| ------------------- | ---------------- |
+| `/mnt/movies`       | `/media/Movies`  |
+| `/mnt/series`       | `/media/TV`      |
 
-Flow and job exports can contain this API key. Keep them private.
+For Radarr and Sonarr, enable **Unmonitor after refresh** to stop automatic upgrades for the converted
+movie or episodes.
 
-For the other direction, where a media manager tells Millwright about new imports, use
-[Incoming webhooks](webhooks.md).
+Check the job's **Notification deliveries** for status and errors.
+
+Flow and job exports can contain the API key or token. Keep them private.
+
+To receive imports from applications, use [Incoming webhooks](webhooks.md).

@@ -61,8 +61,6 @@ class ServerConfig(BaseModel):
     enable_docs: bool = False
     workspace_dir: str | None = None
     trash_dir: str | None = None
-    # Shared enrollment token for /api/hub. Absent keeps auto-enrollment off.
-    node_enrollment_token: str | None = None
     api_key: str | None = None
     # None uses the state directory's uploaded_plugins subdirectory.
     uploaded_plugins_dir: str | None = None
@@ -145,8 +143,6 @@ def load_config(path: Path) -> ServerConfig:
         for key in ("client_id", "secret"):
             if isinstance(oidc.get(key), str):
                 oidc[key] = resolve_secret(oidc[key], base_dir=path.parent)
-    if isinstance(data.get("node_enrollment_token"), str):
-        data["node_enrollment_token"] = resolve_secret(data["node_enrollment_token"], base_dir=path.parent)
     if isinstance(data.get("api_key"), str):
         data["api_key"] = resolve_secret(data["api_key"], base_dir=path.parent)
     if isinstance(data.get("database_url"), str):
@@ -176,16 +172,15 @@ def ensure_config(path: Path) -> None:
     if secret_dir.is_symlink() or stat.S_IMODE(secret_dir.stat().st_mode) != 0o700:
         msg = f"secrets directory must be private: {secret_dir}"
         raise ValueError(msg)
-    for name in ("api_key",) if existing else ("api_key", "node_enrollment_token"):
-        secret_path = secret_dir / name
-        if secret_path.is_symlink():
-            msg = f"secret file must not be a symlink: {secret_path}"
+    secret_path = secret_dir / "api_key"
+    if secret_path.is_symlink():
+        msg = f"secret file must not be a symlink: {secret_path}"
+        raise ValueError(msg)
+    if secret_path.exists():
+        if not secret_path.is_file() or stat.S_IMODE(secret_path.stat().st_mode) != 0o600:
+            msg = f"secret file must be private: {secret_path}"
             raise ValueError(msg)
-        if secret_path.exists():
-            if not secret_path.is_file() or stat.S_IMODE(secret_path.stat().st_mode) != 0o600:
-                msg = f"secret file must be private: {secret_path}"
-                raise ValueError(msg)
-            continue
+    else:
         fd = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             output.write(secrets.token_urlsafe(32) + "\n")

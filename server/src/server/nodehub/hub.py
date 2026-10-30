@@ -31,8 +31,7 @@ from common.protocol import (
     ActionTask,
     AttemptMissing,
     Cancel,
-    Enrolled,
-    EnrollmentSaved,
+    CredentialsSaved,
     Error,
     Finished,
     Heartbeat,
@@ -42,6 +41,10 @@ from common.protocol import (
     NodeLogs,
     OfferedJob,
     Progress,
+    Registered,
+    RegistrationPending,
+    Unregister,
+    Unregistered,
     Welcome,
     WorkspaceChallenge,
     WorkspaceResponse,
@@ -72,12 +75,14 @@ from server.nodehub.matching import can_execute, requirements_met
 from server.nodehub.store import get_node, hash_token, register_node, set_node_state, touch_node
 from server.queue.store import (
     TERMINAL_STATUSES,
+    NodeRemovalError,
     claim,
     current_attempt,
     finish,
     finish_artifact_check,
     get_job,
     release_transcode_decision,
+    remove_node,
     requeue,
     transition,
 )
@@ -221,6 +226,14 @@ class NodeEntry:
     offered_at: dict[int, datetime] = field(default_factory=dict)
     last_progress_at: dict[int, datetime] = field(default_factory=dict)
     disconnected: asyncio.Event = field(default_factory=asyncio.Event)
+    unregistered: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+@dataclass(kw_only=True, slots=True)
+class PendingNode:
+    request_id: str
+    capabilities: NodeCapabilities
+    approved: asyncio.Future[bool]
 
 
 async def probe_for_file(session: AsyncSession, media_file: MediaFile) -> ProbeData | None:
@@ -255,7 +268,6 @@ class NodeHub:
         dispatch_interval_s: float = 1.0,
         sweep_interval_s: float = 1.0,
         hello_timeout_s: float = 10.0,
-        enrollment_token: str | None = None,
         replace_original: bool = True,
         action_task_timeout_s: float = 30.0,
         ffprobe_bin: str = "ffprobe",
@@ -289,7 +301,8 @@ class NodeHub:
         self.dispatch_interval_s = dispatch_interval_s
         self.sweep_interval_s = sweep_interval_s
         self.hello_timeout_s = hello_timeout_s
-        self.enrollment_token = enrollment_token
+        self.registration_enabled = True
+        self.pending_nodes: dict[str, PendingNode] = {}
         self.replace_original = replace_original
         self.action_task_timeout_s = action_task_timeout_s
         self.ffprobe_bin = ffprobe_bin
@@ -335,13 +348,21 @@ class NodeHub:
             hello = await self._read_hello(conn)
             if hello is None:
                 return
-            node_name = hello.node_id or "enrolling node"
+            node_name = hello.node_id or "unregistered node"
+            claimed = False
+            if await self._authenticate_hello(hello) is None:
+                if hello.node_id is not None or hello.token:
+                    await self._unregister_connection(conn, node_name)
+                    return
+                claimed = await self._wait_for_claim(conn, hello)
+                if not claimed:
+                    return
             while True:
                 await self._reset_done.wait()
                 async with self.dispatch_lock:
                     if self._reset_active:
                         continue
-                    handshake = await self._handshake_locked(conn, hello)
+                    handshake = await self._handshake_locked(conn, hello, claimed=claimed)
                     if handshake is None:
                         return
                     hello, node_db_id, limits, paused = handshake
@@ -895,7 +916,7 @@ class NodeHub:
             self.staging.busy_jobs.discard(job_id)
 
     @asynccontextmanager
-    async def _dispatch_candidates(self) -> AsyncIterator[AsyncIterator[int]]:
+    async def _dispatch_candidates(self) -> AsyncGenerator[AsyncIterator[int]]:
         async with self.sessionmaker() as session:
             upper = await session.scalar(select(func.max(Job.id))) or 0
         eligible = (
@@ -1649,6 +1670,7 @@ class NodeHub:
 
     def begin_shutdown(self) -> None:
         if self._close_task is None:
+            self.set_registration_enabled(False)
             tasks = [*self._tasks, *self._action_waits]
             for task in tasks:
                 task.cancel()
@@ -1836,41 +1858,125 @@ class NodeHub:
             LOG.warning("Expected node hello in workspace %s, received %s", self.workspace_dir, type(msg).__name__)
             await self._reject(conn, "handshake", "expected a hello message")
             return None
-        if await self._authenticate_hello(conn, msg) is None:
-            return None
         return msg
 
-    async def _authenticate_hello(self, conn: NodeConnection, msg: Hello) -> tuple[int | None, bool] | None:
-        node_db_id: int | None = None
+    async def _authenticate_hello(self, msg: Hello) -> int | None:
         async with self.sessionmaker() as session:
             node = await get_node(session, msg.node_id) if msg.node_id is not None else None
-            known = node is not None and hmac.compare_digest(node.token_hash, hash_token(msg.token))
-            enrolled = self.enrollment_token is not None and hmac.compare_digest(
-                hash_token(msg.token), hash_token(self.enrollment_token)
-            )
-            if not (known or (enrolled and msg.node_id is None)):
-                if node is None:
-                    LOG.error("unknown node %s rejected", msg.node_id)
-                    await self._reject(conn, "auth", "unknown node", 4401)
+            if node is not None and hmac.compare_digest(node.token_hash, hash_token(msg.token)):
+                return node.id
+        return None
+
+    async def remove_node(self, node_id: int) -> bool:
+        async with self.dispatch_lock:
+            entry = next((item for item in self.entries.values() if item.node_db_id == node_id), None)
+            if entry is not None and entry.in_flight:
+                raise NodeRemovalError("Node has active work. Wait for it to finish before removing the node.")
+            async with self.sessionmaker() as session:
+                if not await remove_node(session, node_id):
+                    return False
+                await session.commit()
+            if entry is not None:
+                entry.workspace_ready = False
+                entry.paused = True
+        if entry is not None and not entry.disconnected.is_set():
+            await self._unregister_connection(entry.conn, entry.name, entry.unregistered)
+        return True
+
+    async def _unregister_connection(
+        self, conn: NodeConnection, name: str, acknowledged: asyncio.Event | None = None
+    ) -> None:
+        try:
+            async with asyncio.timeout(self.hello_timeout_s):
+                await conn.send_json(Unregister().model_dump(mode="json"))
+                if acknowledged is not None:
+                    await acknowledged.wait()
                 else:
-                    LOG.error("authentication failed for node %s", msg.node_id)
-                    await self._reject(conn, "auth", "authentication failed", 4401)
-                return None
-            if node is not None:
-                node_db_id = node.id
-        return node_db_id, enrolled
+                    data = await conn.recv_json()
+                    if data is None or not isinstance(parse_message(data), Unregistered):
+                        LOG.warning("Node %s did not acknowledge credential removal.", name)
+        except Exception as exc:
+            LOG.warning(
+                "Could not confirm credential removal for node %s: %s", name, error_message(exc) or type(exc).__name__
+            )
+        finally:
+            await asyncio.wait_for(conn.close(), self.hello_timeout_s)
+
+    def set_registration_enabled(self, enabled: bool) -> None:
+        if self.registration_enabled == enabled:
+            return
+        self.registration_enabled = enabled
+        if not enabled:
+            for pending in self.pending_nodes.values():
+                if not pending.approved.done():
+                    pending.approved.set_result(False)
+            self.pending_nodes.clear()
+        self._publish_registration()
+
+    def _publish_registration(self) -> None:
+        if self.events is not None:
+            self.events.publish("node.registration", self.registration_status())
+
+    def registration_status(self) -> dict:
+        return {
+            "enabled": self.registration_enabled,
+            "pending": [
+                {"request_id": item.request_id, "capabilities": item.capabilities.model_dump(mode="json")}
+                for item in self.pending_nodes.values()
+            ],
+        }
+
+    def claim_node(self, request_id: str) -> bool:
+        pending = self.pending_nodes.pop(request_id, None)
+        if pending is None or pending.approved.done():
+            return False
+        pending.approved.set_result(True)
+        self._publish_registration()
+        return True
+
+    async def _wait_for_claim(self, conn: NodeConnection, msg: Hello) -> bool:
+        if not self.registration_enabled:
+            await self._reject(conn, "registration", "Node registration is disabled.")
+            return False
+        request_id = secrets.token_hex(8)
+        pending = PendingNode(
+            request_id=request_id,
+            capabilities=msg.capabilities,
+            approved=asyncio.get_running_loop().create_future(),
+        )
+        self.pending_nodes[request_id] = pending
+        disconnected: asyncio.Task[dict | None] | None = None
+        try:
+            await conn.send_json(RegistrationPending(request_id=request_id).model_dump(mode="json"))
+            self._publish_registration()
+            disconnected = asyncio.create_task(conn.recv_json())
+            await asyncio.wait((pending.approved, disconnected), return_when=asyncio.FIRST_COMPLETED)
+            if disconnected.done():
+                disconnected.result()
+                return False
+            if not pending.approved.result():
+                await self._reject(conn, "registration", "Node registration is disabled.")
+                return False
+            return True
+        finally:
+            self.pending_nodes.pop(request_id, None)
+            self._publish_registration()
+            if disconnected is not None:
+                disconnected.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await disconnected
 
     async def _handshake_locked(
-        self, conn: NodeConnection, msg: Hello
+        self, conn: NodeConnection, msg: Hello, *, claimed: bool = False
     ) -> tuple[Hello, int, dict[str, int], bool] | None:
         # A reset may have changed node credentials while this connection waited for its dispatch lock.
-        authentication = await self._authenticate_hello(conn, msg)
-        if authentication is None:
+        node_db_id = None if claimed else await self._authenticate_hello(msg)
+        if node_db_id is None and not claimed:
+            await self._unregister_connection(conn, msg.node_id or "unregistered node")
             return None
-        node_db_id, enrolled = authentication
-        issued_token = secrets.token_urlsafe(32) if enrolled else msg.token
+        issued_token = secrets.token_urlsafe(32) if claimed else msg.token
         challenge_id = secrets.token_hex(16)
-        directory = f"nodes/{node_db_id if node_db_id is not None else 'enrollment'}/{challenge_id}"
+        directory = f"nodes/{node_db_id if node_db_id is not None else 'registration'}/{challenge_id}"
         relative_response = f"{directory}/response"
         challenge = secrets.token_bytes(32)
         async with storage_scope():
@@ -1918,7 +2024,7 @@ class NodeHub:
             finally:
                 await storage_io(_cleanup_challenge, self.workspace_dir, directory)
         async with self.sessionmaker() as session:
-            if enrolled:
+            if claimed:
                 node_name = f"node-{secrets.token_hex(8)}"
                 node = await register_node(
                     session,
@@ -1928,7 +2034,7 @@ class NodeHub:
                     display_name=_hardware_name(msg.capabilities),
                 )
                 node_db_id = node.id
-                await conn.send_json(Enrolled(node_id=node_name, token=issued_token).model_dump(mode="json"))
+                await conn.send_json(Registered(node_id=node_name, token=issued_token).model_dump(mode="json"))
                 cause = None
                 try:
                     data = await asyncio.wait_for(conn.recv_json(), timeout=self.hello_timeout_s)
@@ -1936,20 +2042,20 @@ class NodeHub:
                 except (TimeoutError, ValueError) as exc:
                     cause = error_message(exc)
                     saved = None
-                if not isinstance(saved, EnrollmentSaved) or saved.node_id != node_name:
+                if not isinstance(saved, CredentialsSaved) or saved.node_id != node_name:
                     if cause is None:
                         cause = (
                             f"Acknowledgement named node {saved.node_id} instead of {node_name}."
-                            if isinstance(saved, EnrollmentSaved)
-                            else f"Expected EnrollmentSaved, got {type(saved).__name__ if saved else 'no acknowledgement'}."
+                            if isinstance(saved, CredentialsSaved)
+                            else f"Expected CredentialsSaved, got {type(saved).__name__ if saved else 'no acknowledgement'}."
                         )
                     LOG.warning(
-                        "Could not confirm credential storage for enrolling node %s in workspace %s",
+                        "Could not confirm credential storage for node %s in workspace %s",
                         node_name,
                         self.workspace_dir,
                         extra={"error": cause},
                     )
-                    await self._reject(conn, "enrollment", "node did not save credentials")
+                    await self._reject(conn, "registration", "Node did not save credentials.")
                     return None
                 msg = msg.model_copy(update={"node_id": node_name, "token": issued_token})
             assert msg.node_id is not None
@@ -1960,7 +2066,7 @@ class NodeHub:
                 .returning(NodeRow.id)
             )
             if current is None:
-                await self._reject(conn, "auth", "authentication revoked during workspace verification", 4401)
+                await self._unregister_connection(conn, msg.node_id)
                 return None
             node = await get_node(session, msg.node_id)
             assert node is not None
@@ -2022,12 +2128,12 @@ class NodeHub:
         return msg, node_db_id, limits, paused
 
     def _log_workspace_failure(self, msg: Hello, cause: str) -> None:
-        credentials = (msg.token, self.enrollment_token or "")
+        credentials = (msg.token,)
         LOG.warning(
             "Workspace verification failed for node %s. Resolved server workspace: %s. "
             "Check server workspace_dir/MW_WORKSPACE_DIR and node workspace_dir/MW_NODE_WORKSPACE_DIR. "
             "Both must access the same shared files. Paths can differ between hosts.",
-            redact(msg.node_id or "enrollment", secrets=credentials),
+            redact(msg.node_id or "registration", secrets=credentials),
             redact(str(self.workspace_dir), secrets=credentials),
             extra={"error": redact(cause, secrets=credentials)},
         )
@@ -2046,6 +2152,9 @@ class NodeHub:
                         Error(code="protocol", message="unparseable message").model_dump(mode="json")
                     )
                 continue
+            if isinstance(msg, Unregistered):
+                entry.unregistered.set()
+                return
             if isinstance(msg, Heartbeat):
                 await self._handle_heartbeat(entry, msg)
             elif isinstance(msg, AttemptMissing):
@@ -3372,7 +3481,7 @@ class NodeHub:
         self._wake.set()
 
     @asynccontextmanager
-    async def pause_for_reset(self) -> AsyncIterator[None]:
+    async def pause_for_reset(self) -> AsyncGenerator[None]:
         async with self.dispatch_lock:
             if self._close_task is not None:
                 raise ValueError("server is shutting down")

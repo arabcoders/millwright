@@ -5,7 +5,11 @@ media processing tasks, such as changing video codecs, containers, audio tracks,
 individual files or let Millwright handle new files automatically.
 
 > [!WARNING]
-> Millwright is still in alpha phase and may have bugs or incomplete features.
+> Millwright is in beta testing phase and may have bugs or incomplete features.
+> 
+> I personally tested the app on my own library and it worked as expected at least for nvidia, qsv and software encoders.
+> Unfortunately, I cannot guarantee that it will work perfectly for all setups or encoders without actual testing on
+> those setups. **AMD** encoders may also work, but I haven't tested them as i dont have the necessary hardware.
 
 ### If you like my work, you might also like my other projects:
 
@@ -62,7 +66,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/arabcoders/millwright/dev/in
 
 See the [installation guide](docs/installation.md) for requirements, storage, GPU access, and remote nodes.
 
-After starting Millwright, open `http://<server-ip>:8000`, create your account, and [add your first library](docs/usage.md#add-a-library).
+After starting Millwright, open `http://<server-ip>:8000`, create your account, claim the pending node on **Nodes**, and [add your first library](docs/usage.md#add-a-library).
 
 ## Security
 

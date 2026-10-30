@@ -434,7 +434,8 @@ async def restore_data(session: AsyncSession, data: dict, selection: dict) -> No
             raw = next(item for item in _items(data, "libraries") if item.get("name") == name)
             flow_name = raw.get("flow_name")
             flow_row = flow_rows[flow_name] if flow_name else None
-            fields = body.model_dump(exclude={"name"}) | {"flow_id": flow_row.id if flow_row else None}
+            fields = body.model_dump(exclude={"name"})
+            fields["flow_id"] = flow_row.id if flow_row else None
             if name in existing_libraries:
                 await update_library(session, existing_libraries[name].id, fields)
             else:
@@ -534,7 +535,7 @@ def export_config(path: Path) -> str | None:
             value = oidc.get(key)
             if isinstance(value, str) and value.startswith("file:"):
                 oidc[key] = resolve_secret(value, base_dir=path.parent)
-    for key in ("api_key", "node_enrollment_token", "database_url"):
+    for key in ("api_key", "database_url"):
         value = doc.get(key)
         if isinstance(value, str) and value.startswith("file:"):
             doc[key] = resolve_secret(value, base_dir=path.parent)
@@ -548,10 +549,7 @@ def validate_config(content: str) -> None:
         isinstance(oidc.get(key), str) and oidc[key].startswith("file:") for key in ("client_id", "secret")
     ):
         raise ValueError("backup config contains unresolved secret references")
-    if any(
-        isinstance(data.get(key), str) and data[key].startswith("file:")
-        for key in ("node_enrollment_token", "api_key", "database_url")
-    ):
+    if any(isinstance(data.get(key), str) and data[key].startswith("file:") for key in ("api_key", "database_url")):
         raise ValueError("backup config contains unresolved secret references")
     ServerConfig.model_validate(data)
 
@@ -561,7 +559,7 @@ def prepared_config(path: Path, content: str) -> tuple[str, dict[str, str]]:
     doc = tomlkit.parse(content)
     values = {}
     generation = secrets.token_hex(16)
-    for key in ("api_key", "node_enrollment_token", "database_url"):
+    for key in ("api_key", "database_url"):
         value = doc.get(key)
         if isinstance(value, str):
             name = f"{generation}-{key}"

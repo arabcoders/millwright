@@ -91,6 +91,7 @@ export type ServerEvent =
       };
     }
   | { type: 'node.usage'; payload: { name: string; usage: NodeUsage; last_seen_at: string } }
+  | { type: 'node.registration'; payload: import('~/types/api').NodeRegistration }
   | {
       type: 'operator.alert';
       payload: {

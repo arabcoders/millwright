@@ -2,9 +2,7 @@ id = "inspector.output_ratio"
 kind = "inspector"
 description = "Reject output below a minimum source size or bitrate ratio."
 help = """
-Reject output below the minimum output-to-source ratio (default: 0.5).
-Compare file size or video bitrate. Bitrate falls back to size and duration.
-Skip without a source probe. Reject if either metric is unavailable.
+Place after a conversion step. Choose size or bitrate and set the minimum ratio.
 """
 name = "Minimum output ratio"
 author = "Millwright"

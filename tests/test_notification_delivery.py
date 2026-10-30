@@ -59,7 +59,9 @@ async def test_terminal_enqueue_is_transactional(db: async_sessionmaker[AsyncSes
         await session.flush()
         assert await finish(session, job_id, JobStatus.FAILED, now=NOW)
         deliveries = list((await session.execute(select(NotificationDelivery))).scalars())
-        events = list((await session.execute(select(JobEvent).where(JobEvent.job_id == job_id))).scalars())
+        events = list(
+            (await session.execute(select(JobEvent).where(JobEvent.job_id == job_id).order_by(JobEvent.id))).scalars()
+        )
         assert [(item.target_name, item.job_event_id) for item in deliveries] == [("primary", events[-1].id)]
         await session.rollback()
 

@@ -2,9 +2,8 @@ id = "inspector.stream_guard"
 kind = "inspector"
 description = "Reject output with too few audio or subtitle streams."
 help = """
-Run after transcoding. Check audio and subtitle counts separately.
-Set a minimum to zero to disable its check. Optional comma-separated ISO-639-2
-filters count any listed language. Missing tags count as und. Blank filters count all streams.
+Place after a conversion step. Set minimum audio and subtitle counts.
+Use language filters to count only selected languages.
 """
 name = "Stream guard"
 author = "Millwright"

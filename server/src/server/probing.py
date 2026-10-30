@@ -400,7 +400,7 @@ class ProbeService:
                 Job.media_file_id.not_in(busy_files),
                 eligible,
             )
-            deadline = MediaFile.first_seen + literal(timedelta(seconds=1)) * Library.cooldown_s
+            deadline = MediaFile.first_seen + Library.cooldown_s * literal(timedelta(seconds=1))
             cooling = and_(
                 MediaFile.first_seen.is_not(None),
                 Library.mkv_stats.is_(True),
@@ -878,7 +878,7 @@ class ProbeService:
                 .group_by(Library.id)
                 .order_by(Library.id)
             )
-            return dict(rows.tuples().all())
+            return dict(rows.all())
 
     def _pending_status(self, library_id: int) -> str:
         if library_id in self._task_libraries.values():

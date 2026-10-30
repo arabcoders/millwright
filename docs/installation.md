@@ -11,14 +11,14 @@ Run this in the directory where you want to keep Millwright:
 bash <(curl -fsSL https://raw.githubusercontent.com/arabcoders/millwright/HEAD/install.sh)
 ```
 
-Enter your media folder when prompted. The installer starts PostgreSQL, the server, and a node.
+Enter your media folder when prompted. The installer asks before starting compose file. Press Enter to skip startup.
 Rerunning it keeps your existing configuration and credentials.
 
 Open `http://YOUR_SERVER_IP:8000` and create your account. Use your server's IP address, or
 `http://localhost:8000` if your browser is on the same machine.
 
-Then [add a library](usage.md#add-a-library), using `/media` for the folder you selected during
-installation. Check **Nodes** to confirm the node is connected before starting a conversion.
+Open **Nodes** and click **Claim** on the pending node. Then [add a library](usage.md#add-a-library),
+using `/media` for the folder you selected during installation.
 
 ## Update Millwright
 
@@ -87,12 +87,8 @@ workspace, stop the server and nodes and copy the contents of `workspace/` to th
 
 ### Connect the new node
 
-Create a directory for the new node. Copy `config/millwright/secrets/node_enrollment_token` from
-the server's installation directory into it, keeping the filename `node_enrollment_token`.
-This file lets the new node connect. Keep it private.
-
-Save the following as `compose.yml` in the new node's directory. Replace `YOUR_SERVER_IP` with your
-server's address and adjust the shared folder's host path if needed:
+Create a directory for the new node and save the following as `compose.yml`. Replace
+`YOUR_SERVER_IP` with your server's address and adjust the shared folder's host path if needed:
 
 ```yaml
 services:
@@ -103,14 +99,12 @@ services:
       MW_ROLE: node
       UMASK: ${UMASK:-0002}
       MW_NODE_SERVER_URL: http://YOUR_SERVER_IP:8000
-      MW_NODE_ENROLLMENT_TOKEN: file:/run/node_enrollment_token
       MW_NODE_WORKSPACE_DIR: /workspace
       TZ: ${TZ:-UTC}
     volumes:
       - ./node-config:/config
       - ./node-data:/data
       - /mnt/millwright-workspace:/workspace
-      - ./node_enrollment_token:/run/node_enrollment_token:ro
     restart: unless-stopped
 ```
 
@@ -127,8 +121,13 @@ Start the node:
 docker compose up -d --pull always
 ```
 
-Check **Nodes** in the web interface, then use **Nodes -> Edit** to set its processing limits.
-Keep each node's `node-config` and `node-data` directories separate. Only the workspace is shared.
+Open **Nodes** in the web interface and click **Claim**. Use **Edit** to set the node's processing limits.
+
+New node registration is enabled by default. The **Allow new nodes** switch on **Nodes** stops new
+registration.
+
+Keep each node's `node-config` and `node-data` directories separate. The node saves its credentials
+there and reconnects automatically after a restart. Only the workspace is shared.
 
 You can keep or remove the node on the server machine. For connections across an untrusted network,
 use [HTTPS](#reverse-proxies) for the server address.

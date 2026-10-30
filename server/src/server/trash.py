@@ -28,7 +28,7 @@ from server.storage import storage_io, storage_scope
 from server.workspace import FINISHED_FINALIZATION_STATES, recovery_jobs, wait_workspace_io
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Callable, Generator, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from sqlalchemy.sql import Select
@@ -358,7 +358,7 @@ def _manifest(meta: Path, root: Path, *, allow_missing_media: bool = False) -> t
     return data, media
 
 
-def _check_trash_records(root: Path, rows: list[tuple[str, int, str, str]], active: set[str]) -> list:
+def _check_trash_records(root: Path, rows: Sequence[tuple[str, int, str, str]], active: set[str]) -> list:
     row_results = []
     for row_id, library_id, suffix, library_root in rows:
         leaf = trash_path(root, library_id, row_id, suffix).parent
@@ -494,14 +494,12 @@ async def _refresh_trash_records(session: AsyncSession, root: Path) -> int:
     after = ""
     while True:
         rows = list(
-            (
-                await session.execute(
-                    select(TrashEntry.id, TrashEntry.library_id, TrashEntry.suffix, TrashEntry.library_root)
-                    .where(TrashEntry.id > after)
-                    .order_by(TrashEntry.id)
-                    .limit(_TRASH_BATCH_SIZE)
-                )
-            ).tuples()
+            await session.execute(
+                select(TrashEntry.id, TrashEntry.library_id, TrashEntry.suffix, TrashEntry.library_root)
+                .where(TrashEntry.id > after)
+                .order_by(TrashEntry.id)
+                .limit(_TRASH_BATCH_SIZE)
+            )
         )
         if not rows:
             break
@@ -668,7 +666,7 @@ async def purge_trash(
     return count
 
 
-def _finalization_trash() -> Select[tuple[str]]:
+def _finalization_trash() -> Select[str]:
     return select(FinalizationJournal.trash_path).where(
         or_(
             FinalizationJournal.state.not_in(FINISHED_FINALIZATION_STATES),

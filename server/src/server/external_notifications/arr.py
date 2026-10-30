@@ -49,9 +49,9 @@ class _Progress(BaseModel):
 
 
 async def notify_arr(
-    action: NotifyExternal, payload: dict, save_progress: Callable[[dict], Awaitable[None]] | None = None
+    action: NotifyExternal, payload: dict, path: str, save_progress: Callable[[dict], Awaitable[None]] | None = None
 ) -> bool:
-    path, filename = payload["path"], payload["original_filename"]
+    filename = payload["original_filename"]
     async with httpx.AsyncClient(
         base_url=str(action.url).rstrip("/") + "/api/v3/",
         headers={"X-Api-Key": action.api_key},
@@ -64,7 +64,7 @@ async def notify_arr(
             response.raise_for_status()
             progress = _Command.model_validate(response.json())
         elif action.application == "radarr":
-            identifiers = {kind.lower(): value for kind, value in _IDENTIFIER.findall(path + "/" + filename)}
+            identifiers = {kind.lower(): value for kind, value in _IDENTIFIER.findall(payload["path"] + "/" + filename)}
             if identifiers:
                 params = {"tmdbId": identifiers["tmdb"]} if "tmdb" in identifiers else {}
                 response = await client.get("movie", params=params)

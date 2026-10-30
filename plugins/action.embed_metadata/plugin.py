@@ -12,20 +12,20 @@ if TYPE_CHECKING:
 
 class Inputs(BaseModel):
     existing_tags: Literal["fill_missing", "overwrite"] = Field(
-        default="fill_missing", description="Fill absent tags or replace only supplied fields"
+        default="fill_missing", description="Fill missing tags or overwrite tags supplied by the sidecar."
     )
     source_priority: list[MetadataSource] = Field(
-        default=["nfo", "info_json"], description="Source order. The first nonempty value wins for each field"
+        default=["nfo", "info_json"], description="Choose which sidecars to prefer when they provide the same tag."
     )
     when_no_media_changes: Literal["skip", "remux"] = Field(
-        default="skip", description="Skip metadata-only work or permit changed tags alone to trigger processing"
+        default="skip", description="Skip files needing only tag changes, or remux them to update the tags."
     )
 
     @field_validator("source_priority")
     @classmethod
     def check_priority(cls, value: list[MetadataSource]) -> list[MetadataSource]:
         if not value or len(value) != len(set(value)):
-            raise ValueError("source_priority must be nonempty and unique")
+            raise ValueError("Choose at least one metadata source without duplicates.")
         return value
 
 

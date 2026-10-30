@@ -116,19 +116,31 @@ test('bulk partial summary', async () => {
   );
   expect(await state.requeueBulk([1, 2, 3, 4])).toEqual([1, 2, 3]);
   expect(state.calls).toEqual([{ kind: 'bulk', id: [1, 2, 3, 4], action: 'retry' }]);
-  expect(state.messages.map(({ kind }) => kind)).toEqual(['error']);
+  expect(state.messages).toEqual([
+    {
+      kind: 'error',
+      text: 'Requeue requested for 3 jobs. 1 rejected. First rejection: #4: active job',
+    },
+  ]);
 });
 
 test('bulk accepted summary', async () => {
   const state = await handler([], [{ accepted: [2], failed: [] }]);
   expect(await state.requeueBulk([2])).toEqual([2]);
-  expect(state.messages.map(({ kind }) => kind)).toEqual(['success']);
+  expect(state.messages).toEqual([
+    { kind: 'success', text: 'Requeue requested for 1 job. 0 rejected.' },
+  ]);
 });
 
 test('bulk rejection summary', async () => {
   const state = await handler([], [{ accepted: [], failed: [{ id: 2, detail: 'Missing file.' }] }]);
   expect(await state.requeueBulk([2])).toEqual([]);
-  expect(state.messages.map(({ kind }) => kind)).toEqual(['error']);
+  expect(state.messages).toEqual([
+    {
+      kind: 'error',
+      text: 'Requeue requested for 0 jobs. 1 rejected. First rejection: #2: Missing file.',
+    },
+  ]);
 });
 
 test('bulk request failure', async () => {

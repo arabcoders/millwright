@@ -21,7 +21,7 @@ DELETABLE = (*TERMINAL, JobStatus.QUEUED.value, JobStatus.STAGING.value, JobStat
 QUERY_BATCH = 500
 
 
-def protected_history_jobs() -> Select[tuple[int]]:
+def protected_history_jobs() -> Select[int]:
     return select(Job.id).where(
         or_(
             Job.id.in_(recovery_jobs()),

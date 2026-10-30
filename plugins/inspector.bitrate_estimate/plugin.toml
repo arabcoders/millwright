@@ -2,9 +2,7 @@ id = "inspector.bitrate_estimate"
 kind = "inspector"
 description = "Estimate AVC, HEVC, and AV1 bitrate and size."
 help = """
-Apply codec ratios to the selected bitrate source to estimate bitrate and size.
-Video bitrate falls back to file size and duration. Skip files without video or
-a derivable bitrate.
+Set a bitrate ratio for each codec. Files without video or a usable bitrate are skipped.
 """
 name = "Bitrate estimate"
 author = "Millwright"

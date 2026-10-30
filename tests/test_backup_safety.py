@@ -323,11 +323,14 @@ def test_config_secret_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 @pytest.mark.parametrize("change", ["replacement", "hardlink"])
 def test_published_secret_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str) -> None:
     path = tmp_path / "config.toml"
-    restore_config(path, 'access_log = false\napi_key = "old-key"\nnode_enrollment_token = "old-token"\n')
+    monkeypatch.delenv("MW_DATABASE_URL", raising=False)
+    restore_config(
+        path, 'access_log = false\napi_key = "old-key"\ndatabase_url = "postgresql://user:old-password@db/millwright"\n'
+    )
     before = path.read_bytes()
     directory = tmp_path / "secrets"
     original_files = {file.name: file.read_bytes() for file in directory.iterdir()}
-    foreign = tmp_path / "retained-token"
+    foreign = tmp_path / "retained-database-url"
     changed: Path | None = None
     fsync = os.fsync
 
@@ -337,8 +340,8 @@ def test_published_secret_generation(tmp_path: Path, monkeypatch: pytest.MonkeyP
         if partial.name == ".config.toml.partial":
             assert changed is None
             staged = tomllib.loads(partial.read_text())
-            changed = tmp_path / staged["node_enrollment_token"].removeprefix("file:")
-            assert changed.read_bytes() == b"new-token\n"
+            changed = tmp_path / staged["database_url"].removeprefix("file:")
+            assert changed.read_bytes() == b"postgresql://user:new-password@db/millwright\n"
             if change == "replacement":
                 changed.rename(foreign)
                 changed.write_bytes(b"another writer's data")
@@ -348,12 +351,15 @@ def test_published_secret_generation(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr("server.backup.os.fsync", change_published)
     with pytest.raises(ValueError):
-        restore_config(path, 'access_log = false\napi_key = "new-key"\nnode_enrollment_token = "new-token"\n')
+        restore_config(
+            path,
+            'access_log = false\napi_key = "new-key"\ndatabase_url = "postgresql://user:new-password@db/millwright"\n',
+        )
     assert changed is not None
     assert path.read_bytes() == before
     config = load_config(path)
-    assert config.api_key == "old-key" and config.node_enrollment_token == "old-token"
-    assert foreign.read_bytes() == b"new-token\n"
+    assert config.api_key == "old-key" and config.database_url == "postgresql://user:old-password@db/millwright"
+    assert foreign.read_bytes() == b"postgresql://user:new-password@db/millwright\n"
     retained = original_files.copy()
     if change == "replacement":
         assert changed.read_bytes() == b"another writer's data"

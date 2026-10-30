@@ -3,6 +3,18 @@ import { reactive } from 'vue';
 import { buildInputs, initializeInputs, newPluginNode } from '../app/utils/stepDraft';
 import type { PluginInputField } from '../app/types/api';
 
+const mappingField: PluginInputField = {
+  name: 'path_mappings',
+  type: 'path_mappings',
+  default: [],
+  required: false,
+  nullable: false,
+  min: null,
+  max: null,
+  values: null,
+  help: null,
+};
+
 test('preserves input edits', () => {
   const saved = reactive({ count: 0, enabled: false, tags: [], future: { nested: 'value' } });
   const node = reactive(newPluginNode());
@@ -139,4 +151,55 @@ test('lists preserve values', () => {
   initializeInputs(defaults, [field]);
   expect(defaults.inputs.targets).toEqual(['a,b']);
   expect(buildInputs(defaults, [field])).toEqual({});
+});
+
+test('mapping edits persist', () => {
+  const rows = [
+    { source: '/media/movies', destination: '/movies' },
+    { source: '/media/series', destination: '/series' },
+  ];
+  const node = reactive(newPluginNode());
+  node.rawInputs = { path_mappings: rows.map((row) => ({ ...row })) };
+  initializeInputs(node, [mappingField]);
+  expect(buildInputs(node, [mappingField])).toEqual({ path_mappings: rows });
+
+  const mappings = node.inputs.path_mappings;
+  if (!Array.isArray(mappings)) throw new Error('Expected mapping draft');
+  const first = mappings[0];
+  if (!first || typeof first === 'string') throw new Error('Expected mapping row');
+  first.destination = '/library/movies';
+  expect(buildInputs(node, [mappingField]).path_mappings).toEqual([
+    { source: '/media/movies', destination: '/library/movies' },
+    rows[1],
+  ]);
+  expect(node.rawInputs.path_mappings).toEqual(rows);
+  expect(node.initialInputs.path_mappings).toEqual(rows);
+
+  mappings.splice(0, 1);
+  expect(buildInputs(node, [mappingField]).path_mappings).toEqual([rows[1]]);
+  mappings.splice(0);
+  expect(buildInputs(node, [mappingField]).path_mappings).toEqual([]);
+  expect(node.rawInputs.path_mappings).toEqual(rows);
+  expect(node.initialInputs.path_mappings).toEqual(rows);
+});
+
+test('mapping defaults separate', () => {
+  const rows = [{ source: '/media', destination: '/library' }];
+  const field = { ...mappingField, default: rows.map((row) => ({ ...row })) };
+  const first = reactive(newPluginNode());
+  const second = reactive(newPluginNode());
+  initializeInputs(first, [field]);
+  initializeInputs(second, [field]);
+  const mappings = first.inputs.path_mappings;
+  if (!Array.isArray(mappings)) throw new Error('Expected mapping draft');
+  const mapping = mappings[0];
+  if (!mapping || typeof mapping === 'string') throw new Error('Expected mapping row');
+  mapping.source = '/mnt/media';
+  expect(buildInputs(first, [field]).path_mappings).toEqual([
+    { source: '/mnt/media', destination: '/library' },
+  ]);
+  expect(field.default).toEqual(rows);
+  expect(first.initialInputs.path_mappings).toEqual(rows);
+  expect(second.inputs.path_mappings).toEqual(rows);
+  expect(buildInputs(second, [field])).toEqual({});
 });

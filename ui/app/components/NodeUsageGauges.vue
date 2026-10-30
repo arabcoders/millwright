@@ -2,7 +2,7 @@
   <div class="space-y-1.5">
     <div class="flex items-center gap-1.5">
       <p v-if="offline && usage" class="text-[11px] text-toned">Last known</p>
-      <UTooltip text="Usage reflects the whole system, not just Millwright.">
+      <UTooltip text="Usage reflects the whole system">
         <span
           tabindex="0"
           role="img"

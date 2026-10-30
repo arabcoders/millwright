@@ -3,7 +3,6 @@ kind = "action"
 description = "Extract selected subtitle tracks beside converted media."
 help = """
 Select formats and languages. The default is English SRT.
-Extracted files are written beside the converted media.
 """
 name = "Extract subtitles"
 author = "Millwright"

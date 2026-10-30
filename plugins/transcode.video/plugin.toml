@@ -1,13 +1,9 @@
 id = "transcode.video"
 kind = "transcode"
-description = "Encode AVC, HEVC, or AV1 with quality or bitrate rate control."
+description = "Convert video to AVC, HEVC, or AV1."
 help = """
-Quality mode (default) uses encoder quality without a bitrate target. Bitrate mode uses
-a source bitrate ratio without quality flags. The output size limit applies in both modes.
-Optionally set encoder, pixel format, bit depth, preset, or maximum dimensions.
-Skip matching files unless another video, audio, stream, or container change is requested.
-Skip files without video or with only cover art. HEVC defaults to libx265, quality 21,
-and bitrate ratio 0.5. AVC uses libx264. AV1 uses libsvtav1. Both have codec-specific defaults.
+Choose quality or bitrate mode. Set an encoder or an encoder priority list if needed.
+Files already matching your settings are skipped.
 """
 name = "Video transcode"
 author = "Millwright"

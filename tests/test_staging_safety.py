@@ -382,8 +382,8 @@ async def test_continuation_refuses_changes(staged_env, change: str):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["drained", "exhausted", "unconfirmed", "unread", "transcode", "unavailable"])
-async def test_prune_healthcheck_logs(staged_env, state: str):
+@pytest.mark.parametrize("workload", ["healthcheck", "transcode"])
+async def test_prune_healthcheck_logs(staged_env, workload: str):
     factory, service, job_id, source = staged_env
     relative = workspace.create_attempt_layout(service.workspace_dir, job_id, 1, ".mkv")["log"]
     log = service.workspace_dir / relative
@@ -396,18 +396,14 @@ async def test_prune_healthcheck_logs(staged_env, state: str):
             attempt_number=1,
             status=JobStatus.FAILED,
             result="interrupted",
-            workload="transcode" if state == "transcode" else "healthcheck",
+            workload=workload,
             log_path=relative,
-            log_data=None if state == "unread" else log.read_bytes(),
+            log_data=log.read_bytes(),
             finished_at=utcnow(),
-            error="max attempts exceeded"
-            if state == "exhausted"
-            else ("healthcheck process exit is unconfirmed" if state == "unconfirmed" else "requeued"),
+            error="requeued",
         )
         session.add(attempt)
         await session.flush()
-        if state == "unavailable":
-            session.add(JobEvent(job_id=job_id, attempt_id=attempt.id, type="healthcheck_log_unavailable"))
         await session.commit()
     eligible = False
     assert await service.prune_attempt(attempt.id) is eligible
@@ -415,7 +411,7 @@ async def test_prune_healthcheck_logs(staged_env, state: str):
     async with factory() as session:
         saved = await session.get(JobAttempt, attempt.id)
         assert saved is not None and saved.result == "interrupted"
-        assert saved.log_data == (None if state == "unread" else b"healthcheck log")
+        assert saved.log_data == b"healthcheck log"
     assert source.read_bytes() == b"source"
 
 

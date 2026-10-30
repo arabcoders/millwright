@@ -2,6 +2,7 @@
 services:
   postgres:
     image: postgres:18
+    container_name: millwright-postgres
     environment:
       POSTGRES_USER: millwright
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -16,6 +17,7 @@ services:
     restart: unless-stopped
 
   server:
+    container_name: millwright-server
     image: ghcr.io/arabcoders/millwright:latest
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -37,6 +39,7 @@ services:
     restart: unless-stopped
 
   node:
+    container_name: millwright-node
     image: ghcr.io/arabcoders/millwright:latest
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -45,7 +48,6 @@ services:
     environment:
       MW_ROLE: node
       MW_NODE_SERVER_URL: http://server:8000
-      MW_NODE_ENROLLMENT_TOKEN: file:/run/node_enrollment_token
       MW_NODE_WORKSPACE_DIR: /workspace
       UMASK: ${UMASK:-0002}
       TZ: ${TZ:-UTC}
@@ -53,7 +55,6 @@ services:
       - ./node-config:/config
       - ./node-data:/data
       - ./workspace:/workspace
-      - ./config/millwright/secrets/node_enrollment_token:/run/node_enrollment_token:ro
     restart: unless-stopped
 
 volumes:

@@ -8,11 +8,12 @@ import os
 import re
 import uuid
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Literal
 from unittest.mock import AsyncMock
 
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from common.media.probe import probe_from_raw
 from common.plan.models import FFmpegPlan, VideoTarget
-from common.protocol import NodeCapabilities
+from common.protocol import Hello, NodeCapabilities
 from common.enums import JobStatus
 from tests.helpers import api_client
 from tests.helpers import create_test_app as create_app
@@ -56,6 +57,7 @@ from server.serialize import iso_utc
 from server.staging import StagingService
 from common.fs.identity import source_identity
 from tests.helpers import database_context, graph_flow, make_test_temp_dir
+from tests.hub_helpers import FakeConn
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -101,7 +103,8 @@ class ApiEnv:
 
 
 @asynccontextmanager
-async def api_context(*, background: bool = False) -> AsyncIterator[ApiEnv]:
+async def api_context(monkeypatch: pytest.MonkeyPatch, *, background: bool = False) -> AsyncGenerator[ApiEnv]:
+    monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
     lib_dir = make_test_temp_dir("api-lib")
     async with database_context("api") as factory:
         app = create_app(
@@ -174,9 +177,9 @@ async def api_context(*, background: bool = False) -> AsyncIterator[ApiEnv]:
 
 
 @pytest_asyncio.fixture
-async def api_env(request: pytest.FixtureRequest) -> AsyncIterator[ApiEnv]:
+async def api_env(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[ApiEnv]:
     # Only background integration tests start service loops.
-    async with api_context(background=getattr(request, "param", False)) as env:
+    async with api_context(monkeypatch, background=getattr(request, "param", False)) as env:
         yield env
 
 
@@ -234,7 +237,7 @@ async def requeue_outcome(env: ApiEnv, job_id: int, *, event_type: str = "requeu
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ["complete", "failure", "cancel"])
 async def test_cleanup_joins_scans(monkeypatch: pytest.MonkeyPatch, outcome: str) -> None:
-    context = api_context()
+    context = api_context(monkeypatch)
     env = await context.__aenter__()
     started, closing_started, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     order: list[str] = []
@@ -442,7 +445,7 @@ async def test_queue_rotation(api_env: ApiEnv, monkeypatch) -> None:
     )
     h.entries[entry.name] = entry
     async with api_env.factory() as session:
-        before_jobs = [dict(row) for row in (await session.execute(select(Job.__table__))).mappings()]
+        before_jobs = [dict(row) for row in (await session.execute(select(Job.__table__).order_by(Job.id))).mappings()]
         before_node = dict((await session.execute(select(NodeRow.__table__))).mappings().one())
         before_events = await session.scalar(select(func.count(JobEvent.id)))
     h._wake.clear()
@@ -471,7 +474,9 @@ async def test_queue_rotation(api_env: ApiEnv, monkeypatch) -> None:
     assert "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY" in statements
     assert not any(statement.startswith(("INSERT", "UPDATE", "DELETE")) for statement in statements)
     async with api_env.factory() as session:
-        assert [dict(row) for row in (await session.execute(select(Job.__table__))).mappings()] == before_jobs
+        assert [
+            dict(row) for row in (await session.execute(select(Job.__table__).order_by(Job.id))).mappings()
+        ] == before_jobs
         assert dict((await session.execute(select(NodeRow.__table__))).mappings().one()) == before_node
         assert await session.scalar(select(func.count(JobEvent.id))) == before_events
 
@@ -3589,7 +3594,13 @@ async def test_attempt_history_and(api_env: ApiEnv) -> None:
             ]
         )
         await session.flush()
-        attempts = list((await session.execute(select(JobAttempt).where(JobAttempt.job_id == job.id))).scalars())
+        attempts = list(
+            (
+                await session.execute(
+                    select(JobAttempt).where(JobAttempt.job_id == job.id).order_by(JobAttempt.attempt_number)
+                )
+            ).scalars()
+        )
         session.add(JobEvent(job_id=job.id, attempt_id=attempts[1].id, type="finished", payload={}))
         await session.commit()
         job_id, first_id, second_id, third_id = job.id, attempts[0].id, attempts[1].id, attempts[2].id
@@ -3662,6 +3673,49 @@ async def test_attempt_history_and(api_env: ApiEnv) -> None:
         attempt.log_path = "jobs/1/attempts/2/run.log"
         await session.commit()
     assert (await api_env.client.get(f"/api/jobs/{job_id}/attempts/{second_id}/log")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_registration_claim(api_env: ApiEnv) -> None:
+    hub = api_env.app.state.hub
+    # Immediate delivery makes subscription coalescing independent of runner speed.
+    api_env.app.state.events.min_interval_s = 0
+    conn = FakeConn(
+        [Hello(capabilities=NodeCapabilities(hostname="encoder"), active_attempts=[]).model_dump(mode="json")]
+    )
+    task = asyncio.create_task(hub.serve_connection(conn))
+    sub = api_env.app.state.events.subscribe()
+    try:
+        async with asyncio.timeout(3):
+            while not conn.messages("registration_pending"):
+                conn.changed.clear()
+                await conn.changed.wait()
+        request_id = conn.messages("registration_pending")[0]["request_id"]
+        response = await api_env.client.get("/api/nodes/registration")
+        assert response.status_code == 200
+        pending = response.json()["pending"]
+        assert [(item["request_id"], item["capabilities"]["hostname"]) for item in pending] == [(request_id, "encoder")]
+        assert (await api_env.client.get("/api/nodes")).json() == []
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api_env.app), base_url=UI_BASE) as anonymous:
+            assert (await anonymous.get("/api/nodes/registration")).status_code == 401
+            assert (await anonymous.post(f"/api/nodes/pending/{request_id}/claim")).status_code == 401
+        async with asyncio.timeout(3):
+            event = await sub.next()
+            while event is not None and event.type != "node.registration":
+                event = await sub.next()
+        assert event is not None and event.payload["pending"][0]["request_id"] == request_id
+        response = await api_env.client.post(f"/api/nodes/pending/{request_id}/claim")
+        assert response.status_code == 202
+        assert (await api_env.client.post(f"/api/nodes/pending/{request_id}/claim")).status_code == 404
+        async with asyncio.timeout(3):
+            while not conn.messages("workspace_challenge"):
+                conn.changed.clear()
+                await conn.changed.wait()
+        assert not conn.messages("registered")
+    finally:
+        conn.disconnect()
+        await asyncio.wait_for(task, 3)
+        api_env.app.state.events.unsubscribe(sub)
 
 
 @pytest.mark.asyncio
@@ -3768,7 +3822,7 @@ async def test_remove_offline_node(api_env: ApiEnv) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reject_online_node(api_env: ApiEnv) -> None:
+async def test_remove_online_node(api_env: ApiEnv) -> None:
     await seed_node(api_env)
     async with api_env.factory() as session:
         node = await session.scalar(select(NodeRow).where(NodeRow.name == "node-a"))
@@ -3777,15 +3831,18 @@ async def test_reject_online_node(api_env: ApiEnv) -> None:
         await session.commit()
         node_id = node.id
     response = await api_env.client.delete(f"/api/nodes/{node_id}")
-    assert response.status_code == 409
+    assert response.status_code == 204
+    assert (await api_env.client.get("/api/nodes")).json() == []
 
 
 @pytest.mark.asyncio
-async def test_reject_active_node(api_env: ApiEnv) -> None:
+@pytest.mark.parametrize("state", ["online", "offline"])
+async def test_reject_active_node(api_env: ApiEnv, state: str) -> None:
     await seed_node(api_env)
     async with api_env.factory() as session:
         node = await session.scalar(select(NodeRow).where(NodeRow.name == "node-a"))
         assert node is not None
+        node.state = state
         media_id, library_id = await seed_media(api_env)
         job = Job(media_file_id=media_id, library_id=library_id, status=JobStatus.QUEUED.value, node_id=node.id)
         session.add(job)
@@ -3844,7 +3901,9 @@ async def test_system_timezone(api_env: ApiEnv, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_stats_overview_scope(api_env: ApiEnv) -> None:
-    now = datetime.now(UTC)
+    now = T0
+    api_env.app.state.stats.clock = lambda: now
+    api_env.app.state.cache.clock = lambda: now
     async with api_env.factory() as session:
         libraries = [Library(name=f"overview-{uuid.uuid4().hex}", roots=[str(api_env.lib_dir)]) for _ in range(3)]
         session.add_all(libraries)
@@ -4806,7 +4865,7 @@ async def test_manual_flow_snapshot(api_env: ApiEnv, skipped: bool, binding: str
 
     response = await api_env.client.post(
         f"/api/files/{media_id}/transcode",
-        **({"json": {"flow_id": flow["id"], "expected_version": flow["version"]}} if binding != "default" else {}),
+        json={"flow_id": flow["id"], "expected_version": flow["version"]} if binding != "default" else None,
     )
     assert response.status_code == 202
     outcome = await requeue_outcome(api_env, response.json()["job_id"], event_type="request_result")
@@ -4939,7 +4998,7 @@ async def test_manual_flow_retries(
         (api_env.lib_dir / "movie.avi").write_bytes(b"changed before preparation")
     response = await api_env.client.post(
         f"/api/files/{media_id}/transcode",
-        **({"json": {"flow_id": flow["id"], "expected_version": flow["version"]}} if selected_flow else {}),
+        json={"flow_id": flow["id"], "expected_version": flow["version"]} if selected_flow else None,
         params={"refresh": scenario == "unprepared"},
     )
     assert response.status_code == 202, response.text

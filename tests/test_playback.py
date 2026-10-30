@@ -62,7 +62,7 @@ class PlaybackEnv:
 
 
 @asynccontextmanager
-async def playback_context() -> AsyncIterator[PlaybackEnv]:
+async def playback_context() -> AsyncGenerator[PlaybackEnv]:
     lib_dir = make_test_temp_dir("playback-lib")
     files_dir = make_test_temp_dir("playback-files")
     workspace = make_test_temp_dir("playback-workspace")

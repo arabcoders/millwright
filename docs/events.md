@@ -57,6 +57,7 @@ Some messages contain a batch. Handle each entry in `payload.events` as an ordin
 | `job.cancel_requested`              | Show cancellation in progress                          |
 | `file.status`                       | Update the file list or show scan totals               |
 | `node.status`                       | Update a node's connection state and active job counts |
+| `node.registration`                 | Update registration availability and pending nodes     |
 | `library.scan`, `library.deletion`  | Show scan and deletion results                         |
 | `library.progress`                  | Update scanning and metadata-reading activity          |
 | `scanner.state`, `probing.state`    | Show scanning or metadata-reading status               |
@@ -66,6 +67,12 @@ Some messages contain a batch. Handle each entry in `payload.events` as an ordin
 Individual file updates contain `media_file_id`, `library_id`, and `file`. On `action: "pruned"`, remove
 the file from your client's list. Scan totals instead use `action: "scanned"` with `added`, `updated`,
 and `pruned` counts.
+
+Node registration updates contain `enabled` and the complete `pending` list. Each pending request
+contains `request_id` and `capabilities`. Load the initial state from `GET /api/nodes/registration`.
+Claim a connected request with `POST /api/nodes/pending/{request_id}/claim`. A `202` response starts
+registration. The node becomes available only after saving its credentials and verifying the workspace.
+Use `PATCH /api/settings` with `node_registration_enabled` to allow or stop new requests.
 
 For initial library activity, request `GET /api/libraries/progress`. Active metadata reads include
 `media_file_id`, `path`, `tool`, `started_at`, and nullable `percent`. These activity counters reset

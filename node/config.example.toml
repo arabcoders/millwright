@@ -2,15 +2,11 @@
 # Config precedence: --config, $MW_NODE_CONFIG, $MW_CONFIG_PATH/node.toml,
 # then $XDG_CONFIG_HOME/millwright/node.toml (default: ~/.config/millwright/node.toml).
 # MW_NODE_<UPPERCASE_NAME> overrides each field. Lists use JSON arrays.
-# The server assigns an ID and credential. State directory precedence:
+# Claim the pending node on the server's Nodes page to assign an ID and credential.
+# State directory precedence:
 # $MW_NODE_STATE_PATH, $MW_STATE_PATH, then $XDG_STATE_HOME/millwright
 # (default: ~/.local/state/millwright).
-# enrollment_token accepts file:<path> in config and environment values.
 # Unknown keys are ignored with a warning.
-
-# Required for enrollment and re-enrollment.
-enrollment_token = "change-me"
-# enrollment_token = "file:/run/secrets/node_token"
 
 # Required. Server URL. HTTP becomes WS, HTTPS becomes WSS, and /api/hub is added.
 # A full ws:// or wss:// endpoint ending in /api/hub also works.

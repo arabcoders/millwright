@@ -21,7 +21,7 @@ class _WebSocketAccessFilter(logging.Filter):
 
 class _PlaybackStreamFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.exc_info is not None and isinstance(record.exc_info[1], PlaybackStreamClosed):
+        if record.exc_info and isinstance(record.exc_info[1], PlaybackStreamClosed):
             # Uvicorn must still catch this exception and close the truncated transport.
             record.msg = "Playback response aborted: %s"
             record.args = (str(record.exc_info[1]),)

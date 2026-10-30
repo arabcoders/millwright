@@ -12,8 +12,10 @@ if TYPE_CHECKING:
 
 
 class Inputs(AudioPlanInputs):
-    container: Literal["mkv", "mp4", "original"] = Field(default="mkv", description="Output container format")
-    size_ceiling_ratio: float = Field(default=1.05, gt=0, description="Maximum output-to-source file size ratio")
+    container: Literal["mkv", "mp4", "original"] = Field(default="mkv", description="Choose the output container.")
+    size_ceiling_ratio: float = Field(
+        default=1.05, gt=0, description="Reject output larger than this multiple of the input file size."
+    )
 
 
 INPUTS = Inputs
@@ -30,7 +32,7 @@ def decide(ctx: PluginContext, inputs: Inputs) -> dict[str, Any]:
     media_changes = changes_media(plan, ctx.probe)
     plan = apply_metadata(plan, ctx)
     if not changes_media(plan, ctx.probe):
-        return {"type": "skip", "reason": "container and streams already satisfy the policy"}
+        return {"type": "skip", "reason": "The file already matches the requested settings."}
     reasons = change_reasons(plan, ctx.probe)
     # Generate missing packet timestamps during remuxing, not as a reason to remux again.
     plan.generate_timestamps = media_changes

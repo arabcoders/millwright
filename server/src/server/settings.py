@@ -42,6 +42,7 @@ class OperationalSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_healthchecks: int = Field(default=1, ge=1)
+    node_registration_enabled: bool = True
     max_probes: int = Field(default=4, ge=1)
     max_mkv_stats: int = Field(default=1, ge=1)
     healthcheck_hwaccel: bool = True

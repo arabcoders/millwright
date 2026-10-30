@@ -36,6 +36,7 @@ from common.protocol import (
     NodeLog,
     NodeLogs,
     Progress,
+    Unregistered,
     WorkspaceResponse,
     parse_message,
 )
@@ -267,7 +268,8 @@ async def test_foreign_action_report(env):
 
 
 @pytest_asyncio.fixture
-async def env():
+async def env(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
     async with database_context("hub") as factory:
         async with factory() as session:
             await register_node(session, "node-a", "tok")
@@ -282,7 +284,8 @@ async def env():
 
 
 @pytest_asyncio.fixture
-async def writer_env(tmp_path: Path):
+async def writer_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
     library = tmp_path / "library"
     library.mkdir()
     async with database_context("hub-writer") as factory:
@@ -699,15 +702,23 @@ async def wait_for(pred, event, timeout=3):
             await event.wait()
 
 
-async def serve(h, conn, *, enroll=False):
+async def serve(h, conn, *, claim=False):
     task = asyncio.create_task(h.serve_connection(conn))
-    await wait_for(lambda: conn.messages("workspace_challenge"), conn.changed)
-    answer_challenge(h, conn)
-    if enroll:
-        await wait_for(lambda: conn.messages("enrolled"), conn.changed)
-        conn.push({"v": 1, "type": "enrollment_saved", "node_id": conn.messages("enrolled")[0]["node_id"]})
-    await wait_for(lambda: conn.messages("welcome"), conn.changed)
-    await asyncio.wait_for(conn.ready.wait(), 3)
+    try:
+        if claim:
+            await wait_for(lambda: conn.messages("registration_pending"), conn.changed)
+            assert h.claim_node(conn.messages("registration_pending")[0]["request_id"])
+        await wait_for(lambda: conn.messages("workspace_challenge"), conn.changed)
+        answer_challenge(h, conn)
+        if claim:
+            await wait_for(lambda: conn.messages("registered"), conn.changed)
+            conn.push({"v": 1, "type": "credentials_saved", "node_id": conn.messages("registered")[0]["node_id"]})
+        await wait_for(lambda: conn.messages("welcome"), conn.changed)
+        await asyncio.wait_for(conn.ready.wait(), 3)
+    except BaseException:
+        task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 3)
+        raise
     return task
 
 
@@ -1015,7 +1026,9 @@ async def test_challenge_revocation_checked(env):
             )
             await session.commit()
         answer_challenge(h, conn)
-        await wait_for(lambda: conn.messages("welcome") or conn.messages("error") or connection.done(), conn.changed)
+        await wait_for(lambda: conn.messages("unregister"), conn.changed)
+        conn.push(Unregistered().model_dump(mode="json"))
+        await asyncio.wait_for(connection, 3)
         assert not conn.messages("welcome"), "revoked credentials queued a connection after workspace verification"
         assert "node-a" not in h.entries
     finally:
@@ -1041,9 +1054,11 @@ async def test_removed_challenge_refused(env, replace):
                 await register_node(session, "node-a", "replacement-token")
                 await session.commit()
         answer_challenge(h, conn)
+        await wait_for(lambda: conn.messages("unregister"), conn.changed)
+        conn.push(Unregistered().model_dump(mode="json"))
         await asyncio.wait_for(connection, 3)
         assert not conn.messages("welcome") and not h.entries
-        assert conn.messages("error")[0]["code"] == "auth" and conn.closed == 4401
+        assert conn.closed == 1000
         async with env.factory() as session:
             stored = await get_node(session, "node-a")
             if replace:
@@ -1526,8 +1541,10 @@ async def test_removal_preserves_owner(env, monkeypatch, check):
             assert (env.workspace / offer["output_path"]).read_bytes() == b"output"
         else:
             assert removed and replacement_id != node_id
+            await wait_for(lambda: conn.messages("unregister"), conn.changed)
+            conn.push(Unregistered().model_dump(mode="json"))
             await asyncio.wait_for(connection, 3)
-            assert conn.messages("error")[-1]["code"] == "auth"
+            assert not conn.messages("welcome")
             replacement_conn = FakeConn([hello("node-b", "replacement-token")])
             replacement_connection = await serve(h, replacement_conn)
             assert await asyncio.wait_for(h.dispatch_once(), 2) == 1
@@ -1706,7 +1723,7 @@ async def test_node_cancel_boundary(env, monkeypatch, phase, reason) -> None:
 
 @pytest.mark.asyncio
 async def test_post_cleanup_retry(env, monkeypatch) -> None:
-    from server.queue.store import ActiveJobError
+    from server.queue.store import ActiveJobError, NodeRemovalError, remove_node
 
     cleanup_started, release_cleanup = asyncio.Event(), asyncio.Event()
     async with post_action_case(env) as case:
@@ -1735,6 +1752,8 @@ async def test_post_cleanup_retry(env, monkeypatch) -> None:
             async with env.factory() as session:
                 from server.queue.store import restore_retry_result
 
+                with pytest.raises(NodeRemovalError):
+                    await remove_node(session, case.hub.entries["node-a"].node_db_id)
                 request_id = await request_retry(session, case.jid)
                 with pytest.raises(ActiveJobError):
                     await retry_job(session, case.jid, request_id=request_id)
@@ -4149,9 +4168,10 @@ async def test_idle_hello_availability(env):
 
 
 @pytest.mark.asyncio
-async def test_hello_rejects_unlocked(env):
+async def test_registration_rejects_unlocked(env):
     h = hub(env)
-    conn = FakeConn([hello(token="wrong")])
+    h.set_registration_enabled(False)
+    conn = FakeConn([hello(name=None, token="")])
     async with h.dispatch_lock:
         await asyncio.wait_for(h.serve_connection(conn), 3)
     assert conn.messages("error") and conn.closed is not None
@@ -4214,8 +4234,10 @@ async def test_reset_defers_queue(env, monkeypatch, revoke):
                     current.token_hash = hash_token("replacement")
                     await session.commit()
         if revoke:
+            await wait_for(lambda: conn.messages("unregister"), conn.changed)
+            conn.push(Unregistered().model_dump(mode="json"))
             await asyncio.wait_for(task, 3)
-            assert conn.messages("error")[0]["code"] == "auth" and conn.closed == 4401
+            assert conn.closed == 1000
             assert not conn.messages("workspace_challenge") and not h.entries
         else:
             await wait_for(lambda: conn.messages("workspace_challenge"), conn.changed)
@@ -4234,10 +4256,12 @@ async def test_handshake_ready(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    n = await node(env)
-    assert n.state == "online" and n.workspace_ready and n.workspace_free_bytes == 123456
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        n = await node(env)
+        assert n.state == "online" and n.workspace_ready and n.workspace_free_bytes == 123456
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
     n = await node(env)
     assert n.state == "offline" and not n.workspace_ready and n.workspace_free_bytes is None
 
@@ -4307,19 +4331,176 @@ async def test_handshake_io_drains(env, monkeypatch, phase):
 
 
 @pytest.mark.asyncio
-async def test_handshake_rejects(env):
-    async with env.factory() as s:
-        s.add(await register_node(s, "node-a", "right"))
-        await s.commit()
-    c = FakeConn([hello(token="wrong")])
-    await hub(env).serve_connection(c)
-    assert c.messages("error")[0]["code"] == "auth" and c.closed == 4401
+@pytest.mark.parametrize("registration", ["invalid", "offline", "interrupted"])
+async def test_stale_credentials_clear(env, registration):
+    h = hub(env)
+    await file_job(env)
+    removed = registration != "invalid"
+    if removed:
+
+        class RemovalConn(FakeConn):
+            async def send_json(self, data):
+                if data["type"] == "unregister":
+                    raise OSError("Connection lost before unregister delivery.")
+                await super().send_json(data)
+
+        original = RemovalConn([hello()])
+        connection = await serve(h, original) if registration == "interrupted" else None
+        async with env.factory() as session:
+            saved = await get_node(session, "node-a")
+            assert saved is not None
+            node_id = saved.id
+        try:
+            assert await h.remove_node(node_id)
+        finally:
+            original.disconnect()
+            if connection is not None:
+                await asyncio.wait_for(connection, 2)
+    c = FakeConn([hello(token="tok" if removed else "wrong")])
+    task = asyncio.create_task(h.serve_connection(c))
+    retry = FakeConn([hello(name=None, token="")])
+    retried = None
+    try:
+        await wait_for(lambda: c.messages("unregister"), c.changed)
+        assert not h.pending_nodes and not c.messages("workspace_challenge")
+        c.push(Unregistered().model_dump(mode="json"))
+        await asyncio.wait_for(task, 2)
+        retried = asyncio.create_task(h.serve_connection(retry))
+        await wait_for(lambda: retry.messages("registration_pending"), retry.changed)
+        assert not retry.messages("registered")
+        await h.dispatch_once()
+        assert not retry.messages("job")
+        async with env.factory() as session:
+            saved = await get_node(session, "node-a")
+            if removed:
+                assert saved is None
+            else:
+                assert saved is not None and saved.token_hash == hash_token("tok")
+            assert len(list(await session.scalars(select(NodeRow)))) == (0 if removed else 1)
+    finally:
+        c.disconnect()
+        retry.disconnect()
+        await asyncio.wait_for(asyncio.gather(task, *([retried] if retried else [])), 2)
+    assert not h.pending_nodes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("registration", [True, False])
+async def test_online_unregister_reconnects(env, monkeypatch, registration):
+    from node.agent import Agent, AgentConfig
+
+    h = hub(env)
+    h.set_registration_enabled(registration)
+    path = env.workspace.parent / "node-credentials.json"
+    config = AgentConfig(
+        node_id="node-a",
+        token="tok",
+        credentials_path=path,
+        server_url="ws://test",
+        workspace_dir=str(env.workspace),
+        min_free_gb=0,
+    )
+    agent = Agent(config)
+    agent._save_credentials("node-a", config.token)
+    retained = env.workspace / "retained.log"
+    retained.write_bytes(b"retained log")
+    acknowledged, release = asyncio.Event(), asyncio.Event()
+    connections, tasks = [], []
+
+    def connect():
+        server, client = FakeConn(), FakeConn()
+        connections.extend((server, client))
+
+        async def from_hub(data):
+            await FakeConn.send_json(server, data)
+            client.push(data)
+
+        async def from_node(data):
+            await FakeConn.send_json(client, data)
+            if data["type"] == "unregistered":
+                acknowledged.set()
+                await asyncio.wait_for(release.wait(), 3)
+            server.push(data)
+
+        async def close_hub(code=1000):
+            server.closed = code
+            client.disconnect()
+
+        monkeypatch.setattr(server, "send_json", from_hub)
+        monkeypatch.setattr(client, "send_json", from_node)
+        monkeypatch.setattr(server, "close", close_hub)
+        tasks.extend((asyncio.create_task(h.serve_connection(server)), asyncio.create_task(agent._session(client))))
+        return server, client
+
+    server, client = connect()
+    removal = None
+    try:
+        await asyncio.wait_for(server.ready.wait(), 3)
+        node_id = h.entries["node-a"].node_db_id
+        jid = await file_job(env)
+        removal = asyncio.create_task(h.remove_node(node_id))
+        await asyncio.wait_for(acknowledged.wait(), 3)
+        assert not removal.done()
+        assert await asyncio.wait_for(h.dispatch_once(), 2) == 0
+        assert (await job(env, jid)).status == JobStatus.QUEUED
+        assert not path.exists() and config.node_id is None and config.token == ""
+        assert retained.read_bytes() == b"retained log"
+        async with env.factory() as session:
+            assert await get_node(session, "node-a") is None
+        release.set()
+        assert await asyncio.wait_for(removal, 3)
+        await asyncio.wait_for(asyncio.gather(*tasks), 3)
+        assert client.messages("unregistered") and not agent._closed
+        retry, retried_client = connect()
+        if registration:
+            await wait_for(lambda: retry.messages("registration_pending"), retry.changed)
+            assert len(h.pending_nodes) == 1 and not retry.messages("registered")
+        else:
+            await asyncio.wait_for(asyncio.gather(*tasks[-2:]), 3)
+            assert not h.pending_nodes and retry.messages("error")[0]["code"] == "registration"
+        assert retried_client.messages("hello")[0]["node_id"] is None
+        assert retried_client.messages("hello")[0]["token"] == ""
+    finally:
+        release.set()
+        for connection in connections:
+            connection.disconnect()
+        if removal is not None and not removal.done():
+            removal.cancel()
+        await asyncio.wait_for(asyncio.gather(*tasks, *([removal] if removal else []), return_exceptions=True), 3)
+        await asyncio.wait_for(agent.aclose(), 3)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["cancel", "connection"])
+async def test_pending_cleanup(env, failure):
+    class BrokenConn(FakeConn):
+        async def recv_json(self):
+            data = await super().recv_json()
+            if data is None:
+                raise OSError("Connection lost.")
+            return data
+
+    h = hub(env)
+    conn = BrokenConn([hello(name=None, token="")])
+    task = asyncio.create_task(h.serve_connection(conn))
+    try:
+        await wait_for(lambda: conn.messages("registration_pending"), conn.changed)
+        if failure == "cancel":
+            task.cancel()
+        else:
+            conn.disconnect()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
+        assert not h.pending_nodes and not conn.messages("registered")
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["node", "missing", "digest", "permission", "verification", "closure"])
 async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
-    h = hub(env, enrollment_token="fleet-secret")
+    h = hub(env)
     conn = FakeConn([hello()])
     task = asyncio.create_task(h.serve_connection(conn))
     try:
@@ -4333,13 +4514,13 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
             elif failure == "permission":
 
                 def denied(_path):
-                    raise PermissionError("Response denied for tok fleet-secret")
+                    raise PermissionError("Response denied for tok")
 
                 monkeypatch.setattr(Path, "read_bytes", denied)
             else:
 
                 def invalid(*_args):
-                    raise ValueError("Unsafe shared mount for tok fleet-secret")
+                    raise ValueError("Unsafe shared mount for tok")
 
                 monkeypatch.setattr("server.nodehub.hub._check_challenge", invalid)
         elif failure == "closure":
@@ -4351,7 +4532,7 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
                     response_path=challenge["response_path"],
                     workspace_ready=failure != "node",
                     workspace_free_bytes=0,
-                    error="Shared mount missing for tok fleet-secret" if failure == "node" else None,
+                    error="Shared mount missing for tok" if failure == "node" else None,
                 ).model_dump(mode="json")
             )
         await asyncio.wait_for(task, 2)
@@ -4363,7 +4544,7 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
         assert diagnostics
         if failure in {"missing", "digest"}:
             assert str(response_path) in diagnostics
-        assert "tok" not in caplog.text + diagnostics and "fleet-secret" not in caplog.text + diagnostics
+        assert "tok" not in caplog.text + diagnostics
     finally:
         conn.disconnect()
         if not task.done():
@@ -4373,10 +4554,10 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
 
 @pytest.mark.asyncio
 async def test_workspace_creation_diagnostics(env, monkeypatch, caplog):
-    h = hub(env, enrollment_token="fleet-secret")
+    h = hub(env)
 
     def denied(*_args):
-        raise PermissionError("Challenge directory denied for tok fleet-secret")
+        raise PermissionError("Challenge directory denied for tok")
 
     monkeypatch.setattr("server.nodehub.hub._prepare_challenge", denied)
     conn = FakeConn([hello()])
@@ -4384,24 +4565,26 @@ async def test_workspace_creation_diagnostics(env, monkeypatch, caplog):
     assert conn.messages("error")[0]["code"] == "workspace"
     diagnostics = "\n".join(getattr(record, "error", "") for record in caplog.records)
     assert diagnostics
-    assert "tok" not in caplog.text + diagnostics and "fleet-secret" not in caplog.text + diagnostics
+    assert "tok" not in caplog.text + diagnostics
 
 
 @pytest.mark.asyncio
-async def test_enrollment_issues_token(env):
-    h = hub(env, enrollment_token="fleet-secret")
-    greeting = hello(name=None, token="fleet-secret")
+async def test_claim_issues_token(env):
+    h = hub(env)
+    greeting = hello(name=None, token="")
     greeting["capabilities"].update(cpu_model="Intel(R) Core(TM) i9-14900K", gpus=["Intel UHD", "NVIDIA RTX 4090"])
     c = FakeConn([greeting])
-    task = await serve(h, c, enroll=True)
+    task = await serve(h, c, claim=True)
     try:
-        enrolled = c.messages("enrolled")[0]
-        assert enrolled["node_id"].startswith("node-")
-        assert enrolled["token"] != "fleet-secret"
+        registered = c.messages("registered")[0]
+        assert registered["node_id"].startswith("node-")
+        assert registered["token"]
         async with env.factory() as session:
-            node = await get_node(session, enrolled["node_id"])
+            node = await get_node(session, registered["node_id"])
             assert node is not None
-            assert node.token_hash == hash_token(enrolled["token"])
+            assert node.token_hash == hash_token(registered["token"])
+            saved = await get_node(session, "node-a")
+            assert saved is not None and saved.token_hash == hash_token("tok")
             assert node.transcode_limit == 1
             assert node.display_name.startswith("i9-igpu-nvidia-")
             assert len(node.display_name.rsplit("-", 1)[-1]) == 4
@@ -4411,47 +4594,81 @@ async def test_enrollment_issues_token(env):
 
 
 @pytest.mark.asyncio
-async def test_enrollment_rejects_named(env):
-    h = hub(env, enrollment_token="fleet-secret")
-    c = FakeConn([hello(name="arbitrary", token="fleet-secret")])
-    await h.serve_connection(c)
-    assert c.messages("error")[0]["code"] == "auth"
-    async with env.factory() as session:
-        assert await get_node(session, "arbitrary") is None
+async def test_registration_toggle(env):
+    h = hub(env)
+    registered = FakeConn([hello()])
+    active = await serve(h, registered)
+    pending = FakeConn([hello(name=None, token="")])
+    waiting = asyncio.create_task(h.serve_connection(pending))
+    retry = FakeConn([hello(name=None, token="")])
+    retried = None
+    try:
+        await wait_for(lambda: pending.messages("registration_pending"), pending.changed)
+        request_id = pending.messages("registration_pending")[0]["request_id"]
+        h.set_registration_enabled(False)
+        await asyncio.wait_for(waiting, 2)
+        assert not h.pending_nodes and not h.claim_node(request_id)
+        assert pending.messages("error")[0]["code"] == "registration"
+        assert h.entries["node-a"].workspace_ready and not registered.messages("error")
+        await asyncio.wait_for(h.serve_connection(retry), 2)
+        assert not retry.messages("registration_pending")
+        h.set_registration_enabled(True)
+        retry = FakeConn([hello(name=None, token="")])
+        retried = asyncio.create_task(h.serve_connection(retry))
+        await wait_for(lambda: retry.messages("registration_pending"), retry.changed)
+        assert len(h.pending_nodes) == 1
+        await asyncio.wait_for(h.aclose(), 2)
+        await asyncio.wait_for(retried, 2)
+        assert not h.pending_nodes and retry.messages("error")[0]["code"] == "registration"
+    finally:
+        registered.disconnect()
+        pending.disconnect()
+        retry.disconnect()
+        await asyncio.wait_for(asyncio.gather(active, waiting, *([retried] if retried else [])), 2)
 
 
 @pytest.mark.asyncio
-async def test_enrollment_workspace_failure(env):
-    h = hub(env, enrollment_token="fleet-secret")
-    c = FakeConn([hello(name=None, token="fleet-secret")])
+async def test_registration_workspace_failure(env):
+    h = hub(env)
+    c = FakeConn([hello(name=None, token="")])
     task = asyncio.create_task(h.serve_connection(c))
-    await wait_for(lambda: c.messages("workspace_challenge"), c.changed)
-    challenge = c.messages("workspace_challenge")[0]
-    c.push(
-        WorkspaceResponse(
-            challenge_id=challenge["challenge_id"],
-            response_path=challenge["response_path"],
-            workspace_ready=False,
-            workspace_free_bytes=0,
-        ).model_dump(mode="json")
-    )
-    await asyncio.wait_for(task, 2)
-    assert c.messages("error")[0]["code"] == "workspace"
+    try:
+        await wait_for(lambda: c.messages("registration_pending"), c.changed)
+        assert h.claim_node(c.messages("registration_pending")[0]["request_id"])
+        await wait_for(lambda: c.messages("workspace_challenge"), c.changed)
+        challenge = c.messages("workspace_challenge")[0]
+        c.push(
+            WorkspaceResponse(
+                challenge_id=challenge["challenge_id"],
+                response_path=challenge["response_path"],
+                workspace_ready=False,
+                workspace_free_bytes=0,
+            ).model_dump(mode="json")
+        )
+        await asyncio.wait_for(task, 2)
+        assert c.messages("error")[0]["code"] == "workspace"
+    finally:
+        c.disconnect()
+        if not task.done():
+            task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["closure", "parse", "timeout", "wrong_node"])
-async def test_enrollment_save_failure(env, caplog, failure):
-    class EnrollmentConn(FakeConn):
+async def test_registration_save_failure(env, caplog, failure):
+    class RegistrationConn(FakeConn):
         async def recv_json(self):
-            if failure == "timeout" and self.messages("enrolled"):
+            if failure == "timeout" and self.messages("registered"):
                 raise TimeoutError
             return await super().recv_json()
 
-    h = hub(env, enrollment_token="fleet-secret")
-    c = EnrollmentConn([hello(name=None, token="fleet-secret")])
+    h = hub(env)
+    c = RegistrationConn([hello(name=None, token="")])
     task = asyncio.create_task(h.serve_connection(c))
     try:
+        await wait_for(lambda: c.messages("registration_pending"), c.changed)
+        assert h.claim_node(c.messages("registration_pending")[0]["request_id"])
         await wait_for(lambda: c.messages("workspace_challenge"), c.changed)
         challenge = c.messages("workspace_challenge")[0]
         path = h.workspace_dir / challenge["response_path"]
@@ -4465,12 +4682,14 @@ async def test_enrollment_save_failure(env, caplog, failure):
                 workspace_free_bytes=10,
             ).model_dump(mode="json")
         )
-        await wait_for(lambda: c.messages("enrolled"), c.changed)
-        issued_id = c.messages("enrolled")[0]["node_id"]
+        await wait_for(lambda: c.messages("registered"), c.changed)
+        issued_id = c.messages("registered")[0]["node_id"]
+        async with env.factory() as session:
+            assert await get_node(session, issued_id) is None
         if failure == "parse":
-            c.push({"v": 1, "type": "enrollment_saved"})
+            c.push({"v": 1, "type": "credentials_saved"})
         elif failure == "wrong_node":
-            c.push({"v": 1, "type": "enrollment_saved", "node_id": "other-node"})
+            c.push({"v": 1, "type": "credentials_saved", "node_id": "other-node"})
         elif failure == "closure":
             c.push(None)
         await asyncio.wait_for(task, 2)
@@ -4555,17 +4774,19 @@ async def test_dispatch_paths(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    assert await h.dispatch_once() == 1
-    offer = c.messages("job")[0]["job"]
-    assert offer["min_free_gb"] == h.staging.min_free_gb == 1
-    assert offer["attempt_id"] > 0 and all(
-        not p.startswith("/") for p in (offer["source_path"], offer["output_path"], offer["log_path"])
-    )
-    assert str(env.library) not in json.dumps(offer)
-    a = (await attempt(env, jid))[0]
-    assert a.source_path == offer["source_path"] and a.output_path == offer["output_path"]
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        assert await h.dispatch_once() == 1
+        offer = c.messages("job")[0]["job"]
+        assert offer["min_free_gb"] == h.staging.min_free_gb == 1
+        assert offer["attempt_id"] > 0 and all(
+            not p.startswith("/") for p in (offer["source_path"], offer["output_path"], offer["log_path"])
+        )
+        assert str(env.library) not in json.dumps(offer)
+        a = (await attempt(env, jid))[0]
+        assert a.source_path == offer["source_path"] and a.output_path == offer["output_path"]
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -4751,16 +4972,18 @@ async def test_paused_skips_dispatch(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    h.set_paused(h.entries["node-a"].node_db_id, True)
-    assert await h.dispatch_once() == 0
-    j = await job(env, jid)
-    assert j.status == JobStatus.QUEUED
-    assert j.warning is not None
-    h.set_paused(h.entries["node-a"].node_db_id, False)
-    assert await h.dispatch_once() == 1
-    assert c.messages("job")[0]["job"]["job_id"] == jid
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        h.set_paused(h.entries["node-a"].node_db_id, True)
+        assert await h.dispatch_once() == 0
+        j = await job(env, jid)
+        assert j.status == JobStatus.QUEUED
+        assert j.warning is not None
+        h.set_paused(h.entries["node-a"].node_db_id, False)
+        assert await h.dispatch_once() == 1
+        assert c.messages("job")[0]["job"]["job_id"] == jid
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -4786,20 +5009,24 @@ async def test_waiting_warning_clears(env):
     h = hub(env)
     c = FakeConn([hello(encoders=("hevc_nvenc",))])
     task = await serve(h, c)
-    assert await h.dispatch_once() == 0
-    assert await h.dispatch_once() == 0
-    waiting = await job(env, jid)
-    assert waiting.status == JobStatus.QUEUED and waiting.warning is not None
-    assert (await events(env, jid)).count("waiting") == 1
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        assert await h.dispatch_once() == 0
+        assert await h.dispatch_once() == 0
+        waiting = await job(env, jid)
+        assert waiting.status == JobStatus.QUEUED and waiting.warning is not None
+        assert (await events(env, jid)).count("waiting") == 1
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
     c2 = FakeConn([hello()])
     task2 = await serve(h, c2)
-    await h.dispatch_once()
-    j = await job(env, jid)
-    assert j.warning is None and j.status == JobStatus.CLAIMED
-    c2.disconnect()
-    await asyncio.wait_for(task2, 2)
+    try:
+        await h.dispatch_once()
+        j = await job(env, jid)
+        assert j.warning is None and j.status == JobStatus.CLAIMED
+    finally:
+        c2.disconnect()
+        await asyncio.wait_for(task2, 2)
 
 
 @pytest.mark.asyncio
@@ -4849,12 +5076,14 @@ async def test_cancel_attempt(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    assert await h.cancel_job(jid)
-    msg = c.messages("cancel")[0]
-    assert msg["attempt_id"] == (await attempt(env, jid))[0].id
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        await h.dispatch_once()
+        assert await h.cancel_job(jid)
+        msg = c.messages("cancel")[0]
+        assert msg["attempt_id"] == (await attempt(env, jid))[0].id
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -5173,12 +5402,14 @@ async def test_stall_cancel(env):
     h = hub(env, stall_timeout_s=1)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    env.clock.advance(2)
-    await h.sweep_once()
-    assert c.messages("cancel")[0]["attempt_id"] > 0
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        await h.dispatch_once()
+        env.clock.advance(2)
+        await h.sweep_once()
+        assert c.messages("cancel")[0]["attempt_id"] > 0
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -5187,20 +5418,24 @@ async def test_disconnect_retains_attempt(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    first = (await attempt(env, jid))[0].id
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        await h.dispatch_once()
+        first = (await attempt(env, jid))[0].id
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
     assert (await job(env, jid)).status == JobStatus.CLAIMED
     assert jid in h.entries["node-a"].in_flight
     c2 = FakeConn([hello(active_attempts=[{"job_id": jid, "attempt_id": first}])])
     task = await serve(h, c2)
-    assert await h.dispatch_once() == 0
-    rows = await attempt(env, jid)
-    assert len(rows) == 1 and rows[0].id == first and rows[0].result is None
-    assert jid in h.entries["node-a"].in_flight and not c2.messages("job")
-    c2.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        assert await h.dispatch_once() == 0
+        rows = await attempt(env, jid)
+        assert len(rows) == 1 and rows[0].id == first and rows[0].result is None
+        assert jid in h.entries["node-a"].in_flight and not c2.messages("job")
+    finally:
+        c2.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -5210,15 +5445,17 @@ async def test_finished_failure(env, result):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    o = c.messages("job")[0]["job"]
-    await h._handle_finished(h.entries["node-a"], finished(jid, o["attempt_id"], o["log_path"], result))
-    status = (await job(env, jid)).status
-    assert status == JobStatus.FAILED
-    assert not (h.workspace_dir / f"jobs/{jid}").exists()
-    assert (env.library / "movie.avi").read_bytes() == b"source"
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        await h.dispatch_once()
+        o = c.messages("job")[0]["job"]
+        await h._handle_finished(h.entries["node-a"], finished(jid, o["attempt_id"], o["log_path"], result))
+        status = (await job(env, jid)).status
+        assert status == JobStatus.FAILED
+        assert not (h.workspace_dir / f"jobs/{jid}").exists()
+        assert (env.library / "movie.avi").read_bytes() == b"source"
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -5592,21 +5829,23 @@ async def test_finishes_cancelled(env):
     h = hub(env, max_attempts=3)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    offer = c.messages("job")[0]["job"]
+    try:
+        await h.dispatch_once()
+        offer = c.messages("job")[0]["job"]
 
-    assert await h.cancel_job(jid)
-    await h._handle_finished(
-        h.entries["node-a"],
-        finished(jid, offer["attempt_id"], offer["log_path"], "cancelled"),
-    )
+        assert await h.cancel_job(jid)
+        await h._handle_finished(
+            h.entries["node-a"],
+            finished(jid, offer["attempt_id"], offer["log_path"], "cancelled"),
+        )
 
-    assert (await job(env, jid)).status == JobStatus.CANCELLED
-    assert (await attempt(env, jid))[0].status == JobStatus.CANCELLED
-    assert await h.dispatch_once() == 0
-    assert len(await attempt(env, jid)) == 1
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+        assert (await job(env, jid)).status == JobStatus.CANCELLED
+        assert (await attempt(env, jid))[0].status == JobStatus.CANCELLED
+        assert await h.dispatch_once() == 0
+        assert len(await attempt(env, jid)) == 1
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -5615,33 +5854,37 @@ async def test_duplicate_finished(env, monkeypatch):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    offer = c.messages("job")[0]["job"]
-    await h._handle_finished(h.entries["node-a"], finished(jid, offer["attempt_id"], offer["log_path"], "cancelled"))
-    calls = 0
+    try:
+        await h.dispatch_once()
+        offer = c.messages("job")[0]["job"]
+        await h._handle_finished(
+            h.entries["node-a"], finished(jid, offer["attempt_id"], offer["log_path"], "cancelled")
+        )
+        calls = 0
 
-    async def probe(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        raise AssertionError("duplicate was probed")
+        async def probe(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("duplicate was probed")
 
-    monkeypatch.setattr("server.nodehub.hub.run_ffprobe", probe)
-    duplicate = finished(
-        jid,
-        offer["attempt_id"],
-        offer["log_path"],
-        "succeeded",
-        output_path=offer["output_path"],
-        output_probe=ProbeData.model_validate(
-            {"file_path": offer["output_path"], "duration_s": 1, "size_bytes": 1, "streams": []}
-        ),
-    )
-    await h._handle_finished(h.entries["node-a"], duplicate)
-    assert calls == 0 and (await job(env, jid)).status == JobStatus.CANCELLED
-    assert "foreign_finished" in await events(env, jid)
-    assert (await events(env, jid)).count("cancelled") == 1
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+        monkeypatch.setattr("server.nodehub.hub.run_ffprobe", probe)
+        duplicate = finished(
+            jid,
+            offer["attempt_id"],
+            offer["log_path"],
+            "succeeded",
+            output_path=offer["output_path"],
+            output_probe=ProbeData.model_validate(
+                {"file_path": offer["output_path"], "duration_s": 1, "size_bytes": 1, "streams": []}
+            ),
+        )
+        await h._handle_finished(h.entries["node-a"], duplicate)
+        assert calls == 0 and (await job(env, jid)).status == JobStatus.CANCELLED
+        assert "foreign_finished" in await events(env, jid)
+        assert (await events(env, jid)).count("cancelled") == 1
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -5650,17 +5893,23 @@ async def test_reconnect_keeps_locks(env):
     h = hub(env)
     old = FakeConn([hello()])
     old_task = await serve(h, old)
-    await h.dispatch_once()
-    offer = old.messages("job")[0]["job"]
-    new = FakeConn([hello(active_attempts=[{"job_id": jid, "attempt_id": offer["attempt_id"]}])])
-    new_task = await serve(h, new)
-    old.disconnect()
-    await asyncio.wait_for(old_task, 2)
-    assert h.entries["node-a"].conn is new and jid in h.entries["node-a"].in_flight
-    assert (await job(env, jid)).status == JobStatus.CLAIMED
-    assert "retried" not in await events(env, jid)
-    new.disconnect()
-    await asyncio.wait_for(new_task, 2)
+    try:
+        await h.dispatch_once()
+        offer = old.messages("job")[0]["job"]
+        new = FakeConn([hello(active_attempts=[{"job_id": jid, "attempt_id": offer["attempt_id"]}])])
+        new_task = await serve(h, new)
+        try:
+            old.disconnect()
+            await asyncio.wait_for(old_task, 2)
+            assert h.entries["node-a"].conn is new and jid in h.entries["node-a"].in_flight
+            assert (await job(env, jid)).status == JobStatus.CLAIMED
+            assert "retried" not in await events(env, jid)
+        finally:
+            new.disconnect()
+            await asyncio.wait_for(new_task, 2)
+    finally:
+        old.disconnect()
+        await asyncio.wait_for(old_task, 2)
 
 
 @pytest.mark.asyncio
@@ -5711,22 +5960,24 @@ async def test_heartbeat_filters_locks(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    entry = h.entries["node-a"]
-    before = await job(env, jid)
-    env.clock.advance(1)
-    await h._handle_heartbeat(entry, Heartbeat(cpu_percent=1, memory_percent=1, gpus=[]))
-    renewed = await job(env, jid)
-    assert renewed.lease_expires_at > before.lease_expires_at
-    async with env.factory() as session:
-        row = await session.get(Job, jid)
-        row.status = JobStatus.QUEUED.value
-        row.node_id = None
-        await session.commit()
-    await h._handle_heartbeat(entry, Heartbeat(cpu_percent=1, memory_percent=1, gpus=[]))
-    assert jid not in entry.in_flight and jid not in entry.offered_at and jid not in entry.last_progress_at
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        await h.dispatch_once()
+        entry = h.entries["node-a"]
+        before = await job(env, jid)
+        env.clock.advance(1)
+        await h._handle_heartbeat(entry, Heartbeat(cpu_percent=1, memory_percent=1, gpus=[]))
+        renewed = await job(env, jid)
+        assert renewed.lease_expires_at > before.lease_expires_at
+        async with env.factory() as session:
+            row = await session.get(Job, jid)
+            row.status = JobStatus.QUEUED.value
+            row.node_id = None
+            await session.commit()
+        await h._handle_heartbeat(entry, Heartbeat(cpu_percent=1, memory_percent=1, gpus=[]))
+        assert jid not in entry.in_flight and jid not in entry.offered_at and jid not in entry.last_progress_at
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -6007,34 +6258,36 @@ async def test_probe_failure(env, monkeypatch):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    offer = c.messages("job")[0]["job"]
-    materialize_offer(h, offer)
+    try:
+        await h.dispatch_once()
+        offer = c.messages("job")[0]["job"]
+        materialize_offer(h, offer)
 
-    async def fail_probe(*args, **kwargs):
-        raise RuntimeError("bad artifact")
+        async def fail_probe(*args, **kwargs):
+            raise RuntimeError("bad artifact")
 
-    monkeypatch.setattr("server.nodehub.hub.run_ffprobe", fail_probe)
-    node_probe = ProbeData.model_validate(
-        {"file_path": offer["output_path"], "duration_s": 60, "size_bytes": 6, "streams": []}
-    )
-    await h._handle_finished(
-        h.entries["node-a"],
-        finished(
-            jid,
-            offer["attempt_id"],
-            offer["log_path"],
-            "succeeded",
-            output_path=offer["output_path"],
-            output_probe=node_probe,
-        ),
-    )
-    row = await job(env, jid)
-    assert row.status == JobStatus.FAILED and row.error is not None
-    assert not (h.workspace_dir / offer["output_path"]).exists()
-    assert (env.library / "movie.avi").exists()
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+        monkeypatch.setattr("server.nodehub.hub.run_ffprobe", fail_probe)
+        node_probe = ProbeData.model_validate(
+            {"file_path": offer["output_path"], "duration_s": 60, "size_bytes": 6, "streams": []}
+        )
+        await h._handle_finished(
+            h.entries["node-a"],
+            finished(
+                jid,
+                offer["attempt_id"],
+                offer["log_path"],
+                "succeeded",
+                output_path=offer["output_path"],
+                output_probe=node_probe,
+            ),
+        )
+        row = await job(env, jid)
+        assert row.status == JobStatus.FAILED and row.error is not None
+        assert not (h.workspace_dir / offer["output_path"]).exists()
+        assert (env.library / "movie.avi").exists()
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -6043,33 +6296,35 @@ async def test_post_failure(env, monkeypatch):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    offer = c.messages("job")[0]["job"]
-    output = materialize_offer(h, offer)
+    try:
+        await h.dispatch_once()
+        offer = c.messages("job")[0]["job"]
+        output = materialize_offer(h, offer)
 
-    async def fail_gate(*args, **kwargs):
-        raise RuntimeError("plugin exploded")
+        async def fail_gate(*args, **kwargs):
+            raise RuntimeError("plugin exploded")
 
-    monkeypatch.setattr(h, "_post_gate", fail_gate)
-    node_probe = ProbeData.model_validate(
-        {"file_path": offer["output_path"], "duration_s": 60, "size_bytes": 6, "streams": []}
-    )
-    await h._handle_finished(
-        h.entries["node-a"],
-        finished(
-            jid,
-            offer["attempt_id"],
-            offer["log_path"],
-            "succeeded",
-            output_path=offer["output_path"],
-            output_probe=node_probe,
-        ),
-    )
-    row = await job(env, jid)
-    assert row.status == JobStatus.FAILED and row.error is not None
-    assert not output.exists()
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+        monkeypatch.setattr(h, "_post_gate", fail_gate)
+        node_probe = ProbeData.model_validate(
+            {"file_path": offer["output_path"], "duration_s": 60, "size_bytes": 6, "streams": []}
+        )
+        await h._handle_finished(
+            h.entries["node-a"],
+            finished(
+                jid,
+                offer["attempt_id"],
+                offer["log_path"],
+                "succeeded",
+                output_path=offer["output_path"],
+                output_probe=node_probe,
+            ),
+        )
+        row = await job(env, jid)
+        assert row.status == JobStatus.FAILED and row.error is not None
+        assert not output.exists()
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -6437,33 +6692,37 @@ async def test_rescan_failure_warns(env, monkeypatch):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    o = c.messages("job")[0]["job"]
-    output = materialize_offer(h, o)
-    probe = ProbeData.model_validate(
-        {"file_path": o["output_path"], "container": "mkv", "duration_s": 60, "size_bytes": 6, "streams": []}
-    )
-    await h._handle_finished(
-        h.entries["node-a"],
-        finished(jid, o["attempt_id"], o["log_path"], "succeeded", output_path=o["output_path"], output_probe=probe),
-    )
-    row = await job(env, jid)
-    assert row.status == JobStatus.SUCCEEDED
-    assert row.warning is not None
-    async with env.factory() as session:
-        assert (
-            await session.scalar(
-                select(JobEvent.type).where(
-                    JobEvent.attempt_id == o["attempt_id"],
-                    JobEvent.type.in_(["artifact_check_pending", "artifact_check_finished"]),
-                )
-            )
-            == "artifact_check_finished"
+    try:
+        await h.dispatch_once()
+        o = c.messages("job")[0]["job"]
+        output = materialize_offer(h, o)
+        probe = ProbeData.model_validate(
+            {"file_path": o["output_path"], "container": "mkv", "duration_s": 60, "size_bytes": 6, "streams": []}
         )
-    assert (env.library / "movie.mkv").exists()
-    assert not (env.library / "movie.avi").exists()
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+        await h._handle_finished(
+            h.entries["node-a"],
+            finished(
+                jid, o["attempt_id"], o["log_path"], "succeeded", output_path=o["output_path"], output_probe=probe
+            ),
+        )
+        row = await job(env, jid)
+        assert row.status == JobStatus.SUCCEEDED
+        assert row.warning is not None
+        async with env.factory() as session:
+            assert (
+                await session.scalar(
+                    select(JobEvent.type).where(
+                        JobEvent.attempt_id == o["attempt_id"],
+                        JobEvent.type.in_(["artifact_check_pending", "artifact_check_finished"]),
+                    )
+                )
+                == "artifact_check_finished"
+            )
+        assert (env.library / "movie.mkv").exists()
+        assert not (env.library / "movie.avi").exists()
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.asyncio
@@ -7807,8 +8066,11 @@ async def test_action_delivery_completed(env, failure, completion):
                 dispatch.cancel()
             else:
                 release.set()
-            await asyncio.wait_for(asyncio.gather(dispatch, return_exceptions=True), 2)
-            assert dispatch.cancelled() is (failure == "cancel")
+            if failure == "cancel":
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(dispatch, 2)
+            else:
+                assert await asyncio.wait_for(dispatch, 2) is None
             assert not (env.workspace / f"jobs/{case.jid}").exists()
             assert not case.hub._action_reports
             assert (env.library / "movie.avi").read_bytes() == b"source"
@@ -8057,7 +8319,11 @@ async def test_action_report_finishes(env, phase, failure):
                 teardown_report()
             elif phase == "cancel":
                 dispatch.cancel()
-            await asyncio.wait_for(asyncio.gather(dispatch, return_exceptions=True), 2)
+            if phase == "cancel" or failure == "cancelled":
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(dispatch, 2)
+            else:
+                assert await asyncio.wait_for(dispatch, 2) is None
             assert not output.exists()
             assert "actions_finished" in await events(env, case.jid)
             assert not case.hub._action_reports
@@ -8368,16 +8634,18 @@ async def test_log_parent_symlink(env):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    o = c.messages("job")[0]["job"]
-    p = h.workspace_dir / o["log_path"]
-    external = make_test_temp_dir("outside")
-    p.parent.rename(external / "moved")
-    p.parent.symlink_to(external / "moved")
-    await h._handle_finished(h.entries["node-a"], finished(jid, o["attempt_id"], o["log_path"]))
-    assert (await job(env, jid)).status == JobStatus.FAILED
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+    try:
+        await h.dispatch_once()
+        o = c.messages("job")[0]["job"]
+        p = h.workspace_dir / o["log_path"]
+        external = make_test_temp_dir("outside")
+        p.parent.rename(external / "moved")
+        p.parent.symlink_to(external / "moved")
+        await h._handle_finished(h.entries["node-a"], finished(jid, o["attempt_id"], o["log_path"]))
+        assert (await job(env, jid)).status == JobStatus.FAILED
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
 
 
 @pytest.mark.parametrize("preserve", [False, True])
@@ -8398,48 +8666,52 @@ async def test_finished_transcode(env, monkeypatch, preserve, missing_log):
     h = hub(env)
     c = FakeConn([hello()])
     task = await serve(h, c)
-    await h.dispatch_once()
-    o = c.messages("job")[0]["job"]
-    output = materialize_offer(h, o)
-    output.write_bytes(b"remux")
-    if missing_log:
-        (h.workspace_dir / o["log_path"]).unlink()
-    from common.media.probe import ProbeData
+    try:
+        await h.dispatch_once()
+        o = c.messages("job")[0]["job"]
+        output = materialize_offer(h, o)
+        output.write_bytes(b"remux")
+        if missing_log:
+            (h.workspace_dir / o["log_path"]).unlink()
+        from common.media.probe import ProbeData
 
-    probe = ProbeData.model_validate(
-        {"file_path": o["output_path"], "container": "mkv", "duration_s": 60, "size_bytes": 5, "streams": []}
-    )
-    await h._handle_finished(
-        h.entries["node-a"],
-        finished(jid, o["attempt_id"], o["log_path"], "succeeded", output_path=o["output_path"], output_probe=probe),
-    )
-    assert (await job(env, jid)).status == JobStatus.SUCCEEDED
-    assert list(env.trash.rglob("*"))
-    async with env.factory() as s:
-        event = await s.scalar(
-            select(JobEvent).where(JobEvent.attempt_id == o["attempt_id"], JobEvent.type == "publication")
+        probe = ProbeData.model_validate(
+            {"file_path": o["output_path"], "container": "mkv", "duration_s": 60, "size_bytes": 5, "streams": []}
         )
-        assert event.payload["preserve_timestamps"] is preserve
-        media = (
-            await s.execute(select(MediaFile).where(MediaFile.path == str(env.library / "movie.mkv")))
-        ).scalar_one()
-        assert media.size == 5
-        assert media.container == "mkv"
-        assert media.video_codec == "h264"
-        assert media.health_status == HealthStatus.PENDING.value
-        assert media.transcode_status == "transcoded"
-        attempt = await s.get(JobAttempt, o["attempt_id"])
-        assert attempt is not None and attempt.output_probe is not None
-        assert attempt.output_probe["file_path"] == str(env.library / "movie.mkv")
-        assert attempt.output_probe["container"] == "mkv"
-        assert attempt.output_probe["streams"][0]["codec"] == "h264"
-        probe = await s.get(ProbeRow, media.probe_id)
-        assert json.loads(probe.raw_json)["format"]["duration"] == "600.0"
-        healthcheck = (
-            await s.execute(select(Job).where(Job.kind == "healthcheck", Job.media_file_id == media.id))
-        ).scalar_one()
-    c.disconnect()
-    await asyncio.wait_for(task, 2)
+        await h._handle_finished(
+            h.entries["node-a"],
+            finished(
+                jid, o["attempt_id"], o["log_path"], "succeeded", output_path=o["output_path"], output_probe=probe
+            ),
+        )
+        assert (await job(env, jid)).status == JobStatus.SUCCEEDED
+        assert list(env.trash.rglob("*"))
+        async with env.factory() as s:
+            event = await s.scalar(
+                select(JobEvent).where(JobEvent.attempt_id == o["attempt_id"], JobEvent.type == "publication")
+            )
+            assert event.payload["preserve_timestamps"] is preserve
+            media = (
+                await s.execute(select(MediaFile).where(MediaFile.path == str(env.library / "movie.mkv")))
+            ).scalar_one()
+            assert media.size == 5
+            assert media.container == "mkv"
+            assert media.video_codec == "h264"
+            assert media.health_status == HealthStatus.PENDING.value
+            assert media.transcode_status == "transcoded"
+            attempt = await s.get(JobAttempt, o["attempt_id"])
+            assert attempt is not None and attempt.output_probe is not None
+            assert attempt.output_probe["file_path"] == str(env.library / "movie.mkv")
+            assert attempt.output_probe["container"] == "mkv"
+            assert attempt.output_probe["streams"][0]["codec"] == "h264"
+            probe = await s.get(ProbeRow, media.probe_id)
+            assert json.loads(probe.raw_json)["format"]["duration"] == "600.0"
+            healthcheck = (
+                await s.execute(select(Job).where(Job.kind == "healthcheck", Job.media_file_id == media.id))
+            ).scalar_one()
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
     assert media.first_seen.replace(tzinfo=UTC) == first_seen
     assert healthcheck.status == JobStatus.QUEUED and healthcheck.hold_until is None
 

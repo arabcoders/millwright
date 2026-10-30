@@ -13,37 +13,42 @@ if TYPE_CHECKING:
 
 
 class Inputs(AudioPlanInputs):
-    target: Literal["avc", "hevc", "av1"] = Field(default="hevc", description="Target video codec family")
+    target: Literal["avc", "hevc", "av1"] = Field(default="hevc", description="Choose the output video codec family.")
     rate_control: RateControlMode = Field(
         default=RateControlMode.QUALITY,
-        description="Quality sets encoder quality with variable size. Bitrate targets a source bitrate ratio",
+        description="Use encoder quality with variable output size, or target a source bitrate ratio.",
     )
     quality: int | None = Field(
-        default=None, ge=0, le=63, description="Codec-specific video quality value. Used only in quality mode"
+        default=None, ge=0, le=63, description="Set the codec-specific quality value. Applies only in quality mode."
     )
     ratio: float | None = Field(
         default=None,
         gt=0,
         le=1,
-        description="Target video bitrate as a fraction of the source. Used only in bitrate mode",
+        description="Set video bitrate as a fraction of the source. Applies only in bitrate mode.",
     )
-    encoder: str | None = Field(default=None, description="FFmpeg video encoder override")
+    encoder: str | None = Field(default=None, description="Override the FFmpeg video encoder.")
     encoder_priority: list[str] = Field(
         default=[],
-        description="Encoder priority order. Override wins. Empty uses the software default",
+        description=(
+            "List encoders in priority order. The encoder override wins. Leave blank for the software default."
+        ),
     )
-    pixel_format: str | None = Field(default=None, description="Pixel format for the encoded video")
-    ten_bit: bool = Field(default=False, description="Encode video with 10-bit precision")
-    preset: str | None = Field(default=None, description="Encoder speed and compression preset")
-    max_width: int | None = Field(default=None, ge=1, description="Maximum output video width in pixels")
-    max_height: int | None = Field(default=None, ge=1, description="Maximum output video height in pixels")
-    container: Literal["mkv", "mp4"] = Field(default="mkv", description="Output container format")
+    pixel_format: str | None = Field(default=None, description="Set the encoded video's pixel format.")
+    ten_bit: bool = Field(default=False, description="Encode video with 10-bit precision.")
+    preset: str | None = Field(default=None, description="Choose the encoder's speed and compression preset.")
+    max_width: int | None = Field(default=None, ge=1, description="Limit output video width in pixels.")
+    max_height: int | None = Field(default=None, ge=1, description="Limit output video height in pixels.")
+    container: Literal["mkv", "mp4"] = Field(default="mkv", description="Choose the output container.")
     bitrate_source: Literal["video", "container", "average"] = Field(
-        default="video", description="Bitrate mode source: video, container, or their average when both are available"
+        default="video",
+        description="In bitrate mode, choose video bitrate, whole-file bitrate, or their average.",
     )
-    size_ceiling_ratio: float = Field(default=1.05, gt=0, description="Maximum output-to-source file size ratio")
-    fix_timestamps: bool = Field(default=False, description="Generate missing timestamps for AVI and TS inputs")
-    extras: list[str] = Field(default=[], description="Additional FFmpeg arguments, one argument per entry")
+    size_ceiling_ratio: float = Field(
+        default=1.05, gt=0, description="Reject output larger than this multiple of the input file size."
+    )
+    fix_timestamps: bool = Field(default=False, description="Generate missing timestamps for AVI and TS inputs.")
+    extras: list[str] = Field(default=[], description="Add FFmpeg arguments, one argument per entry.")
 
 
 INPUTS = Inputs
@@ -52,7 +57,7 @@ INPUTS = Inputs
 def decide(ctx: PluginContext, inputs: Inputs) -> dict[str, Any]:
     video = ctx.probe.real_video
     if not video:
-        return {"type": "skip", "reason": "no video stream"}
+        return {"type": "skip", "reason": "No video stream found."}
     families = {"avc": {"avc", "h264", "avc1"}, "hevc": {"hevc", "h265"}, "av1": {"av1", "av01"}}
     defaults = {"avc": ("libx264", 0.75, 23), "hevc": ("libx265", 0.5, 21), "av1": ("libsvtav1", 0.45, 30)}
     encoder, ratio, quality = defaults[inputs.target]
@@ -116,7 +121,7 @@ def decide(ctx: PluginContext, inputs: Inputs) -> dict[str, Any]:
         plan.video = None
     plan = apply_metadata(plan, ctx)
     if not changes_media(plan, ctx.probe):
-        return {"type": "skip", "reason": f"already {inputs.target}"}
+        return {"type": "skip", "reason": f"The file already matches the {inputs.target.upper()} settings."}
     reasons = change_reasons(plan, ctx.probe)
     return {
         "type": "plan",

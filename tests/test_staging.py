@@ -7,7 +7,7 @@ import os
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 T0 = datetime(2026, 1, 1, 12, tzinfo=UTC)
@@ -41,6 +41,11 @@ from tests.helpers import create_test_app as create_app
 from server.core.config import ServerConfig
 from tests.test_workspace import stage_source
 from tests.helpers import request_retry, database_context, make_test_disk_path, make_test_temp_dir
+
+
+@pytest.fixture(autouse=True)
+def workspace_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("server.staging.shutil.disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
 
 
 @pytest_asyncio.fixture
@@ -206,7 +211,7 @@ async def test_catalog_cancel_drains(db, tmp_path: Path, monkeypatch: pytest.Mon
 
 
 @asynccontextmanager
-async def subscribed() -> AsyncIterator[tuple[EventBus, Subscription]]:
+async def subscribed() -> AsyncGenerator[tuple[EventBus, Subscription]]:
     bus = EventBus()
     sub = bus.subscribe()
     try:

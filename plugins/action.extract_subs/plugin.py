@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 
 
 class Inputs(BaseModel):
-    formats: list[str] = Field(default=["srt"], description="Subtitle output formats to extract: srt or vtt.")
-    languages: list[str] = Field(default=["eng"], description="ISO 639-2 language tags to extract.")
+    formats: list[str] = Field(default=["srt"], description="Extract subtitles as srt or vtt.")
+    languages: list[str] = Field(default=["eng"], description="Choose subtitle language codes, such as eng or jpn.")
 
 
 INPUTS = Inputs

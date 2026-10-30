@@ -2,7 +2,16 @@
   <main class="w-full min-w-0 max-w-full space-y-6">
     <PageHeader page="nodes">
       <template #actions>
-        <div class="flex items-center justify-end gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-3">
+          <USwitch
+            v-if="registration"
+            :model-value="registration.enabled"
+            label="Allow new nodes"
+            size="sm"
+            :loading="savingRegistration"
+            :disabled="loading || savingRegistration"
+            @update:model-value="changeRegistration"
+          />
           <UButton
             color="neutral"
             variant="outline"
@@ -26,41 +35,62 @@
       title="Could not load nodes"
       :description="lastError.message"
     />
-    <div v-if="loading && !nodes.length" class="space-y-2">
+    <div v-if="loading && !allNodes.length" class="space-y-2">
       <USkeleton v-for="index in 4" :key="index" class="h-20 rounded-xl" />
     </div>
-    <div v-else-if="nodes.length" class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-      <article v-for="node in nodes" :key="node.id" class="mw-card flex h-full flex-col gap-3 p-4">
+    <div v-else-if="allNodes.length" class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <article
+        v-for="node in allNodes"
+        :key="'request_id' in node ? node.request_id : node.id"
+        class="mw-card flex h-full flex-col gap-3 p-4"
+        :class="{ 'border-warning': 'request_id' in node }"
+      >
         <div class="flex min-w-0 items-center gap-2">
           <div class="min-w-0">
             <button
+              v-if="'id' in node"
               type="button"
               class="truncate text-start font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
               @click="selectNode(node)"
             >
               {{ node.display_name }}
             </button>
+            <h2 v-else class="truncate font-semibold text-highlighted">
+              {{ node.capabilities.hostname || 'Unnamed node' }}
+            </h2>
           </div>
-          <span
-            class="ms-auto flex shrink-0 items-center gap-1 rounded-md bg-elevated px-2 py-0.5 text-xs text-toned"
+          <UBadge
+            v-if="'request_id' in node"
+            color="warning"
+            variant="soft"
+            size="sm"
+            class="ms-auto shrink-0 gap-1"
           >
-            <UIcon name="i-lucide-repeat-2" class="size-3" />
-            {{ node.active_jobs }} active
-          </span>
-          <StatusBadge
-            class="shrink-0"
-            :status="
-              node.state === 'online' && node.active_jobs > 0
-                ? 'busy'
-                : node.state === 'online' && node.paused
-                  ? 'paused'
-                  : node.state
-            "
-            group="node"
-          />
+            <UIcon name="i-lucide-user-round-plus" class="size-3.5 shrink-0" />
+            Unclaimed
+          </UBadge>
+          <template v-else>
+            <span
+              class="ms-auto flex shrink-0 items-center gap-1 rounded-md bg-elevated px-2 py-0.5 text-xs text-toned"
+            >
+              <UIcon name="i-lucide-repeat-2" class="size-3" />
+              {{ node.active_jobs }} active
+            </span>
+            <StatusBadge
+              class="shrink-0"
+              :status="
+                node.state === 'online' && node.active_jobs > 0
+                  ? 'busy'
+                  : node.state === 'online' && node.paused
+                    ? 'paused'
+                    : node.state
+              "
+              group="node"
+            />
+          </template>
         </div>
 
-        <dl class="grid grid-cols-3 gap-2 text-xs text-toned">
+        <dl v-if="'id' in node" class="grid grid-cols-3 gap-2 text-xs text-toned">
           <div>
             <dt>Transcodes</dt>
             <dd>{{ node.active_transcodes }}/{{ node.max_transcodes }}</dd>
@@ -75,55 +105,88 @@
           </div>
         </dl>
         <NodeUsageGauges
-          :usage="node.usage"
+          :usage="'id' in node ? node.usage : null"
           :cpu-name="node.capabilities?.cpu_model"
           :cpu-cores="node.capabilities?.cpu_cores"
           :gpu-names="node.capabilities?.gpus"
-          :offline="node.state !== 'online'"
+          :offline="'id' in node && node.state !== 'online'"
         />
         <div class="mt-auto flex flex-wrap items-center justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-1 text-xs text-toned">
-            <span class="shrink-0">Last seen:</span>
-            <UTooltip v-if="node.last_seen_at" :text="formatDate(node.last_seen_at, 'detail')">
-              <time :datetime="node.last_seen_at" class="truncate">{{
-                formatRelativeTime(node.last_seen_at, 'en')
-              }}</time>
-            </UTooltip>
-            <span v-else>never</span>
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
+          <template v-if="'request_id' in node">
+            <p class="min-w-0 truncate font-mono text-xs text-toned">
+              Request: {{ node.request_id }}
+            </p>
             <UButton
-              color="neutral"
-              variant="outline"
               size="sm"
-              icon="i-lucide-pen-line"
-              aria-label="Edit node"
-              @click.stop="openEdit(node)"
-              >Edit</UButton
+              icon="i-lucide-check"
+              :loading="claimingId === node.request_id"
+              :disabled="claimingId !== null || savingRegistration"
+              :title="
+                savingRegistration
+                  ? 'Wait for registration settings to save.'
+                  : claimingId !== null
+                    ? 'Wait for the current claim to finish.'
+                    : undefined
+              "
+              @click="claimPending(node.request_id)"
+              >Claim</UButton
             >
-            <UButton
-              color="neutral"
-              variant="outline"
-              size="sm"
-              :icon="node.paused ? 'i-lucide-play' : 'i-lucide-pause'"
-              :loading="pausingId === node.id"
-              :disabled="pausingId !== null"
-              @click.stop="pauseNode(node)"
-            >
-              {{ node.paused ? 'Resume' : 'Pause' }}
-            </UButton>
-            <UButton
-              v-if="node.state === 'offline'"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              icon="i-lucide-trash-2"
-              :disabled="removing"
-              @click.stop="openRemoveConfirm(node)"
-            >
-              Remove node
-            </UButton>
-          </div>
+          </template>
+          <template v-else>
+            <div class="flex min-w-0 items-center gap-1 text-xs text-toned">
+              <span class="shrink-0">Last seen:</span>
+              <UTooltip v-if="node.last_seen_at" :text="formatDate(node.last_seen_at, 'detail')">
+                <time :datetime="node.last_seen_at" class="truncate">{{
+                  formatRelativeTime(node.last_seen_at, 'en')
+                }}</time>
+              </UTooltip>
+              <span v-else>never</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-pen-line"
+                aria-label="Edit node"
+                @click.stop="openEdit(node)"
+                >Edit</UButton
+              >
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                :icon="node.paused ? 'i-lucide-play' : 'i-lucide-pause'"
+                :loading="pausingId === node.id"
+                :disabled="pausingId !== null"
+                @click.stop="pauseNode(node)"
+              >
+                {{ node.paused ? 'Resume' : 'Pause' }}
+              </UButton>
+              <UTooltip
+                :disabled="!node.active_jobs && !removing"
+                :text="
+                  node.active_jobs
+                    ? 'Wait for active work to finish before removing this node.'
+                    : 'Wait for the current node removal to finish.'
+                "
+              >
+                <span class="inline-flex">
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    icon="i-lucide-trash-2"
+                    :loading="removingId === node.id"
+                    :disabled="removing || node.active_jobs > 0"
+                    @click.stop="openRemoveConfirm(node)"
+                  >
+                    Remove node
+                  </UButton>
+                </span>
+              </UTooltip>
+            </div>
+          </template>
         </div>
       </article>
     </div>
@@ -134,7 +197,11 @@
     >
       <UIcon name="i-lucide-server-off" class="size-6 text-toned" />
       <p class="text-sm text-toned">
-        No nodes registered yet. Connect a node with the enrollment token.
+        {{
+          registration?.enabled
+            ? 'No nodes connected. Start a node and claim it here.'
+            : 'No nodes connected. Enable Allow new nodes to register a node.'
+        }}
       </p>
     </div>
 
@@ -157,7 +224,7 @@
 
 <script setup lang="ts">
 import StatusBadge from '~/components/StatusBadge.vue';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NodeDetailsModal from '~/components/NodeDetailsModal.vue';
 import NodeEditModal from '~/components/NodeEditModal.vue';
 import NodeUsageGauges from '~/components/NodeUsageGauges.vue';
@@ -171,16 +238,21 @@ import type { NodeChanges, NodeRow } from '~/types/api';
 
 const {
   items: nodes,
+  registration,
   isLoading: loading,
   lastError,
   ensure: ensureNodes,
   reload: reloadNodes,
   update,
   deleteNode,
+  claimNode,
+  allowRegistration,
+  setRegistration,
   setStatus,
   setUsage,
 } = useNodes();
 const { confirmDialog } = useDialog();
+const allNodes = computed(() => [...nodes.value, ...(registration.value?.pending ?? [])]);
 
 const loadNodes = async (): Promise<void> => {
   await reloadNodes();
@@ -211,11 +283,22 @@ watch(
 );
 
 const stopEvents = on((event) => {
+  if (event.type === 'node.registration') {
+    setRegistration(event.payload);
+    return;
+  }
   if (event.type === 'node.usage') {
     setUsage(event.payload.name, event.payload.usage, event.payload.last_seen_at);
     return;
   }
   if (event.type !== 'node.status') {
+    return;
+  }
+  if (
+    event.payload.state === 'online' &&
+    !nodes.value.some((node) => node.name === event.payload.name)
+  ) {
+    void reloadNodes();
     return;
   }
   setStatus(
@@ -235,7 +318,32 @@ onBeforeUnmount(() => {
 
 const selectedNode = ref<NodeRow | null>(null);
 const editNode = ref<NodeRow | null>(null);
-const removing = ref(false);
+const removingId = ref<number | null>(null);
+const removing = computed(() => removingId.value !== null);
+const savingRegistration = ref(false);
+const claimingId = ref<string | null>(null);
+
+const changeRegistration = async (enabled: boolean): Promise<void> => {
+  if (savingRegistration.value) return;
+  savingRegistration.value = true;
+  try {
+    await allowRegistration(enabled);
+  } catch {
+  } finally {
+    savingRegistration.value = false;
+  }
+};
+
+const claimPending = async (requestId: string): Promise<void> => {
+  if (claimingId.value !== null) return;
+  claimingId.value = requestId;
+  try {
+    await claimNode(requestId);
+  } catch {
+  } finally {
+    claimingId.value = null;
+  }
+};
 
 const selectNode = (node: NodeRow | undefined): void => {
   selectedNode.value = node ?? null;
@@ -246,22 +354,22 @@ const openEdit = (node: NodeRow): void => {
 };
 
 const openRemoveConfirm = async (node: NodeRow): Promise<void> => {
-  if (removing.value) return;
+  if (removing.value || node.active_jobs > 0) return;
   const result = await confirmDialog({
     title: 'Remove node?',
-    message: `Remove ${node.display_name}? This cannot be undone.`,
+    message: `Removing the node will keep its configuration, files, logs, and job history.`,
     confirmText: 'Remove node',
     confirmColor: 'error',
   });
   if (!result.status || removing.value) return;
-  removing.value = true;
+  removingId.value = node.id;
   try {
     await deleteNode(node.id);
     if (selectedNode.value?.id === node.id) selectedNode.value = null;
     if (editNode.value?.id === node.id) editNode.value = null;
   } catch {
   } finally {
-    removing.value = false;
+    removingId.value = null;
   }
 };
 

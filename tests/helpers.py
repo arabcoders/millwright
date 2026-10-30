@@ -22,7 +22,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Generator
+    from collections.abc import AsyncGenerator, Generator
 
     from server.fs.library import LibraryFS, ProbeResult
     from sqlalchemy.engine import Engine
@@ -193,7 +193,7 @@ def make_test_disk_path(*parts: str) -> Path:
 @contextlib.asynccontextmanager
 async def database_context(
     name: str, *, tables: tuple[str, ...] | None = None, fresh: bool = False
-) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+) -> AsyncGenerator[async_sessionmaker[AsyncSession]]:
     with _database_factory(name, tables=tables, fresh=fresh) as (engine, factory):
         try:
             yield factory
@@ -360,7 +360,7 @@ def cleanup_test_schemas() -> None:
 
 
 @contextlib.asynccontextmanager
-async def plugin_host(roots: list[Path]) -> AsyncIterator[PluginHost]:
+async def plugin_host(roots: list[Path]) -> AsyncGenerator[PluginHost]:
     host = PluginHost(roots)
     try:
         yield host

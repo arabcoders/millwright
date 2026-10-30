@@ -1,6 +1,6 @@
 id = "action.notify_external"
 kind = "action"
-description = "Refresh Radarr or Sonarr after verified publication. Optionally unmonitor the movie or associated episodes after refresh succeeds."
+description = "Notify applications after conversion."
 name = "Notify external application"
 author = "Millwright"
 url = "https://github.com/arabcoders/millwright"

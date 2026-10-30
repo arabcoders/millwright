@@ -1,9 +1,10 @@
 import { ref, shallowReadonly } from 'vue';
 import { parse_api_error, request } from '~/utils';
 import { useApiErrorMessage } from '~/composables/useApiErrorMessage';
-import type { NodeChanges, NodeRow, NodeUsage } from '~/types/api';
+import type { NodeChanges, NodeRegistration, NodeRow, NodeUsage } from '~/types/api';
 
 const items = ref<NodeRow[]>([]);
+const registration = ref<NodeRegistration | null>(null);
 const isLoading = ref(false);
 const lastError = ref<Error | null>(null);
 let pending: Promise<void> | null = null;
@@ -13,9 +14,15 @@ const fetchNodes = async (): Promise<void> => {
   isLoading.value = true;
   lastError.value = null;
   try {
-    const response = await request('/api/nodes');
+    const [response, registrationResponse] = await Promise.all([
+      request('/api/nodes'),
+      request('/api/nodes/registration'),
+    ]);
     if (!response.ok) throw new Error(`Failed to load nodes (${response.status})`);
+    if (!registrationResponse.ok)
+      throw new Error(`Failed to load node registration (${registrationResponse.status})`);
     items.value = (await response.json()) as NodeRow[];
+    registration.value = (await registrationResponse.json()) as NodeRegistration;
     loaded = true;
   } catch (error) {
     lastError.value = error instanceof Error ? error : new Error(String(error));
@@ -84,7 +91,7 @@ const deleteNode = async (id: number): Promise<void> => {
     if (!response.ok)
       throw new Error(await parse_api_error(await response.json().catch(() => null)));
     remove(id);
-    if (node) notify.success(`Removed node ${node.display_name}`);
+    if (node) notify.success(`Removed node ${node.display_name}.`);
   } catch (error) {
     notify.error(messageFor(error instanceof Error ? error.message : undefined));
     throw error;
@@ -112,6 +119,49 @@ const setStatus = (
   }
 };
 
+const claimNode = async (requestId: string): Promise<void> => {
+  const notify = useNotification();
+  const { messageFor } = useApiErrorMessage();
+  try {
+    const response = await request(`/api/nodes/pending/${requestId}/claim`, { method: 'POST' });
+    if (!response.ok)
+      throw new Error(await parse_api_error(await response.json().catch(() => null)));
+    if (registration.value)
+      registration.value.pending = registration.value.pending.filter(
+        (node) => node.request_id !== requestId,
+      );
+    notify.success('Claim approved. The node must verify its workspace before connecting.');
+  } catch (error) {
+    notify.error(messageFor(error instanceof Error ? error.message : undefined));
+    throw error;
+  }
+};
+
+const setRegistration = (value: NodeRegistration): void => {
+  registration.value = value;
+};
+
+const allowRegistration = async (enabled: boolean): Promise<void> => {
+  const notify = useNotification();
+  const { messageFor } = useApiErrorMessage();
+  try {
+    const response = await request('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ node_registration_enabled: enabled }),
+    });
+    if (!response.ok)
+      throw new Error(await parse_api_error(await response.json().catch(() => null)));
+    if (registration.value) {
+      registration.value.enabled = enabled;
+      if (!enabled) registration.value.pending = [];
+    }
+    notify.success(`Node registration ${enabled ? 'enabled' : 'disabled'}.`);
+  } catch (error) {
+    notify.error(messageFor(error instanceof Error ? error.message : undefined));
+    throw error;
+  }
+};
+
 const setUsage = (name: string, usage: NodeUsage, last_seen_at: string | null): void => {
   const node = items.value.find((item) => item.name === name);
   if (node) {
@@ -122,6 +172,7 @@ const setUsage = (name: string, usage: NodeUsage, last_seen_at: string | null): 
 
 export const useNodes = () => ({
   items: shallowReadonly(items),
+  registration: shallowReadonly(registration),
   isLoading: shallowReadonly(isLoading),
   lastError: shallowReadonly(lastError),
   ensure,
@@ -130,6 +181,9 @@ export const useNodes = () => ({
   remove,
   update,
   deleteNode,
+  claimNode,
+  allowRegistration,
+  setRegistration,
   setStatus,
   setUsage,
 });

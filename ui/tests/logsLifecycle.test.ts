@@ -33,26 +33,43 @@ const page = (ids: number[], next: number | null = null): LogsResponse => ({
   oldest_id: 1,
   truncated: false,
 });
-const flush = async () => {
-  for (let i = 0; i < 6; i++) {
-    await Promise.resolve();
-    await Vue.nextTick();
-  }
-};
 const mount = async (pages: (LogsResponse | Promise<LogsResponse>)[], visible = false) => {
   const urls: string[] = [];
   let stream: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const connected = Promise.withResolvers<undefined>();
+  const disconnected = Promise.withResolvers<undefined>();
+  let consumed: ReturnType<typeof Promise.withResolvers<undefined>> | null = null;
   const request = async (url: string, options: { signal?: AbortSignal }) => {
     urls.push(url);
     if (url.startsWith('/api/logs/stream')) {
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            stream = controller;
-            options.signal?.addEventListener('abort', () => controller.close(), { once: true });
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          stream = controller;
+          options.signal?.addEventListener('abort', () => controller.close(), { once: true });
+        },
+      });
+      return {
+        ok: true,
+        body: {
+          getReader: () => {
+            const reader = body.getReader();
+            return {
+              read: () => {
+                connected.resolve(undefined);
+                // The next read starts after the previous chunk was processed.
+                consumed?.resolve(undefined);
+                consumed = null;
+                return reader.read();
+              },
+              cancel: () => reader.cancel(),
+              releaseLock: () => {
+                reader.releaseLock();
+                disconnected.resolve(undefined);
+              },
+            };
           },
-        }),
-      );
+        },
+      };
     }
     return Response.json((await pages.shift()) ?? page([]));
   };
@@ -89,16 +106,24 @@ const mount = async (pages: (LogsResponse | Promise<LogsResponse>)[], visible = 
   return {
     state,
     urls,
-    emit(entries: LogEntry[]) {
-      stream?.enqueue(
+    ready: connected.promise,
+    async emit(entries: LogEntry[]) {
+      await connected.promise;
+      const processed = Promise.withResolvers<undefined>();
+      consumed = processed;
+      stream!.enqueue(
         new TextEncoder().encode(
           entries
             .map((entry) => `id: ${entry.id}\nevent: log_lines\ndata: ${JSON.stringify(entry)}\n\n`)
             .join(''),
         ),
       );
+      await processed.promise;
     },
-    close: () => renderer.render(null, root),
+    close: async () => {
+      renderer.render(null, root);
+      if (stream) await disconnected.promise;
+    },
   };
 };
 
@@ -113,8 +138,7 @@ test('applies initial persisted levels and pages empty results', async () => {
     expect(view.state.entries.value.map((entry) => entry.id)).toEqual([20, 30]);
     expect(view.state.live.value).toBe(false);
   } finally {
-    view.close();
-    await flush();
+    await view.close();
   }
 });
 
@@ -134,9 +158,7 @@ test('keeps older history accessible after live eviction', async () => {
   );
   try {
     await view.state.start(['warning']);
-    await flush();
-    view.emit(Array.from({ length: 700 }, (_, index) => record(index + 101)));
-    await flush();
+    await view.emit(Array.from({ length: 700 }, (_, index) => record(index + 101)));
     expect(view.state.entries.value.length).toBe(logs.LOG_WINDOW);
     expect(view.state.entries.value[0]?.id).toBe(501);
     expect(view.state.loggerNames.value).toEqual(['server.initial', 'test']);
@@ -146,10 +168,8 @@ test('keeps older history accessible after live eviction', async () => {
     expect(view.state.entries.value[0]?.id).toBe(400);
     expect(view.state.entries.value.length).toBe(logs.LOG_WINDOW);
     expect(view.state.loggerNames.value).toEqual(['server.initial', 'server.older', 'test']);
-    await flush();
   } finally {
-    view.close();
-    await flush();
+    await view.close();
   }
 });
 
@@ -160,8 +180,20 @@ test('pages exact logger history', async () => {
     await view.state.searchHistory(' failure ', ['warning'], ' server.worker ');
     await view.state.loadOlder();
     await view.state.refreshHistory();
-    view.state.setLive(true);
-    await flush();
+    const refreshed = Promise.withResolvers<undefined>();
+    const stop = Vue.watch(
+      view.state.loading,
+      (loading) => {
+        if (!loading) refreshed.resolve(undefined);
+      },
+      { flush: 'sync' },
+    );
+    try {
+      view.state.setLive(true);
+      await refreshed.promise;
+    } finally {
+      stop();
+    }
     for (const url of view.urls.slice(1)) {
       const params = new URL(url, 'http://localhost').searchParams;
       expect(params.get('logger')).toBe('server.worker');
@@ -172,8 +204,7 @@ test('pages exact logger history', async () => {
     await view.state.searchHistory('', ['warning'], '');
     expect(new URL(view.urls.at(-1)!, 'http://localhost').searchParams.has('logger')).toBe(false);
   } finally {
-    view.close();
-    await flush();
+    await view.close();
   }
 });
 
@@ -181,9 +212,9 @@ test('filters exact live loggers', async () => {
   const view = await mount([page([]), page([]), page([])], true);
   try {
     await view.state.start();
-    await flush();
+    await view.ready;
     await view.state.searchHistory('failure', ['warning'], 'server.worker');
-    view.emit([
+    await view.emit([
       { ...record(101), logger: 'server.worker', message: 'Failure' },
       { ...record(102), logger: 'server.worker.child', message: 'failure' },
       { ...record(103), logger: 'Server.worker', message: 'failure' },
@@ -191,35 +222,30 @@ test('filters exact live loggers', async () => {
       { ...record(105), logger: 'server.worker', message: 'failure', level: 'info' },
       { ...record(106), logger: 'server.worker', message: 'success' },
     ]);
-    await flush();
     expect(view.state.entries.value.map((entry) => entry.id)).toEqual([101]);
     await view.state.searchHistory('failure', ['warning'], '');
-    view.emit([{ ...record(107), logger: 'other', message: 'failure' }]);
-    await flush();
+    await view.emit([{ ...record(107), logger: 'other', message: 'failure' }]);
     expect(view.state.entries.value.map((entry) => entry.id)).toEqual([101, 107]);
   } finally {
-    view.close();
-    await flush();
+    await view.close();
   }
 });
 
 test('filters retained live entries', async () => {
   const history = Promise.withResolvers<LogsResponse>();
   const view = await mount([page([]), history.promise, page([])], true);
+  let search: Promise<void> | undefined;
   try {
     await view.state.start();
-    await flush();
-    view.emit([
+    await view.emit([
       { ...record(101), logger: 'server.worker' },
       { ...record(102), logger: 'other' },
     ]);
-    await flush();
-    const search = view.state.searchHistory('', [], 'server.worker');
-    view.emit([
+    search = view.state.searchHistory('', [], 'server.worker');
+    await view.emit([
       { ...record(103), logger: 'server.worker' },
       { ...record(104), logger: 'server.worker.child' },
     ]);
-    await flush();
     history.resolve(page([]));
     await search;
     expect(view.state.entries.value.map((entry) => entry.id)).toEqual([101, 103]);
@@ -227,8 +253,8 @@ test('filters retained live entries', async () => {
     expect(view.state.entries.value.map((entry) => entry.id)).toEqual([101, 103]);
   } finally {
     history.resolve(page([]));
-    view.close();
-    await flush();
+    await search;
+    await view.close();
   }
 });
 
@@ -243,19 +269,18 @@ test('retains observed logger suggestions', async () => {
   const view = await mount([initial, page([]), page([])], true);
   try {
     await view.state.start(['warning']);
-    await flush();
+    await view.ready;
     expect(view.state.loggerNames.value).toEqual(['server.alpha', 'server.beta']);
     await view.state.searchHistory('', ['warning'], 'server.alpha');
     expect(view.state.entries.value).toEqual([]);
     expect(view.state.loggerNames.value).toEqual(['server.alpha', 'server.beta']);
     const historyRequests = view.urls.filter((url) => !url.startsWith('/api/logs/stream')).length;
-    view.emit([
+    await view.emit([
       { ...record(101), logger: 'server.alpha' },
       { ...record(102), logger: 'server.gamma', level: 'info' },
       { ...record(103), logger: 'server.beta' },
       { ...record(104), logger: 'Server.alpha' },
     ]);
-    await flush();
     expect(view.state.entries.value.map((entry) => entry.id)).toEqual([101]);
     expect(view.state.loggerNames.value).toEqual([
       'Server.alpha',
@@ -271,7 +296,6 @@ test('retains observed logger suggestions', async () => {
     expect(view.state.loggerNames.value).toContain('server.alpha');
     expect(view.state.loggerNames.value).toContain('server.beta');
   } finally {
-    view.close();
-    await flush();
+    await view.close();
   }
 });

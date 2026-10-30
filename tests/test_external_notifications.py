@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import PurePath
 
 import httpx
 import pytest
+from common.actions import ExternalNotificationConfig
+from common.plugin import build_inputs
 from sqlalchemy import select
 
 from server.external_notifications import notify_external
@@ -28,12 +31,253 @@ def notification(application: str = "radarr", *, unmonitor: bool = True) -> dict
     }
 
 
+@pytest.mark.parametrize(
+    "options, error",
+    [
+        ({"application": "plex", "unmonitor_after_refresh": True}, "Unmonitor after refresh"),
+        ({"application": "plex", "path_mappings": [{"destination": "/media"}]}, "source"),
+        ({"application": "plex", "path_mappings": [{"source": "/library"}]}, "destination"),
+        (
+            {"application": "plex", "path_mappings": [{"source": "library", "destination": "/media"}]},
+            "Use absolute paths",
+        ),
+        (
+            {"application": "plex", "path_mappings": [{"source": "/library", "destination": "media"}]},
+            "Use absolute paths",
+        ),
+        (
+            {"application": "plex", "path_mappings": [{"source": "/library", "destination": "/media/../other"}]},
+            "can't contain",
+        ),
+        (
+            {
+                "application": "plex",
+                "path_mappings": [
+                    {"source": "/library", "destination": "/media"},
+                    {"source": "/library/", "destination": "/other"},
+                ],
+            },
+            "appear only once",
+        ),
+    ],
+)
+def test_external_options_rejected(options, error) -> None:
+    with pytest.raises(ValueError, match=error):
+        build_inputs(ExternalNotificationConfig, {"url": "https://server.test", "api_key": "key", **options})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mappings, root, folder, prefix",
+    [
+        ([], "/library", "/library/Series", "/library/Ser"),
+        (
+            [
+                {"source": "/library/Movies", "destination": "/movies"},
+                {"source": "/library/", "destination": "/media/"},
+            ],
+            "/media",
+            "/media/Series",
+            "/media/Ser",
+        ),
+        (
+            [
+                {"source": "/library", "destination": "/wrong"},
+                {"source": "/library/Series", "destination": "/media/Series"},
+            ],
+            "/media",
+            "/media/Series",
+            "/media/Ser",
+        ),
+        (
+            [
+                {"source": "/library/Series", "destination": "/media/Series"},
+                {"source": "/library", "destination": "/wrong"},
+            ],
+            "/media",
+            "/media/Series",
+            "/media/Ser",
+        ),
+        (
+            [{"source": "/library", "destination": "D:\\Media"}],
+            "d:\\media",
+            "D:\\Media\\Series",
+            "D:\\Media\\Ser",
+        ),
+    ],
+)
+async def test_plex_folder_refresh(monkeypatch, mappings, root, folder, prefix) -> None:
+    payload = notification("plex", unmonitor=False)
+    payload["action"]["path_mappings"] = mappings
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        assert request.headers["X-Plex-Token"] == "private-api-key"
+        assert request.headers["Accept"] == "application/json"
+        if request.url.path == "/base/library/sections":
+            return httpx.Response(
+                200,
+                json={
+                    "MediaContainer": {
+                        "Directory": [
+                            {"key": "7", "Location": [{"path": root}, {"path": folder}]},
+                            {"key": "8", "Location": [{"path": root}]},
+                            {"key": "9", "Location": [{"path": prefix}]},
+                        ]
+                    }
+                },
+            )
+        assert request.method == "GET"
+        assert dict(request.url.params) == {"path": folder}
+        return httpx.Response(200)
+
+    client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "server.external_notifications.plex.httpx.AsyncClient",
+        lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(respond)),
+    )
+    assert await notify_external(payload)
+    assert [(request.method, request.url.path) for request in requests] == [
+        ("GET", "/base/library/sections"),
+        ("GET", "/base/library/sections/7/refresh"),
+        ("GET", "/base/library/sections/8/refresh"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mismatch", ["mapping", "library"])
+async def test_plex_path_mismatch(monkeypatch, mismatch) -> None:
+    payload = notification("plex", unmonitor=False)
+    payload["path"] = "/library/SeriesOther/Episode.mp4"
+    if mismatch == "mapping":
+        payload["action"]["path_mappings"] = [
+            {"source": "/library/Series", "destination": "/media/Series"},
+            {"source": "/library/Movies", "destination": "/media/Movies"},
+        ]
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        assert request.url.path == "/base/library/sections"
+        return httpx.Response(
+            200,
+            json={"MediaContainer": {"Directory": [{"key": "7", "Location": [{"path": "/library/Series"}]}]}},
+        )
+
+    client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "server.external_notifications.plex.httpx.AsyncClient",
+        lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(respond)),
+    )
+    with pytest.raises(ValueError, match="No path mapping matches" if mismatch == "mapping" else "No Plex library"):
+        await notify_external(payload)
+    assert len(requests) == (0 if mismatch == "mapping" else 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "application, path, folder",
+    [
+        ("jellyfin", "/library/Series & Friends/Season 1/Episode.mp4", "/media/Series & Friends/Season 1"),
+        ("emby", "/library/Movies/A Movie/Movie.mp4", "/movies/A Movie"),
+    ],
+)
+async def test_media_folder_update(monkeypatch, application, path, folder) -> None:
+    payload = notification(application, unmonitor=False)
+    payload["path"] = path
+    payload["action"]["path_mappings"] = [
+        {"source": "/library/Movies", "destination": "/movies"},
+        {"source": "/library", "destination": "/media"},
+    ]
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/base/Library/Media/Updated"
+        assert not request.url.params
+        if application == "jellyfin":
+            assert request.headers["Authorization"] == 'MediaBrowser Token="private-api-key"'
+        else:
+            assert request.headers["X-Emby-Token"] == "private-api-key"
+        assert json.loads(request.content) == {"Updates": [{"Path": folder, "UpdateType": "Modified"}]}
+        return httpx.Response(204 if application == "jellyfin" else 200)
+
+    client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "server.external_notifications.media_server.httpx.AsyncClient",
+        lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(respond)),
+    )
+    assert await notify_external(payload)
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_plex_retry_persisted(monkeypatch, caplog) -> None:
+    refreshes = []
+
+    def respond(request):
+        if request.url.path == "/base/library/sections":
+            return httpx.Response(
+                200,
+                json={
+                    "MediaContainer": {
+                        "Directory": [{"key": key, "Location": [{"path": "/library"}]} for key in ["7", "8"]]
+                    }
+                },
+            )
+        refreshes.append(request.url.path)
+        if len(refreshes) == 2:
+            raise httpx.ConnectError("connection refused private-api-key", request=request)
+        return httpx.Response(200)
+
+    client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "server.external_notifications.plex.httpx.AsyncClient",
+        lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(respond)),
+    )
+    async with database_context("plex-retry") as factory:
+        async with factory() as session:
+            job_id = await make_job(session, notify=False)
+            job = await session.get(Job, job_id)
+            assert job is not None
+            job.status = "succeeded"
+            event = JobEvent(job_id=job_id, type="external_notification", payload=notification("plex", unmonitor=False))
+            session.add(event)
+            await session.flush()
+            session.add(NotificationDelivery(job_id=job_id, job_event_id=event.id, target_name="external:plex"))
+            await session.commit()
+        await NotificationService(factory).deliver_pending()
+        async with factory() as session:
+            delivery = (await session.scalars(select(NotificationDelivery))).one()
+            assert (delivery.status, delivery.attempts) == ("pending", 1)
+            assert delivery.error and "connection refused" in delivery.error
+            assert "private-api-key" not in delivery.error
+        await NotificationService(factory).deliver_pending()
+        async with factory() as session:
+            delivery = (await session.scalars(select(NotificationDelivery))).one()
+            assert (delivery.status, delivery.attempts, delivery.error) == ("sent", 2, None)
+            job = await session.get(Job, job_id)
+            assert job is not None and job.status == "succeeded"
+    assert refreshes == [
+        "/base/library/sections/7/refresh",
+        "/base/library/sections/8/refresh",
+        "/base/library/sections/7/refresh",
+        "/base/library/sections/8/refresh",
+    ]
+    assert all("private-api-key" not in str(record.__dict__) for record in caplog.records)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("identifier", [None, "tmdb-42", "imdb-tt123"])
 async def test_radarr_refresh_order(monkeypatch, identifier) -> None:
     payload = notification()
     if identifier:
         payload["path"] = f"/library/Movie {{{identifier}}}/Movie.mp4"
+    payload["action"]["path_mappings"] = [
+        {"source": str(PurePath(payload["path"]).parent), "destination": "/radarr/Movie"}
+    ]
     requests = []
     movie = {"id": 7, "tmdbId": 42, "imdbId": "tt123"}
 
@@ -79,12 +323,19 @@ async def test_radarr_refresh_order(monkeypatch, identifier) -> None:
 @pytest.mark.parametrize("failure", [None, "lookup", "refresh", "unmonitor"])
 async def test_sonarr_delivery_persisted(monkeypatch, caplog, failure) -> None:
     payload = notification("sonarr")
+    payload["action"]["path_mappings"] = [
+        {"source": "/other", "destination": "/unused"},
+        {"source": "/library", "destination": "/sonarr"},
+    ]
     requests = []
 
     def respond(request):
         requests.append(request)
         if request.url.path.endswith("/parse"):
-            assert dict(request.url.params) == {"title": payload["original_filename"], "path": payload["path"]}
+            assert dict(request.url.params) == {
+                "title": payload["original_filename"],
+                "path": "/sonarr/Series/Series.S01E01E02.mp4",
+            }
             return httpx.Response(
                 200,
                 json={
@@ -128,6 +379,8 @@ async def test_sonarr_delivery_persisted(monkeypatch, caplog, failure) -> None:
             assert delivery.attempts == (3 if failure else 1)
             assert (delivery.error is not None) is bool(failure)
             assert "private-api-key" not in (delivery.error or "")
+            event = await session.get(JobEvent, delivery.job_event_id)
+            assert event is not None and event.payload["path"] == "/library/Series/Series.S01E01E02.mp4"
             job = await session.get(Job, job_id)
             assert job is not None and job.status == "succeeded"
     if failure in {"lookup", "refresh"}:

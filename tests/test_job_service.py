@@ -315,41 +315,42 @@ async def test_lifecycle_drains_worker(api_env: ApiEnv, monkeypatch: pytest.Monk
             raise
 
     monkeypatch.setattr(service.staging, "prune_job", blocked)
-    assert (await api_env.client.post(f"/api/jobs/{job_id}/retry")).status_code == 202
-    await asyncio.wait_for(entered.wait(), 2)
-    if operation == "shutdown":
-        ending = asyncio.create_task(service.close())
-    elif operation == "reset":
-        api_env.app.state.services_running = True
-        api_env.app.state.auth.config.api_key = "test-job-service"
-        api_env.client.headers["Authorization"] = "Bearer test-job-service"
-        ending = asyncio.create_task(api_env.client.post("/api/backups/reset", json={"keep": []}))
-        # Keep reset's service restarts deterministic and avoid starting unrelated loops.
-        for owner, name in (
-            (api_env.app.state.scanner, "start"),
-            (api_env.app.state.healthchecks, "start"),
-            (api_env.app.state.staging, "start"),
-            (api_env.app.state.scheduler, "start"),
-            (api_env.app.state.notifications, "start"),
-        ):
-            monkeypatch.setattr(owner, name, lambda: None)
-
-        async def start():
-            pass
-
-        monkeypatch.setattr(api_env.app.state.probes, "start", start)
-        monkeypatch.setattr(api_env.app.state.flow_enqueue, "start", start)
-    else:
-        api_env.app.state.services_running = True
-        async with api_env.factory() as session:
-            job = await session.get(Job, job_id)
-            assert job is not None
-            library_id = job.library_id
-        await api_env.app.state.library_deletion.start()
-        response = await api_env.client.delete(f"/api/libraries/{library_id}")
-        assert response.status_code == 202
-        ending = api_env.app.state.library_deletion._tasks[library_id]
+    ending = None
     try:
+        assert (await api_env.client.post(f"/api/jobs/{job_id}/retry")).status_code == 202
+        await asyncio.wait_for(entered.wait(), 2)
+        if operation == "shutdown":
+            ending = asyncio.create_task(service.close())
+        elif operation == "reset":
+            api_env.app.state.services_running = True
+            api_env.app.state.auth.config.api_key = "test-job-service"
+            api_env.client.headers["Authorization"] = "Bearer test-job-service"
+            ending = asyncio.create_task(api_env.client.post("/api/backups/reset", json={"keep": []}))
+            # Keep reset's service restarts deterministic and avoid starting unrelated loops.
+            for owner, name in (
+                (api_env.app.state.scanner, "start"),
+                (api_env.app.state.healthchecks, "start"),
+                (api_env.app.state.staging, "start"),
+                (api_env.app.state.scheduler, "start"),
+                (api_env.app.state.notifications, "start"),
+            ):
+                monkeypatch.setattr(owner, name, lambda: None)
+
+            async def start():
+                pass
+
+            monkeypatch.setattr(api_env.app.state.probes, "start", start)
+            monkeypatch.setattr(api_env.app.state.flow_enqueue, "start", start)
+        else:
+            api_env.app.state.services_running = True
+            async with api_env.factory() as session:
+                job = await session.get(Job, job_id)
+                assert job is not None
+                library_id = job.library_id
+            await api_env.app.state.library_deletion.start()
+            response = await api_env.client.delete(f"/api/libraries/{library_id}")
+            assert response.status_code == 202
+            ending = api_env.app.state.library_deletion._tasks[library_id]
         await asyncio.wait_for(draining.wait(), 2)
         assert not ending.done()
         release.set()
@@ -366,8 +367,9 @@ async def test_lifecycle_drains_worker(api_env: ApiEnv, monkeypatch: pytest.Monk
                 assert await session.get(Library, library_id) is None
     finally:
         release.set()
-        await asyncio.wait_for(asyncio.gather(ending, return_exceptions=True), 5)
-        await api_env.app.state.library_deletion.close()
+        if ending is not None:
+            await asyncio.wait_for(asyncio.gather(ending, return_exceptions=True), 5)
+        await asyncio.wait_for(api_env.app.state.library_deletion.close(), 5)
 
 
 @pytest.mark.asyncio

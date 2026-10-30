@@ -10,7 +10,9 @@ if TYPE_CHECKING:
 
 
 class Inputs(BaseModel):
-    expected: list[str] = Field(default=["eng", "und"], description="ISO 639-2 language tags allowed on audio streams.")
+    expected: list[str] = Field(
+        default=["eng", "und"], description="List allowed audio language codes, such as eng or und."
+    )
 
 
 INPUTS = Inputs

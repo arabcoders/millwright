@@ -220,6 +220,62 @@ jobs:
       packages: write
     steps: *build-image
 
+  release-notes:
+    name: Update GitHub release notes
+    needs: docker
+    if: github.server_url == 'https://github.com' && vars.REGISTRY == '' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Append release commits
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const repo = context.repo;
+            const { data: release } = await github.rest.repos.getReleaseByTag({ ...repo, tag });
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              ...repo,
+              per_page: 100,
+            });
+            const published = releases.filter(r => !r.draft);
+            const baseTag = published[published.findIndex(r => r.id === release.id) + 1]?.tag_name;
+            const commits = baseTag
+              ? await github.paginate(github.rest.repos.compareCommitsWithBasehead, {
+                  ...repo,
+                  basehead: `${baseTag}...${tag}`,
+                  per_page: 100,
+                })
+              : await github.paginate(github.rest.repos.listCommits, {
+                  ...repo,
+                  sha: tag,
+                  per_page: 100,
+                });
+            const changelog = commits
+              .filter(c => c.parents.length <= 1)
+              .map(c => `- ${c.sha.substring(0, 7)} ${c.commit.message.split('\n')[0]}`)
+              .join('\n');
+
+            if (!changelog) {
+              core.setFailed('No commits found for the release notes.');
+              return;
+            }
+
+            const heading = baseTag ? `## Commits since ${baseTag}` : '## Commits';
+            const existingBody = (release.body || '').trim();
+            const body = existingBody
+              ? `${existingBody}\n\n---\n\n${heading}\n\n${changelog}`
+              : `${heading}\n\n${changelog}`;
+
+            await github.rest.repos.updateRelease({
+              ...repo,
+              release_id: release.id,
+              body,
+            });
+
   dockerhub-sync-readme:
     name: Sync Docker Hub README
     needs: test

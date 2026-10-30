@@ -45,7 +45,7 @@ from server.settings import OperationalSettings
 from server.workspace import recovery_jobs, wait_workspace_io
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -64,7 +64,7 @@ class _RestoreOutcome:
 
 
 @asynccontextmanager
-async def _pause_dry_runs(request: Request) -> AsyncIterator[None]:
+async def _pause_dry_runs(request: Request) -> AsyncGenerator[None]:
     try:
         async with request.app.state.dry_runs.pause():
             yield

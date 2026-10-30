@@ -1,7 +1,7 @@
-import type { PluginInputField } from '~/types/api';
+import type { PathMapping, PluginInputField } from '~/types/api';
 import { emptyCondition, type DraftCondition } from '~/utils/condition';
 
-export type DraftInput = string | number | boolean | string[];
+export type DraftInput = string | number | boolean | string[] | PathMapping[];
 
 export type DraftPluginNode = {
   kind: 'plugin';
@@ -53,6 +53,7 @@ export const newTerminalNode = (used?: Set<string>): DraftTerminalNode => ({
 });
 
 export const inputDraft = (field: PluginInputField): DraftInput => {
+  if (field.type === 'path_mappings') return toDraft(field, field.default);
   if (field.type === 'strings') {
     return Array.isArray(field.default) ? field.default.map(String) : [];
   }
@@ -63,6 +64,18 @@ export const inputDraft = (field: PluginInputField): DraftInput => {
 };
 
 export const toDraft = (field: PluginInputField, value: unknown): DraftInput => {
+  if (field.type === 'path_mappings') {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (mapping): mapping is PathMapping =>
+          mapping !== null &&
+          typeof mapping === 'object' &&
+          typeof mapping.source === 'string' &&
+          typeof mapping.destination === 'string',
+      )
+      .map(({ source, destination }) => ({ source, destination }));
+  }
   if (field.type === 'strings') {
     return Array.isArray(value) ? value.map(String) : [];
   }
@@ -79,11 +92,11 @@ export const initializeInputs = (node: DraftPluginNode, fields: PluginInputField
     if (field.name in node.rawInputs) {
       const value = toDraft(field, node.rawInputs[field.name]);
       node.inputs[field.name] = value;
-      node.initialInputs[field.name] = Array.isArray(value) ? [...value] : value;
+      node.initialInputs[field.name] = toDraft(field, value);
     } else if (!field.required) {
       const value = inputDraft(field);
       node.inputs[field.name] = value;
-      node.initialInputs[field.name] = Array.isArray(value) ? [...value] : value;
+      node.initialInputs[field.name] = toDraft(field, value);
     }
   }
 };
@@ -97,7 +110,8 @@ export const buildInputs = (
     const raw = node.inputs[field.name];
     if (raw === undefined) continue;
     if (JSON.stringify(raw) === JSON.stringify(node.initialInputs[field.name])) continue;
-    if (field.type === 'strings') out[field.name] = raw;
+    if (field.type === 'path_mappings') out[field.name] = toDraft(field, raw);
+    else if (field.type === 'strings') out[field.name] = raw;
     else if (field.type === 'int' || field.type === 'float') {
       if (raw === '') Reflect.deleteProperty(out, field.name);
       else out[field.name] = Number(raw);
