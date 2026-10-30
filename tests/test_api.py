@@ -3678,6 +3678,8 @@ async def test_attempt_history_and(api_env: ApiEnv) -> None:
 @pytest.mark.asyncio
 async def test_registration_claim(api_env: ApiEnv) -> None:
     hub = api_env.app.state.hub
+    # Immediate delivery makes subscription coalescing independent of runner speed.
+    api_env.app.state.events.min_interval_s = 0
     conn = FakeConn(
         [Hello(capabilities=NodeCapabilities(hostname="encoder"), active_attempts=[]).model_dump(mode="json")]
     )
@@ -3697,6 +3699,11 @@ async def test_registration_claim(api_env: ApiEnv) -> None:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api_env.app), base_url=UI_BASE) as anonymous:
             assert (await anonymous.get("/api/nodes/registration")).status_code == 401
             assert (await anonymous.post(f"/api/nodes/pending/{request_id}/claim")).status_code == 401
+        async with asyncio.timeout(3):
+            event = await sub.next()
+            while event is not None and event.type != "node.registration":
+                event = await sub.next()
+        assert event is not None and event.payload["pending"][0]["request_id"] == request_id
         response = await api_env.client.post(f"/api/nodes/pending/{request_id}/claim")
         assert response.status_code == 202
         assert (await api_env.client.post(f"/api/nodes/pending/{request_id}/claim")).status_code == 404
@@ -3705,11 +3712,6 @@ async def test_registration_claim(api_env: ApiEnv) -> None:
                 conn.changed.clear()
                 await conn.changed.wait()
         assert not conn.messages("registered")
-        async with asyncio.timeout(3):
-            event = await sub.next()
-            while event is not None and event.type != "node.registration":
-                event = await sub.next()
-        assert event is not None and event.payload["pending"][0]["request_id"] == request_id
     finally:
         conn.disconnect()
         await asyncio.wait_for(task, 3)
