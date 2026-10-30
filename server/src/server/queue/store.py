@@ -218,12 +218,13 @@ async def remove_node(session: AsyncSession, node_id: int) -> bool:
     node = await session.get(NodeRow, node_id, with_for_update=True)
     if node is None:
         return False
-    if node.state != "offline":
-        msg = "only offline nodes may be removed"
-        raise NodeRemovalError(msg)
-    active = await session.scalar(select(Job.id).where(Job.node_id == node_id, Job.status.in_(_ACTIVE_VALUES)).limit(1))
+    active_jobs = select(Job.id).where(
+        Job.node_id == node_id,
+        or_(Job.status.in_(_ACTIVE_VALUES), Job.id.in_(post_action_jobs())),
+    )
+    active = await session.scalar(active_jobs.limit(1))
     if active is not None:
-        msg = "node owns an active job"
+        msg = "Node has active work. Wait for it to finish before removing the node."
         raise NodeRemovalError(msg)
     removed = await session.scalar(
         update(NodeRow)
@@ -231,14 +232,13 @@ async def remove_node(session: AsyncSession, node_id: int) -> bool:
             NodeRow.id == node_id,
             NodeRow.name == node.name,
             NodeRow.token_hash == node.token_hash,
-            NodeRow.state == "offline",
-            ~select(Job.id).where(Job.node_id == node_id, Job.status.in_(_ACTIVE_VALUES)).exists(),
+            ~active_jobs.exists(),
         )
         .values(state=NodeRow.state, updated_at=NodeRow.updated_at)
         .returning(NodeRow.id)
     )
     if removed is None:
-        raise NodeRemovalError("node changed, connected, or acquired work during removal")
+        raise NodeRemovalError("Node changed or acquired work during removal. Reload and try again.")
     await session.execute(update(Job).where(Job.node_id == node_id).values(node_id=None))
     await session.execute(update(JobAttempt).where(JobAttempt.node_id == node_id).values(node_id=None))
     await session.execute(delete(NodeRow).where(NodeRow.id == node_id))

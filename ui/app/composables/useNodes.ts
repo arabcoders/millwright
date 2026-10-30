@@ -91,7 +91,7 @@ const deleteNode = async (id: number): Promise<void> => {
     if (!response.ok)
       throw new Error(await parse_api_error(await response.json().catch(() => null)));
     remove(id);
-    if (node) notify.success(`Removed node ${node.display_name}`);
+    if (node) notify.success(`Removed node ${node.display_name}.`);
   } catch (error) {
     notify.error(messageFor(error instanceof Error ? error.message : undefined));
     throw error;

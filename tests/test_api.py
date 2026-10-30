@@ -3820,7 +3820,7 @@ async def test_remove_offline_node(api_env: ApiEnv) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reject_online_node(api_env: ApiEnv) -> None:
+async def test_remove_online_node(api_env: ApiEnv) -> None:
     await seed_node(api_env)
     async with api_env.factory() as session:
         node = await session.scalar(select(NodeRow).where(NodeRow.name == "node-a"))
@@ -3829,15 +3829,18 @@ async def test_reject_online_node(api_env: ApiEnv) -> None:
         await session.commit()
         node_id = node.id
     response = await api_env.client.delete(f"/api/nodes/{node_id}")
-    assert response.status_code == 409
+    assert response.status_code == 204
+    assert (await api_env.client.get("/api/nodes")).json() == []
 
 
 @pytest.mark.asyncio
-async def test_reject_active_node(api_env: ApiEnv) -> None:
+@pytest.mark.parametrize("state", ["online", "offline"])
+async def test_reject_active_node(api_env: ApiEnv, state: str) -> None:
     await seed_node(api_env)
     async with api_env.factory() as session:
         node = await session.scalar(select(NodeRow).where(NodeRow.name == "node-a"))
         assert node is not None
+        node.state = state
         media_id, library_id = await seed_media(api_env)
         job = Job(media_file_id=media_id, library_id=library_id, status=JobStatus.QUEUED.value, node_id=node.id)
         session.add(job)

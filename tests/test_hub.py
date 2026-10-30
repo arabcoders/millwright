@@ -36,6 +36,7 @@ from common.protocol import (
     NodeLog,
     NodeLogs,
     Progress,
+    Unregistered,
     WorkspaceResponse,
     parse_message,
 )
@@ -1025,7 +1026,9 @@ async def test_challenge_revocation_checked(env):
             )
             await session.commit()
         answer_challenge(h, conn)
-        await wait_for(lambda: conn.messages("welcome") or conn.messages("error") or connection.done(), conn.changed)
+        await wait_for(lambda: conn.messages("unregister"), conn.changed)
+        conn.push(Unregistered().model_dump(mode="json"))
+        await asyncio.wait_for(connection, 3)
         assert not conn.messages("welcome"), "revoked credentials queued a connection after workspace verification"
         assert "node-a" not in h.entries
     finally:
@@ -1051,9 +1054,11 @@ async def test_removed_challenge_refused(env, replace):
                 await register_node(session, "node-a", "replacement-token")
                 await session.commit()
         answer_challenge(h, conn)
+        await wait_for(lambda: conn.messages("unregister"), conn.changed)
+        conn.push(Unregistered().model_dump(mode="json"))
         await asyncio.wait_for(connection, 3)
         assert not conn.messages("welcome") and not h.entries
-        assert conn.messages("error")[0]["code"] == "auth" and conn.closed == 4401
+        assert conn.closed == 1000
         async with env.factory() as session:
             stored = await get_node(session, "node-a")
             if replace:
@@ -1536,8 +1541,10 @@ async def test_removal_preserves_owner(env, monkeypatch, check):
             assert (env.workspace / offer["output_path"]).read_bytes() == b"output"
         else:
             assert removed and replacement_id != node_id
+            await wait_for(lambda: conn.messages("unregister"), conn.changed)
+            conn.push(Unregistered().model_dump(mode="json"))
             await asyncio.wait_for(connection, 3)
-            assert conn.messages("error")[-1]["code"] == "auth"
+            assert not conn.messages("welcome")
             replacement_conn = FakeConn([hello("node-b", "replacement-token")])
             replacement_connection = await serve(h, replacement_conn)
             assert await asyncio.wait_for(h.dispatch_once(), 2) == 1
@@ -1716,7 +1723,7 @@ async def test_node_cancel_boundary(env, monkeypatch, phase, reason) -> None:
 
 @pytest.mark.asyncio
 async def test_post_cleanup_retry(env, monkeypatch) -> None:
-    from server.queue.store import ActiveJobError
+    from server.queue.store import ActiveJobError, NodeRemovalError, remove_node
 
     cleanup_started, release_cleanup = asyncio.Event(), asyncio.Event()
     async with post_action_case(env) as case:
@@ -1745,6 +1752,8 @@ async def test_post_cleanup_retry(env, monkeypatch) -> None:
             async with env.factory() as session:
                 from server.queue.store import restore_retry_result
 
+                with pytest.raises(NodeRemovalError):
+                    await remove_node(session, case.hub.entries["node-a"].node_db_id)
                 request_id = await request_retry(session, case.jid)
                 with pytest.raises(ActiveJobError):
                     await retry_job(session, case.jid, request_id=request_id)
@@ -4162,7 +4171,7 @@ async def test_idle_hello_availability(env):
 async def test_registration_rejects_unlocked(env):
     h = hub(env)
     h.set_registration_enabled(False)
-    conn = FakeConn([hello(token="wrong")])
+    conn = FakeConn([hello(name=None, token="")])
     async with h.dispatch_lock:
         await asyncio.wait_for(h.serve_connection(conn), 3)
     assert conn.messages("error") and conn.closed is not None
@@ -4225,8 +4234,10 @@ async def test_reset_defers_queue(env, monkeypatch, revoke):
                     current.token_hash = hash_token("replacement")
                     await session.commit()
         if revoke:
+            await wait_for(lambda: conn.messages("unregister"), conn.changed)
+            conn.push(Unregistered().model_dump(mode="json"))
             await asyncio.wait_for(task, 3)
-            assert conn.messages("error")[0]["code"] == "auth" and conn.closed == 4401
+            assert conn.closed == 1000
             assert not conn.messages("workspace_challenge") and not h.entries
         else:
             await wait_for(lambda: conn.messages("workspace_challenge"), conn.changed)
@@ -4320,26 +4331,143 @@ async def test_handshake_io_drains(env, monkeypatch, phase):
 
 
 @pytest.mark.asyncio
-async def test_invalid_credentials_pending(env):
+@pytest.mark.parametrize("registration", ["invalid", "offline", "interrupted"])
+async def test_stale_credentials_clear(env, registration):
     h = hub(env)
     await file_job(env)
-    c = FakeConn([hello(token="wrong")])
-    task = asyncio.create_task(h.serve_connection(c))
-    try:
-        await wait_for(lambda: c.messages("registration_pending"), c.changed)
-        assert not c.messages("workspace_challenge") and not c.messages("registered")
-        async with asyncio.timeout(2), h.dispatch_lock:
-            assert c.messages("registration_pending")[0]["request_id"] in h.pending_nodes
-        await h.dispatch_once()
-        assert not c.messages("job")
+    removed = registration != "invalid"
+    if removed:
+
+        class RemovalConn(FakeConn):
+            async def send_json(self, data):
+                if data["type"] == "unregister":
+                    raise OSError("Connection lost before unregister delivery.")
+                await super().send_json(data)
+
+        original = RemovalConn([hello()])
+        connection = await serve(h, original) if registration == "interrupted" else None
         async with env.factory() as session:
             saved = await get_node(session, "node-a")
-            assert saved is not None and saved.token_hash == hash_token("tok")
-            assert len(list(await session.scalars(select(NodeRow)))) == 1
+            assert saved is not None
+            node_id = saved.id
+        try:
+            assert await h.remove_node(node_id)
+        finally:
+            original.disconnect()
+            if connection is not None:
+                await asyncio.wait_for(connection, 2)
+    c = FakeConn([hello(token="tok" if removed else "wrong")])
+    task = asyncio.create_task(h.serve_connection(c))
+    retry = FakeConn([hello(name=None, token="")])
+    retried = None
+    try:
+        await wait_for(lambda: c.messages("unregister"), c.changed)
+        assert not h.pending_nodes and not c.messages("workspace_challenge")
+        c.push(Unregistered().model_dump(mode="json"))
+        await asyncio.wait_for(task, 2)
+        retried = asyncio.create_task(h.serve_connection(retry))
+        await wait_for(lambda: retry.messages("registration_pending"), retry.changed)
+        assert not retry.messages("registered")
+        await h.dispatch_once()
+        assert not retry.messages("job")
+        async with env.factory() as session:
+            saved = await get_node(session, "node-a")
+            if removed:
+                assert saved is None
+            else:
+                assert saved is not None and saved.token_hash == hash_token("tok")
+            assert len(list(await session.scalars(select(NodeRow)))) == (0 if removed else 1)
     finally:
         c.disconnect()
-        await asyncio.wait_for(task, 2)
+        retry.disconnect()
+        await asyncio.wait_for(asyncio.gather(task, *([retried] if retried else [])), 2)
     assert not h.pending_nodes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("registration", [True, False])
+async def test_online_unregister_reconnects(env, monkeypatch, registration):
+    from node.agent import Agent, AgentConfig
+
+    h = hub(env)
+    h.set_registration_enabled(registration)
+    path = env.workspace.parent / "node-credentials.json"
+    config = AgentConfig(
+        node_id="node-a",
+        token="tok",
+        credentials_path=path,
+        server_url="ws://test",
+        workspace_dir=str(env.workspace),
+        min_free_gb=0,
+    )
+    agent = Agent(config)
+    agent._save_credentials("node-a", config.token)
+    retained = env.workspace / "retained.log"
+    retained.write_bytes(b"retained log")
+    acknowledged, release = asyncio.Event(), asyncio.Event()
+    connections, tasks = [], []
+
+    def connect():
+        server, client = FakeConn(), FakeConn()
+        connections.extend((server, client))
+
+        async def from_hub(data):
+            await FakeConn.send_json(server, data)
+            client.push(data)
+
+        async def from_node(data):
+            await FakeConn.send_json(client, data)
+            if data["type"] == "unregistered":
+                acknowledged.set()
+                await asyncio.wait_for(release.wait(), 3)
+            server.push(data)
+
+        async def close_hub(code=1000):
+            server.closed = code
+            client.disconnect()
+
+        monkeypatch.setattr(server, "send_json", from_hub)
+        monkeypatch.setattr(client, "send_json", from_node)
+        monkeypatch.setattr(server, "close", close_hub)
+        tasks.extend((asyncio.create_task(h.serve_connection(server)), asyncio.create_task(agent._session(client))))
+        return server, client
+
+    server, client = connect()
+    removal = None
+    try:
+        await asyncio.wait_for(server.ready.wait(), 3)
+        node_id = h.entries["node-a"].node_db_id
+        jid = await file_job(env)
+        removal = asyncio.create_task(h.remove_node(node_id))
+        await asyncio.wait_for(acknowledged.wait(), 3)
+        assert not removal.done()
+        assert await asyncio.wait_for(h.dispatch_once(), 2) == 0
+        assert (await job(env, jid)).status == JobStatus.QUEUED
+        assert not path.exists() and config.node_id is None and config.token == ""
+        assert retained.read_bytes() == b"retained log"
+        async with env.factory() as session:
+            assert await get_node(session, "node-a") is None
+        release.set()
+        assert await asyncio.wait_for(removal, 3)
+        await asyncio.wait_for(asyncio.gather(*tasks), 3)
+        assert client.messages("unregistered") and not agent._closed
+        retry, retried_client = connect()
+        if registration:
+            await wait_for(lambda: retry.messages("registration_pending"), retry.changed)
+            assert len(h.pending_nodes) == 1 and not retry.messages("registered")
+        else:
+            await asyncio.wait_for(asyncio.gather(*tasks[-2:]), 3)
+            assert not h.pending_nodes and retry.messages("error")[0]["code"] == "registration"
+        assert retried_client.messages("hello")[0]["node_id"] is None
+        assert retried_client.messages("hello")[0]["token"] == ""
+    finally:
+        release.set()
+        for connection in connections:
+            connection.disconnect()
+        if removal is not None and not removal.done():
+            removal.cancel()
+        await asyncio.wait_for(asyncio.gather(*tasks, *([removal] if removal else []), return_exceptions=True), 3)
+        await asyncio.wait_for(agent.aclose(), 3)
 
 
 @pytest.mark.asyncio
@@ -4441,17 +4569,16 @@ async def test_workspace_creation_diagnostics(env, monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name,token", [(None, ""), ("node-a", "wrong")])
-async def test_claim_issues_token(env, name, token):
+async def test_claim_issues_token(env):
     h = hub(env)
-    greeting = hello(name=name, token=token)
+    greeting = hello(name=None, token="")
     greeting["capabilities"].update(cpu_model="Intel(R) Core(TM) i9-14900K", gpus=["Intel UHD", "NVIDIA RTX 4090"])
     c = FakeConn([greeting])
     task = await serve(h, c, claim=True)
     try:
         registered = c.messages("registered")[0]
         assert registered["node_id"].startswith("node-")
-        assert registered["token"] != token
+        assert registered["token"]
         async with env.factory() as session:
             node = await get_node(session, registered["node_id"])
             assert node is not None

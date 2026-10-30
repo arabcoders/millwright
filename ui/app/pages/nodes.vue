@@ -163,17 +163,28 @@
               >
                 {{ node.paused ? 'Resume' : 'Pause' }}
               </UButton>
-              <UButton
-                v-if="node.state === 'offline'"
-                color="neutral"
-                variant="outline"
-                size="sm"
-                icon="i-lucide-trash-2"
-                :disabled="removing"
-                @click.stop="openRemoveConfirm(node)"
+              <UTooltip
+                :disabled="!node.active_jobs && !removing"
+                :text="
+                  node.active_jobs
+                    ? 'Wait for active work to finish before removing this node.'
+                    : 'Wait for the current node removal to finish.'
+                "
               >
-                Remove node
-              </UButton>
+                <span class="inline-flex">
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    icon="i-lucide-trash-2"
+                    :loading="removingId === node.id"
+                    :disabled="removing || node.active_jobs > 0"
+                    @click.stop="openRemoveConfirm(node)"
+                  >
+                    Remove node
+                  </UButton>
+                </span>
+              </UTooltip>
             </div>
           </template>
         </div>
@@ -307,7 +318,8 @@ onBeforeUnmount(() => {
 
 const selectedNode = ref<NodeRow | null>(null);
 const editNode = ref<NodeRow | null>(null);
-const removing = ref(false);
+const removingId = ref<number | null>(null);
+const removing = computed(() => removingId.value !== null);
 const savingRegistration = ref(false);
 const claimingId = ref<string | null>(null);
 
@@ -342,22 +354,22 @@ const openEdit = (node: NodeRow): void => {
 };
 
 const openRemoveConfirm = async (node: NodeRow): Promise<void> => {
-  if (removing.value) return;
+  if (removing.value || node.active_jobs > 0) return;
   const result = await confirmDialog({
     title: 'Remove node?',
-    message: `Remove ${node.display_name}? This cannot be undone.`,
+    message: `Removing the node will keep its configuration, files, logs, and job history.`,
     confirmText: 'Remove node',
     confirmColor: 'error',
   });
   if (!result.status || removing.value) return;
-  removing.value = true;
+  removingId.value = node.id;
   try {
     await deleteNode(node.id);
     if (selectedNode.value?.id === node.id) selectedNode.value = null;
     if (editNode.value?.id === node.id) editNode.value = null;
   } catch {
   } finally {
-    removing.value = false;
+    removingId.value = null;
   }
 };
 

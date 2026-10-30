@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from server.api.auth import current_principal
 from server.models import NodeRow
 from server.nodehub.store import list_nodes
-from server.queue.store import NodeRemovalError, remove_node
+from server.queue.store import NodeRemovalError
 from server.serialize import iso_utc
 
 if TYPE_CHECKING:
@@ -114,14 +114,12 @@ async def patch_node(node_id: int, body: NodePatchBody, request: Request) -> dic
         return _node_dict(node, entry.in_flight if entry is not None else {})
 
 
-@router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Remove an offline node")
+@router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Unregister a node without active work")
 async def delete_node(node_id: int, request: Request) -> None:
-    db: async_sessionmaker = request.app.state.db
-    async with db() as session:
-        try:
-            removed = await remove_node(session, node_id)
-            if not removed:
-                raise HTTPException(status_code=404, detail="node not found")
-            await session.commit()
-        except NodeRemovalError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        async with request.app.state.reset_lock:
+            removed = await request.app.state.hub.remove_node(node_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="node not found")
+    except NodeRemovalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

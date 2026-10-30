@@ -43,6 +43,8 @@ from common.protocol import (
     Progress,
     Registered,
     RegistrationPending,
+    Unregister,
+    Unregistered,
     Welcome,
     WorkspaceChallenge,
     WorkspaceResponse,
@@ -73,12 +75,14 @@ from server.nodehub.matching import can_execute, requirements_met
 from server.nodehub.store import get_node, hash_token, register_node, set_node_state, touch_node
 from server.queue.store import (
     TERMINAL_STATUSES,
+    NodeRemovalError,
     claim,
     current_attempt,
     finish,
     finish_artifact_check,
     get_job,
     release_transcode_decision,
+    remove_node,
     requeue,
     transition,
 )
@@ -222,6 +226,7 @@ class NodeEntry:
     offered_at: dict[int, datetime] = field(default_factory=dict)
     last_progress_at: dict[int, datetime] = field(default_factory=dict)
     disconnected: asyncio.Event = field(default_factory=asyncio.Event)
+    unregistered: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @dataclass(kw_only=True, slots=True)
@@ -346,6 +351,9 @@ class NodeHub:
             node_name = hello.node_id or "unregistered node"
             claimed = False
             if await self._authenticate_hello(hello) is None:
+                if hello.node_id is not None or hello.token:
+                    await self._unregister_connection(conn, node_name)
+                    return
                 claimed = await self._wait_for_claim(conn, hello)
                 if not claimed:
                     return
@@ -1859,6 +1867,41 @@ class NodeHub:
                 return node.id
         return None
 
+    async def remove_node(self, node_id: int) -> bool:
+        async with self.dispatch_lock:
+            entry = next((item for item in self.entries.values() if item.node_db_id == node_id), None)
+            if entry is not None and entry.in_flight:
+                raise NodeRemovalError("Node has active work. Wait for it to finish before removing the node.")
+            async with self.sessionmaker() as session:
+                if not await remove_node(session, node_id):
+                    return False
+                await session.commit()
+            if entry is not None:
+                entry.workspace_ready = False
+                entry.paused = True
+        if entry is not None and not entry.disconnected.is_set():
+            await self._unregister_connection(entry.conn, entry.name, entry.unregistered)
+        return True
+
+    async def _unregister_connection(
+        self, conn: NodeConnection, name: str, acknowledged: asyncio.Event | None = None
+    ) -> None:
+        try:
+            async with asyncio.timeout(self.hello_timeout_s):
+                await conn.send_json(Unregister().model_dump(mode="json"))
+                if acknowledged is not None:
+                    await acknowledged.wait()
+                else:
+                    data = await conn.recv_json()
+                    if data is None or not isinstance(parse_message(data), Unregistered):
+                        LOG.warning("Node %s did not acknowledge credential removal.", name)
+        except Exception as exc:
+            LOG.warning(
+                "Could not confirm credential removal for node %s: %s", name, error_message(exc) or type(exc).__name__
+            )
+        finally:
+            await asyncio.wait_for(conn.close(), self.hello_timeout_s)
+
     def set_registration_enabled(self, enabled: bool) -> None:
         if self.registration_enabled == enabled:
             return
@@ -1929,7 +1972,7 @@ class NodeHub:
         # A reset may have changed node credentials while this connection waited for its dispatch lock.
         node_db_id = None if claimed else await self._authenticate_hello(msg)
         if node_db_id is None and not claimed:
-            await self._reject(conn, "auth", "Node authentication was revoked.", 4401)
+            await self._unregister_connection(conn, msg.node_id or "unregistered node")
             return None
         issued_token = secrets.token_urlsafe(32) if claimed else msg.token
         challenge_id = secrets.token_hex(16)
@@ -2023,7 +2066,7 @@ class NodeHub:
                 .returning(NodeRow.id)
             )
             if current is None:
-                await self._reject(conn, "auth", "authentication revoked during workspace verification", 4401)
+                await self._unregister_connection(conn, msg.node_id)
                 return None
             node = await get_node(session, msg.node_id)
             assert node is not None
@@ -2109,6 +2152,9 @@ class NodeHub:
                         Error(code="protocol", message="unparseable message").model_dump(mode="json")
                     )
                 continue
+            if isinstance(msg, Unregistered):
+                entry.unregistered.set()
+                return
             if isinstance(msg, Heartbeat):
                 await self._handle_heartbeat(entry, msg)
             elif isinstance(msg, AttemptMissing):

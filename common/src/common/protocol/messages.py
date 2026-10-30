@@ -128,6 +128,14 @@ class CredentialsSaved(_MessageBase):
     node_id: str = Field(min_length=1)
 
 
+class Unregister(_MessageBase):
+    type: Literal["unregister"] = "unregister"
+
+
+class Unregistered(_MessageBase):
+    type: Literal["unregistered"] = "unregistered"
+
+
 class GPUUsage(_StrictModel):
     name: str = Field(min_length=1)
     percent: float | None = Field(default=None, ge=0, le=100)
@@ -349,6 +357,8 @@ Message = Annotated[
     | RegistrationPending
     | Registered
     | CredentialsSaved
+    | Unregister
+    | Unregistered
     | Heartbeat
     | Progress
     | Finished
@@ -371,6 +381,8 @@ _MESSAGE_MODELS = (
     RegistrationPending,
     Registered,
     CredentialsSaved,
+    Unregister,
+    Unregistered,
     Heartbeat,
     Progress,
     Finished,

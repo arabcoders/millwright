@@ -36,6 +36,7 @@ from common.protocol import (
     NodeCapabilities,
     OfferedJob,
     SetLimits,
+    Unregister,
     Welcome,
     WorkspaceChallenge,
     parse_message,
@@ -1069,6 +1070,12 @@ async def test_uncommitted_credentials_claim(env: AgentEnv) -> None:
     assert await agent._session(issued) is False
     assert (config.node_id, config.token) == ("node-issued", "issued-token")
 
+    revoked = FakeHubConn([Unregister().model_dump(mode="json")])
+    assert await agent._session(revoked) is False
+    assert revoked.sent_of("unregistered")
+    assert config.node_id is None and config.token == ""
+    assert not (env.workspace / "node-credentials.json").exists()
+
     replacement = FakeHubConn(
         [
             RegistrationPending(request_id="request-b").model_dump(mode="json"),
@@ -1078,12 +1085,34 @@ async def test_uncommitted_credentials_claim(env: AgentEnv) -> None:
         ]
     )
     assert await asyncio.wait_for(agent._session(replacement), timeout=5)
-    assert replacement.sent[0]["node_id"] == "node-issued"
-    assert replacement.sent[0]["token"] == "issued-token"
+    assert replacement.sent[0]["node_id"] is None
+    assert replacement.sent[0]["token"] == ""
     assert json.loads((env.workspace / "node-credentials.json").read_text()) == {
         "node_id": "node-replaced",
         "token": "replacement-token",
     }
+
+
+@pytest.mark.asyncio
+async def test_unregister_delete_failure(env: AgentEnv, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = make_config(env, node_id="node-a", token="node-token")
+    agent = Agent(config)
+    agent._save_credentials("node-a", config.token)
+    path = env.workspace / "node-credentials.json"
+    unlink = Path.unlink
+
+    def denied(current, *args, **kwargs):
+        if current == path:
+            raise PermissionError("Credential file is not writable.")
+        return unlink(current, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", denied)
+    conn = FakeHubConn([Unregister().model_dump(mode="json")])
+    with pytest.raises(PermissionError):
+        await agent._session(conn)
+    assert not conn.sent_of("unregistered")
+    assert config.node_id == "node-a" and config.token == "node-token"
+    assert path.is_file()
 
 
 @pytest.mark.asyncio
