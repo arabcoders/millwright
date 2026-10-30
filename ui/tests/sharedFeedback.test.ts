@@ -415,8 +415,10 @@ test('node lanes update independently', async () => {
   let requests = 0;
   const exported = await load('composables/useNodes.ts', {
     '~/utils': {
-      request: async () => {
+      request: async (path: string) => {
         requests++;
+        if (path === '/api/nodes/registration')
+          return Response.json({ enabled: true, pending: [] });
         return Response.json([{ id: 1, name: 'node', state: 'offline' }]);
       },
     },
@@ -439,13 +441,14 @@ test('node lanes update independently', async () => {
     active_mkv_stats: 0,
   });
   nodes.setStatus('new-node', 'online', 0, [], 0, 0, 0);
-  expect(requests).toBe(1);
-  await nodes.reload();
   expect(requests).toBe(2);
+  await nodes.reload();
+  expect(requests).toBe(4);
 });
 
 test('settings preserve rejected drafts', async () => {
   const original: OperationalSettings = {
+    node_registration_enabled: true,
     max_healthchecks: 1,
     max_probes: 4,
     max_mkv_stats: 1,
@@ -498,6 +501,53 @@ test('settings preserve rejected drafts', async () => {
   expect(settings.draft.value!.playback.segment_duration_s).toBe(8);
   expect(settings.isDirty.value).toBe(true);
   expect(settings.loading.value).toBe(false);
+});
+
+test('node registration retains failures', async () => {
+  let fail = true;
+  const errors: string[] = [];
+  const successes: string[] = [];
+  const exported = await load(
+    'composables/useNodes.ts',
+    {
+      '~/utils': {
+        request: async () => {
+          if (fail) throw new Error('Connection lost');
+          return new Response(null, { status: 202 });
+        },
+      },
+      '~/composables/useApiErrorMessage': {
+        useApiErrorMessage: () => ({ messageFor: (text: string) => text }),
+      },
+    },
+    {
+      useNotification: () => ({
+        success: (text: string) => successes.push(text),
+        error: (text: string) => errors.push(text),
+      }),
+    },
+  );
+  const nodes = (exported.useNodes as typeof useNodes)();
+  nodes.setRegistration({
+    enabled: true,
+    pending: [{ request_id: 'request-a', capabilities: {} }],
+  });
+  await expect(nodes.claimNode('request-a')).rejects.toThrow('Connection lost');
+  await expect(nodes.allowRegistration(false)).rejects.toThrow('Connection lost');
+  expect(nodes.registration.value?.enabled).toBe(true);
+  expect(nodes.registration.value?.pending.map((node) => node.request_id)).toEqual(['request-a']);
+  expect(errors).toEqual(['Connection lost', 'Connection lost']);
+  expect(successes).toEqual([]);
+  fail = false;
+  await nodes.claimNode('request-a');
+  expect(nodes.registration.value?.pending).toEqual([]);
+  nodes.setRegistration({
+    enabled: true,
+    pending: [{ request_id: 'request-b', capabilities: {} }],
+  });
+  await nodes.allowRegistration(false);
+  expect(nodes.registration.value).toEqual({ enabled: false, pending: [] });
+  expect(successes).toHaveLength(2);
 });
 
 test('cancels queued dialogs', async () => {

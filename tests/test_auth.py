@@ -603,11 +603,10 @@ async def test_authentication_required(factory) -> None:
 
 @pytest.mark.asyncio
 async def test_api_key_with_oidc(factory) -> None:
-    app = create_app(factory, config=make_config(api_key="server-cli-key", node_enrollment_token="node-key"))
+    app = create_app(factory, config=make_config(api_key="server-cli-key"))
     async with make_ui(app) as ui:
         assert (await ui.get("/api/system")).status_code == 401
         assert (await ui.get("/api/system", headers={"Authorization": "Bearer wrong"})).status_code == 401
-        assert (await ui.get("/api/system", headers={"Authorization": "Bearer node-key"})).status_code == 401
         headers = {"Authorization": "Bearer server-cli-key"}
         assert (await ui.get("/api/system", headers=headers)).status_code == 200
         assert (await ui.post("/api/auth/logout", headers=headers)).status_code == 400

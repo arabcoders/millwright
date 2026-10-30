@@ -35,8 +35,7 @@ from common.protocol import (
     ActiveAttempt,
     AttemptMissing,
     Cancel,
-    Enrolled,
-    EnrollmentSaved,
+    CredentialsSaved,
     Error,
     Finished,
     Heartbeat,
@@ -45,6 +44,8 @@ from common.protocol import (
     NodeCapabilities,
     OfferedJob,
     Progress,
+    Registered,
+    RegistrationPending,
     SetLimits,
     Welcome,
     WorkspaceChallenge,
@@ -108,8 +109,7 @@ class HubConnection(Protocol):
 @dataclass(kw_only=True)
 class AgentConfig:
     node_id: str | None = None
-    token: str
-    enrollment_token: str | None = None
+    token: str = ""
     credentials_path: Path | None = None
     server_url: str
     workspace_dir: str
@@ -129,7 +129,7 @@ class _WebSocketConnection:
     def __init__(self, ws: ClientConnection, config: AgentConfig) -> None:
         self._ws = ws
         self._config = config
-        self._secrets = (config.token, config.enrollment_token or "")
+        self._secrets = (config.token,)
 
     async def send_json(self, data: dict) -> None:
         await self._ws.send(json.dumps(data))
@@ -151,7 +151,7 @@ class _WebSocketConnection:
                 frame.code if frame is not None else 1006,
                 redact(
                     reason,
-                    secrets=(*self._secrets, self._config.token, self._config.enrollment_token or ""),
+                    secrets=(*self._secrets, self._config.token),
                 ),
                 extra={"operation": "node.connection.closed"},
             )
@@ -203,7 +203,6 @@ class Agent:
         self._transcode_limit = 1
         self._lane_limits = {"healthcheck": 1, "mkv_stats": 1}
         self._active_lanes = {"healthcheck": 0, "mkv_stats": 0}
-        self._enroll = config.node_id is None
         self._active_transcodes = 0
         self._cpu_sample: tuple[int, int] | None = None
 
@@ -225,15 +224,12 @@ class Agent:
                         context = "The hub is temporarily unavailable. "
                     elif isinstance(exc, websockets.exceptions.InvalidStatus):
                         cause = f"HTTP {exc.response.status_code} rejected the WebSocket upgrade."
-                        context = (
-                            "No enrollment token has been sent. "
-                            "Check /api/hub routing and WebSocket upgrades on the server and reverse proxy. "
-                        )
+                        context = "Check /api/hub routing and WebSocket upgrades on the server and reverse proxy. "
                     else:
                         userinfo = urlsplit(self._config.server_url).netloc.rpartition("@")[0]
                         cause = error_message(
                             exc,
-                            secrets=(self._config.token, self._config.enrollment_token or "", userinfo),
+                            secrets=(self._config.token, userinfo),
                         )
                         if isinstance(exc, TimeoutError):
                             context = "Connection timed out before the WebSocket upgrade completed. "
@@ -265,7 +261,7 @@ class Agent:
                     reason = (
                         "Connection dropped without a WebSocket close handshake"
                         if exc.rcvd is None and exc.sent is None
-                        else redact(str(exc), secrets=(self._config.token, self._config.enrollment_token or ""))
+                        else redact(str(exc), secrets=(self._config.token,))
                     )
                     if frame is not None and frame.code == 1012:
                         LOG.info("Node hub is shutting down or restarting. Reconnecting in %.1f seconds.", backoff)
@@ -275,12 +271,8 @@ class Agent:
                     LOG.error(
                         "Node hub session ended unexpectedly.",
                         extra={
-                            "error": error_message(
-                                exc, secrets=(self._config.token, self._config.enrollment_token or "")
-                            ),
-                            "traceback": error_traceback(
-                                exc, secrets=(self._config.token, self._config.enrollment_token or "")
-                            ),
+                            "error": error_message(exc, secrets=(self._config.token,)),
+                            "traceback": error_traceback(exc, secrets=(self._config.token,)),
                         },
                     )
                 finally:
@@ -383,7 +375,7 @@ class Agent:
 
     async def _session(self, conn: HubConnection) -> bool:
         self._conn = conn
-        credentials = (self._config.token, self._config.enrollment_token or "")
+        credentials = (self._config.token,)
         hello = Hello(
             active_attempts=[
                 ActiveAttempt(job_id=job_id, attempt_id=attempt_id)
@@ -394,10 +386,8 @@ class Agent:
                     if not task.done()
                 )
             ],
-            node_id=None if self._enroll else self._config.node_id,
-            token=self._config.enrollment_token
-            if self._enroll and self._config.enrollment_token
-            else self._config.token,
+            node_id=self._config.node_id,
+            token=self._config.token,
             capabilities=self._config.capabilities.model_copy(
                 update={
                     "max_transcodes": 1,
@@ -430,9 +420,13 @@ class Agent:
                 },
             )
             return False
+        if isinstance(first, RegistrationPending):
+            LOG.info("Node registration request %s is waiting to be claimed on the Nodes page.", first.request_id)
+            data = await conn.recv_json()
+            if data is None:
+                return False
+            first = parse_message(data)
         if isinstance(first, Error):
-            if first.code == "auth" and self._config.node_id is not None and self._config.enrollment_token:
-                self._enroll = True
             LOG.warning(
                 "Node hub handshake rejected at welcome: %s (%s)",
                 redact(first.message, secrets=credentials),
@@ -469,8 +463,6 @@ class Agent:
                 )
                 return False
         if isinstance(first, Error):
-            if first.code == "auth" and self._config.node_id is not None and self._config.enrollment_token:
-                self._enroll = True
             LOG.warning(
                 "Node hub handshake rejected after workspace: %s (%s)",
                 redact(first.message, secrets=credentials),
@@ -482,46 +474,42 @@ class Agent:
                 },
             )
             return False
-        if isinstance(first, Enrolled):
-            if not self._enroll:
-                LOG.warning("Node hub handshake received unexpected Enrolled while not enrolling.")
-                return False
+        if isinstance(first, Registered):
             credentials = (*credentials, first.token)
             if self._config.credentials_path is not None:
                 try:
                     self._save_credentials(first.node_id, first.token)
                 except OSError as exc:
                     LOG.warning(
-                        "Node hub enrollment failed while saving credentials.",
+                        "Node registration failed while saving credentials.",
                         extra={"error": error_message(exc, secrets=credentials)},
                     )
                     return False
             self._config.node_id = first.node_id
             self._config.token = first.token
-            self._enroll = False
-            await conn.send_json(EnrollmentSaved(node_id=first.node_id).model_dump(mode="json"))
+            await conn.send_json(CredentialsSaved(node_id=first.node_id).model_dump(mode="json"))
             try:
                 data = await asyncio.wait_for(conn.recv_json(), timeout=_HANDSHAKE_TIMEOUT_S)
             except (TimeoutError, ValueError) as exc:
                 LOG.warning(
-                    "Node hub enrollment handshake failed.",
+                    "Node registration handshake failed.",
                     extra={"error": error_message(exc, secrets=credentials)},
                 )
                 return False
             if data is None:
-                LOG.warning("Node hub handshake ended without a welcome reply after enrollment.")
+                LOG.warning("Node hub handshake ended without a welcome reply after registration.")
                 return False
             try:
                 first = parse_message(data)
             except ValueError as exc:
                 LOG.warning(
-                    "Node hub enrollment handshake reply was invalid.",
+                    "Node registration handshake reply was invalid.",
                     extra={"error": error_message(exc, secrets=credentials)},
                 )
                 return False
             if isinstance(first, Error):
                 LOG.warning(
-                    "Node hub handshake rejected after enrollment: %s (%s)",
+                    "Node hub handshake rejected after registration: %s (%s)",
                     redact(first.message, secrets=credentials),
                     redact(first.code, secrets=credentials),
                     extra={
@@ -644,9 +632,7 @@ class Agent:
             except Exception as exc:
                 LOG.warning(
                     "Ignored invalid hub message.",
-                    extra={
-                        "error": error_message(exc, secrets=(self._config.token, self._config.enrollment_token or ""))
-                    },
+                    extra={"error": error_message(exc, secrets=(self._config.token,))},
                 )
                 continue
             if isinstance(msg, Error):
@@ -1292,10 +1278,8 @@ class Agent:
                 extra={
                     "operation": "node.heartbeat.failed",
                     "node_id": self._config.node_id,
-                    "error": error_message(exc, secrets=(self._config.token, self._config.enrollment_token or "")),
-                    "traceback": error_traceback(
-                        exc, secrets=(self._config.token, self._config.enrollment_token or "")
-                    ),
+                    "error": error_message(exc, secrets=(self._config.token,)),
+                    "traceback": error_traceback(exc, secrets=(self._config.token,)),
                 },
             )
             raise
@@ -1350,7 +1334,7 @@ class Agent:
                 workspace_free_bytes=shutil.disk_usage(root).free,
             ).model_dump(mode="json")
         except (OSError, ValueError) as exc:
-            secrets = (self._config.token, self._config.enrollment_token or "")
+            secrets = (self._config.token,)
             cause = error_message(exc, secrets=secrets)
             LOG.warning(
                 "Node workspace verification failed. Resolved workspace: %s. Challenge: %s. "

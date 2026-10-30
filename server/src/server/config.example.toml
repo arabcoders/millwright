@@ -17,9 +17,6 @@
 # Instance API key for CLI commands and password resets. Keep it private.
 api_key = "file:secrets/api_key"
 
-# Node enrollment secret. It does not grant API access. Keep it separate from api_key.
-node_enrollment_token = "file:secrets/node_enrollment_token"
-
 # IANA timezone for schedules, calendar statistics, and displayed dates.
 # Defaults to $TZ, then UTC.
 # tz = "Asia/Kuwait"

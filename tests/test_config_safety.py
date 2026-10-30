@@ -44,13 +44,10 @@ def test_env_validation_privacy(
 ) -> None:
     monkeypatch.setenv(variable, value)
     monkeypatch.setenv("MW_API_KEY", "audit-secret-marker")
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "audit-secret-marker")
     monkeypatch.setenv("MW_NODE_STATE_PATH", str(tmp_path / "state"))
     path = tmp_path / "config.toml"
     path.write_text(
-        f'enrollment_token = "enroll-secret"\nserver_url = "ws://hub"\nworkspace_dir = "{tmp_path / "workspace"}"\n'
-        if node
-        else "",
+        f'server_url = "ws://hub"\nworkspace_dir = "{tmp_path / "workspace"}"\n' if node else "",
         encoding="utf-8",
     )
     with pytest.raises(ValueError) as error:
@@ -112,24 +109,6 @@ async def test_trash_contains_workspace(tmp_path: Path) -> None:
     async with database_context("config-nested-roots") as db:
         with pytest.raises(ValueError):
             create_app(db, config=config)
-
-
-def test_node_validation_privacy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    marker = "audit-secret-marker"
-    for key in ("MW_NODE_ENROLLMENT_TOKEN", "MW_NODE_SERVER_URL", "MW_NODE_WORKSPACE_DIR"):
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("MW_NODE_STATE_PATH", str(tmp_path / "state"))
-    path = tmp_path / "node.toml"
-    path.write_text(
-        f'enrollment_token = ["{marker}"]\nserver_url = "ws://hub"\nworkspace_dir = "{tmp_path / "workspace"}"\n',
-        encoding="utf-8",
-    )
-    with pytest.raises(ValueError) as error:
-        load_settings(path, must_exist=True)
-    leaked = marker in str(error.value)
-    assert leaked is False
-    traceback_leaked = marker in "".join(traceback.format_exception(error.value))
-    assert traceback_leaked is False
 
 
 @pytest.mark.asyncio

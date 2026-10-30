@@ -701,14 +701,17 @@ async def wait_for(pred, event, timeout=3):
             await event.wait()
 
 
-async def serve(h, conn, *, enroll=False):
+async def serve(h, conn, *, claim=False):
     task = asyncio.create_task(h.serve_connection(conn))
     try:
+        if claim:
+            await wait_for(lambda: conn.messages("registration_pending"), conn.changed)
+            assert h.claim_node(conn.messages("registration_pending")[0]["request_id"])
         await wait_for(lambda: conn.messages("workspace_challenge"), conn.changed)
         answer_challenge(h, conn)
-        if enroll:
-            await wait_for(lambda: conn.messages("enrolled"), conn.changed)
-            conn.push({"v": 1, "type": "enrollment_saved", "node_id": conn.messages("enrolled")[0]["node_id"]})
+        if claim:
+            await wait_for(lambda: conn.messages("registered"), conn.changed)
+            conn.push({"v": 1, "type": "credentials_saved", "node_id": conn.messages("registered")[0]["node_id"]})
         await wait_for(lambda: conn.messages("welcome"), conn.changed)
         await asyncio.wait_for(conn.ready.wait(), 3)
     except BaseException:
@@ -4156,8 +4159,9 @@ async def test_idle_hello_availability(env):
 
 
 @pytest.mark.asyncio
-async def test_hello_rejects_unlocked(env):
+async def test_registration_rejects_unlocked(env):
     h = hub(env)
+    h.set_registration_enabled(False)
     conn = FakeConn([hello(token="wrong")])
     async with h.dispatch_lock:
         await asyncio.wait_for(h.serve_connection(conn), 3)
@@ -4316,19 +4320,59 @@ async def test_handshake_io_drains(env, monkeypatch, phase):
 
 
 @pytest.mark.asyncio
-async def test_handshake_rejects(env):
-    async with env.factory() as s:
-        s.add(await register_node(s, "node-a", "right"))
-        await s.commit()
+async def test_invalid_credentials_pending(env):
+    h = hub(env)
+    await file_job(env)
     c = FakeConn([hello(token="wrong")])
-    await hub(env).serve_connection(c)
-    assert c.messages("error")[0]["code"] == "auth" and c.closed == 4401
+    task = asyncio.create_task(h.serve_connection(c))
+    try:
+        await wait_for(lambda: c.messages("registration_pending"), c.changed)
+        assert not c.messages("workspace_challenge") and not c.messages("registered")
+        async with asyncio.timeout(2), h.dispatch_lock:
+            assert c.messages("registration_pending")[0]["request_id"] in h.pending_nodes
+        await h.dispatch_once()
+        assert not c.messages("job")
+        async with env.factory() as session:
+            saved = await get_node(session, "node-a")
+            assert saved is not None and saved.token_hash == hash_token("tok")
+            assert len(list(await session.scalars(select(NodeRow)))) == 1
+    finally:
+        c.disconnect()
+        await asyncio.wait_for(task, 2)
+    assert not h.pending_nodes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["cancel", "connection"])
+async def test_pending_cleanup(env, failure):
+    class BrokenConn(FakeConn):
+        async def recv_json(self):
+            data = await super().recv_json()
+            if data is None:
+                raise OSError("Connection lost.")
+            return data
+
+    h = hub(env)
+    conn = BrokenConn([hello(name=None, token="")])
+    task = asyncio.create_task(h.serve_connection(conn))
+    try:
+        await wait_for(lambda: conn.messages("registration_pending"), conn.changed)
+        if failure == "cancel":
+            task.cancel()
+        else:
+            conn.disconnect()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
+        assert not h.pending_nodes and not conn.messages("registered")
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["node", "missing", "digest", "permission", "verification", "closure"])
 async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
-    h = hub(env, enrollment_token="fleet-secret")
+    h = hub(env)
     conn = FakeConn([hello()])
     task = asyncio.create_task(h.serve_connection(conn))
     try:
@@ -4342,13 +4386,13 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
             elif failure == "permission":
 
                 def denied(_path):
-                    raise PermissionError("Response denied for tok fleet-secret")
+                    raise PermissionError("Response denied for tok")
 
                 monkeypatch.setattr(Path, "read_bytes", denied)
             else:
 
                 def invalid(*_args):
-                    raise ValueError("Unsafe shared mount for tok fleet-secret")
+                    raise ValueError("Unsafe shared mount for tok")
 
                 monkeypatch.setattr("server.nodehub.hub._check_challenge", invalid)
         elif failure == "closure":
@@ -4360,7 +4404,7 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
                     response_path=challenge["response_path"],
                     workspace_ready=failure != "node",
                     workspace_free_bytes=0,
-                    error="Shared mount missing for tok fleet-secret" if failure == "node" else None,
+                    error="Shared mount missing for tok" if failure == "node" else None,
                 ).model_dump(mode="json")
             )
         await asyncio.wait_for(task, 2)
@@ -4372,7 +4416,7 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
         assert diagnostics
         if failure in {"missing", "digest"}:
             assert str(response_path) in diagnostics
-        assert "tok" not in caplog.text + diagnostics and "fleet-secret" not in caplog.text + diagnostics
+        assert "tok" not in caplog.text + diagnostics
     finally:
         conn.disconnect()
         if not task.done():
@@ -4382,10 +4426,10 @@ async def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
 
 @pytest.mark.asyncio
 async def test_workspace_creation_diagnostics(env, monkeypatch, caplog):
-    h = hub(env, enrollment_token="fleet-secret")
+    h = hub(env)
 
     def denied(*_args):
-        raise PermissionError("Challenge directory denied for tok fleet-secret")
+        raise PermissionError("Challenge directory denied for tok")
 
     monkeypatch.setattr("server.nodehub.hub._prepare_challenge", denied)
     conn = FakeConn([hello()])
@@ -4393,24 +4437,27 @@ async def test_workspace_creation_diagnostics(env, monkeypatch, caplog):
     assert conn.messages("error")[0]["code"] == "workspace"
     diagnostics = "\n".join(getattr(record, "error", "") for record in caplog.records)
     assert diagnostics
-    assert "tok" not in caplog.text + diagnostics and "fleet-secret" not in caplog.text + diagnostics
+    assert "tok" not in caplog.text + diagnostics
 
 
 @pytest.mark.asyncio
-async def test_enrollment_issues_token(env):
-    h = hub(env, enrollment_token="fleet-secret")
-    greeting = hello(name=None, token="fleet-secret")
+@pytest.mark.parametrize("name,token", [(None, ""), ("node-a", "wrong")])
+async def test_claim_issues_token(env, name, token):
+    h = hub(env)
+    greeting = hello(name=name, token=token)
     greeting["capabilities"].update(cpu_model="Intel(R) Core(TM) i9-14900K", gpus=["Intel UHD", "NVIDIA RTX 4090"])
     c = FakeConn([greeting])
-    task = await serve(h, c, enroll=True)
+    task = await serve(h, c, claim=True)
     try:
-        enrolled = c.messages("enrolled")[0]
-        assert enrolled["node_id"].startswith("node-")
-        assert enrolled["token"] != "fleet-secret"
+        registered = c.messages("registered")[0]
+        assert registered["node_id"].startswith("node-")
+        assert registered["token"] != token
         async with env.factory() as session:
-            node = await get_node(session, enrolled["node_id"])
+            node = await get_node(session, registered["node_id"])
             assert node is not None
-            assert node.token_hash == hash_token(enrolled["token"])
+            assert node.token_hash == hash_token(registered["token"])
+            saved = await get_node(session, "node-a")
+            assert saved is not None and saved.token_hash == hash_token("tok")
             assert node.transcode_limit == 1
             assert node.display_name.startswith("i9-igpu-nvidia-")
             assert len(node.display_name.rsplit("-", 1)[-1]) == 4
@@ -4420,21 +4467,47 @@ async def test_enrollment_issues_token(env):
 
 
 @pytest.mark.asyncio
-async def test_enrollment_rejects_named(env):
-    h = hub(env, enrollment_token="fleet-secret")
-    c = FakeConn([hello(name="arbitrary", token="fleet-secret")])
-    await h.serve_connection(c)
-    assert c.messages("error")[0]["code"] == "auth"
-    async with env.factory() as session:
-        assert await get_node(session, "arbitrary") is None
+async def test_registration_toggle(env):
+    h = hub(env)
+    registered = FakeConn([hello()])
+    active = await serve(h, registered)
+    pending = FakeConn([hello(name=None, token="")])
+    waiting = asyncio.create_task(h.serve_connection(pending))
+    retry = FakeConn([hello(name=None, token="")])
+    retried = None
+    try:
+        await wait_for(lambda: pending.messages("registration_pending"), pending.changed)
+        request_id = pending.messages("registration_pending")[0]["request_id"]
+        h.set_registration_enabled(False)
+        await asyncio.wait_for(waiting, 2)
+        assert not h.pending_nodes and not h.claim_node(request_id)
+        assert pending.messages("error")[0]["code"] == "registration"
+        assert h.entries["node-a"].workspace_ready and not registered.messages("error")
+        await asyncio.wait_for(h.serve_connection(retry), 2)
+        assert not retry.messages("registration_pending")
+        h.set_registration_enabled(True)
+        retry = FakeConn([hello(name=None, token="")])
+        retried = asyncio.create_task(h.serve_connection(retry))
+        await wait_for(lambda: retry.messages("registration_pending"), retry.changed)
+        assert len(h.pending_nodes) == 1
+        await asyncio.wait_for(h.aclose(), 2)
+        await asyncio.wait_for(retried, 2)
+        assert not h.pending_nodes and retry.messages("error")[0]["code"] == "registration"
+    finally:
+        registered.disconnect()
+        pending.disconnect()
+        retry.disconnect()
+        await asyncio.wait_for(asyncio.gather(active, waiting, *([retried] if retried else [])), 2)
 
 
 @pytest.mark.asyncio
-async def test_enrollment_workspace_failure(env):
-    h = hub(env, enrollment_token="fleet-secret")
-    c = FakeConn([hello(name=None, token="fleet-secret")])
+async def test_registration_workspace_failure(env):
+    h = hub(env)
+    c = FakeConn([hello(name=None, token="")])
     task = asyncio.create_task(h.serve_connection(c))
     try:
+        await wait_for(lambda: c.messages("registration_pending"), c.changed)
+        assert h.claim_node(c.messages("registration_pending")[0]["request_id"])
         await wait_for(lambda: c.messages("workspace_challenge"), c.changed)
         challenge = c.messages("workspace_challenge")[0]
         c.push(
@@ -4456,17 +4529,19 @@ async def test_enrollment_workspace_failure(env):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["closure", "parse", "timeout", "wrong_node"])
-async def test_enrollment_save_failure(env, caplog, failure):
-    class EnrollmentConn(FakeConn):
+async def test_registration_save_failure(env, caplog, failure):
+    class RegistrationConn(FakeConn):
         async def recv_json(self):
-            if failure == "timeout" and self.messages("enrolled"):
+            if failure == "timeout" and self.messages("registered"):
                 raise TimeoutError
             return await super().recv_json()
 
-    h = hub(env, enrollment_token="fleet-secret")
-    c = EnrollmentConn([hello(name=None, token="fleet-secret")])
+    h = hub(env)
+    c = RegistrationConn([hello(name=None, token="")])
     task = asyncio.create_task(h.serve_connection(c))
     try:
+        await wait_for(lambda: c.messages("registration_pending"), c.changed)
+        assert h.claim_node(c.messages("registration_pending")[0]["request_id"])
         await wait_for(lambda: c.messages("workspace_challenge"), c.changed)
         challenge = c.messages("workspace_challenge")[0]
         path = h.workspace_dir / challenge["response_path"]
@@ -4480,12 +4555,14 @@ async def test_enrollment_save_failure(env, caplog, failure):
                 workspace_free_bytes=10,
             ).model_dump(mode="json")
         )
-        await wait_for(lambda: c.messages("enrolled"), c.changed)
-        issued_id = c.messages("enrolled")[0]["node_id"]
+        await wait_for(lambda: c.messages("registered"), c.changed)
+        issued_id = c.messages("registered")[0]["node_id"]
+        async with env.factory() as session:
+            assert await get_node(session, issued_id) is None
         if failure == "parse":
-            c.push({"v": 1, "type": "enrollment_saved"})
+            c.push({"v": 1, "type": "credentials_saved"})
         elif failure == "wrong_node":
-            c.push({"v": 1, "type": "enrollment_saved", "node_id": "other-node"})
+            c.push({"v": 1, "type": "credentials_saved", "node_id": "other-node"})
         elif failure == "closure":
             c.push(None)
         await asyncio.wait_for(task, 2)

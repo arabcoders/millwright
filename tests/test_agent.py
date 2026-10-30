@@ -28,7 +28,8 @@ from common.protocol import (
     ActiveAttempt,
     AttemptMissing,
     Cancel,
-    Enrolled,
+    Registered,
+    RegistrationPending,
     Error,
     Finished,
     JobOffer,
@@ -113,8 +114,7 @@ class FailingHubConn(FakeHubConn):
 def make_config(env: AgentEnv, **overrides) -> AgentConfig:
     fields: dict = {
         "node_id": None,
-        "token": "enroll-secret",
-        "enrollment_token": "enroll-secret",
+        "token": "",
         "credentials_path": env.workspace / "node-credentials.json",
         "server_url": "ws://hub/api/hub",
         "workspace_dir": str(env.workspace),
@@ -1031,10 +1031,11 @@ async def test_heartbeat_flows(env: AgentEnv, monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
-async def test_enrollment_persists_pair(env: AgentEnv) -> None:
+async def test_registration_persists_pair(env: AgentEnv) -> None:
     conn = FakeHubConn(
         [
-            Enrolled(node_id="node-a", token="node-token").model_dump(mode="json"),
+            RegistrationPending(request_id="request-a").model_dump(mode="json"),
+            Registered(node_id="node-a", token="node-token").model_dump(mode="json"),
             Welcome(timezone="UTC", active_attempts=[]).model_dump(mode="json"),
             None,
         ]
@@ -1043,7 +1044,8 @@ async def test_enrollment_persists_pair(env: AgentEnv) -> None:
     agent = Agent(config)
     assert await asyncio.wait_for(agent._session(conn), timeout=5)
     assert conn.sent[0]["node_id"] is None
-    assert conn.sent[0]["token"] == "enroll-secret"
+    assert conn.sent[0]["token"] == ""
+    assert conn.sent[1] == {"v": 1, "type": "credentials_saved", "node_id": "node-a"}
     assert json.loads((env.workspace / "node-credentials.json").read_text()) == {
         "node_id": "node-a",
         "token": "node-token",
@@ -1051,56 +1053,33 @@ async def test_enrollment_persists_pair(env: AgentEnv) -> None:
 
 
 @pytest.mark.asyncio
-async def test_auth_rejection_enrolls(env: AgentEnv) -> None:
+async def test_rejected_credentials_stay(env: AgentEnv) -> None:
     conn = FakeHubConn([Error(code="auth", message="rejected").model_dump(mode="json")])
     config = make_config(env, node_id="node-a", token="old-token")
     agent = Agent(config)
     assert await agent._session(conn) is False
     assert config.node_id == "node-a" and config.token == "old-token"
-    assert agent._enroll is True
-
-    next_conn = FakeHubConn(
-        [
-            Enrolled(node_id="node-new", token="new-token").model_dump(mode="json"),
-            Welcome(timezone="UTC", active_attempts=[]).model_dump(mode="json"),
-            None,
-        ]
-    )
-    assert await asyncio.wait_for(agent._session(next_conn), 5)
-    assert next_conn.sent[0]["node_id"] is None
-    assert next_conn.sent[0]["token"] == "enroll-secret"
-    assert next_conn.sent[1] == {"v": 1, "type": "enrollment_saved", "node_id": "node-new"}
-    assert json.loads((env.workspace / "node-credentials.json").read_text()) == {
-        "node_id": "node-new",
-        "token": "new-token",
-    }
-
-    reconnect = FakeHubConn([Welcome(timezone="UTC", active_attempts=[]).model_dump(mode="json"), None])
-    assert await asyncio.wait_for(agent._session(reconnect), 5)
-    assert reconnect.sent[0]["node_id"] == "node-new"
-    assert reconnect.sent[0]["token"] == "new-token"
 
 
 @pytest.mark.asyncio
-async def test_uncommitted_credentials_reenroll(env: AgentEnv) -> None:
+async def test_uncommitted_credentials_claim(env: AgentEnv) -> None:
     config = make_config(env)
     agent = Agent(config)
-    issued = FakeHubConn([Enrolled(node_id="node-issued", token="issued-token").model_dump(mode="json"), None])
+    issued = FakeHubConn([Registered(node_id="node-issued", token="issued-token").model_dump(mode="json"), None])
     assert await agent._session(issued) is False
     assert (config.node_id, config.token) == ("node-issued", "issued-token")
 
-    rejected = FakeHubConn([Error(code="auth", message="not committed").model_dump(mode="json")])
-    assert await agent._session(rejected) is False
-    assert agent._enroll is True
-
     replacement = FakeHubConn(
         [
-            Enrolled(node_id="node-replaced", token="replacement-token").model_dump(mode="json"),
+            RegistrationPending(request_id="request-b").model_dump(mode="json"),
+            Registered(node_id="node-replaced", token="replacement-token").model_dump(mode="json"),
             Welcome(timezone="UTC", active_attempts=[]).model_dump(mode="json"),
             None,
         ]
     )
     assert await asyncio.wait_for(agent._session(replacement), timeout=5)
+    assert replacement.sent[0]["node_id"] == "node-issued"
+    assert replacement.sent[0]["token"] == "issued-token"
     assert json.loads((env.workspace / "node-credentials.json").read_text()) == {
         "node_id": "node-replaced",
         "token": "replacement-token",
@@ -1139,7 +1118,7 @@ def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
     if failure == "permission":
 
         def denied(_path):
-            raise PermissionError("Access denied for node-secret and enroll-secret")
+            raise PermissionError("Access denied for node-secret")
 
         monkeypatch.setattr(Path, "read_bytes", denied)
     monkeypatch.chdir(env.workspace.parent)
@@ -1153,13 +1132,13 @@ def test_workspace_failure_diagnostics(env, monkeypatch, caplog, failure):
     failed = next(record for record in caplog.records if getattr(record, "operation", None) == "node.workspace.failed")
     assert getattr(failed, "error") == response["error"]
     assert failed.levelno == logging.WARNING
-    for secret in (config.token, config.enrollment_token):
+    for secret in (config.token,):
         assert secret not in caplog.text + getattr(failed, "error")
         assert secret not in response["error"]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("phase", ["initial", "workspace", "enrollment"])
+@pytest.mark.parametrize("phase", ["initial", "workspace", "registration"])
 @pytest.mark.parametrize("failure", ["missing", "unexpected", "invalid", "timeout", "auth"])
 async def test_handshake_failure_reason(env, caplog, phase, failure):
     incoming = []
@@ -1170,17 +1149,16 @@ async def test_handshake_failure_reason(env, caplog, phase, failure):
                 mode="json"
             )
         )
-    elif phase == "enrollment":
-        incoming.append(Enrolled(node_id="node-issued", token="issued-secret").model_dump(mode="json"))
+    elif phase == "registration":
+        incoming.append(Registered(node_id="node-issued", token="issued-secret").model_dump(mode="json"))
     reply = {
         "missing": None,
         "unexpected": SetLimits(max_transcodes=1, max_healthchecks=1, max_mkv_stats=1).model_dump(mode="json"),
-        "invalid": {"v": 1, "type": "welcome", "heartbeat_s": "node-secret enroll-secret issued-secret"},
+        "invalid": {"v": 1, "type": "welcome", "heartbeat_s": "node-secret issued-secret"},
         "timeout": None,
         "auth": Error(
             code="auth",
-            message="Authentication revoked. node-secret enroll-secret"
-            + (" issued-secret" if phase == "enrollment" else ""),
+            message="Authentication revoked. node-secret" + (" issued-secret" if phase == "registration" else ""),
         ).model_dump(mode="json"),
     }[failure]
     incoming.append(reply)
@@ -1193,7 +1171,7 @@ async def test_handshake_failure_reason(env, caplog, phase, failure):
             return data
 
     config = make_config(env, token="node-secret")
-    if phase != "enrollment":
+    if phase != "registration":
         config.node_id = "node-a"
     agent = Agent(config)
     assert await asyncio.wait_for(agent._session(DiagnosticConn(incoming)), 2) is False
@@ -1208,22 +1186,12 @@ async def test_handshake_failure_reason(env, caplog, phase, failure):
     if failure == "auth":
         rejected = next(record for record in records if getattr(record, "operation", None) == "node.handshake.rejected")
         assert getattr(rejected, "outcome") == "auth"
-    for secret in ("node-secret", "enroll-secret", "issued-secret"):
+    for secret in ("node-secret", "issued-secret"):
         assert secret not in caplog.text + "".join(getattr(record, "error", "") for record in records)
 
 
 @pytest.mark.asyncio
-async def test_enrolled_reply_unexpected(env, caplog):
-    conn = FakeHubConn([Enrolled(node_id="node-a", token="issued-secret").model_dump(mode="json")])
-    agent = Agent(make_config(env, node_id="node-a"))
-    assert await agent._session(conn) is False
-    records = [record for record in caplog.records if record.name == "node.agent"]
-    assert records and all(record.levelno == logging.WARNING for record in records)
-    assert "issued-secret" not in caplog.text
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("reason", ["Normal shutdown.", "Rejected old-secret node-secret enroll-secret"])
+@pytest.mark.parametrize("reason", ["Normal shutdown.", "Rejected old-secret node-secret"])
 async def test_websocket_close_diagnostics(env, monkeypatch, caplog, reason):
     frame = Close(1000, reason)
 
@@ -1252,24 +1220,24 @@ async def test_websocket_close_diagnostics(env, monkeypatch, caplog, reason):
     assert forwarded[0]["entries"][0]["message"] == closed_record.getMessage()
     if reason == "Normal shutdown.":
         assert reason in closed_record.getMessage()
-    for secret in ("old-secret", "node-secret", "enroll-secret"):
+    for secret in ("old-secret", "node-secret"):
         assert secret not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_enrollment_save_diagnostics(env, monkeypatch, caplog):
+async def test_registration_save_diagnostics(env, monkeypatch, caplog):
     agent = Agent(make_config(env, token="node-secret"))
 
     def denied(*_args):
-        raise PermissionError("Credentials denied for node-secret enroll-secret issued-secret")
+        raise PermissionError("Credentials denied for node-secret issued-secret")
 
     monkeypatch.setattr(agent, "_save_credentials", denied)
-    conn = FakeHubConn([Enrolled(node_id="node-a", token="issued-secret").model_dump(mode="json")])
+    conn = FakeHubConn([Registered(node_id="node-a", token="issued-secret").model_dump(mode="json")])
     assert await agent._session(conn) is False
     records = [record for record in caplog.records if record.name == "node.agent"]
     assert any(getattr(record, "error", None) for record in records)
     assert records and all(record.levelno == logging.WARNING for record in records)
-    for secret in ("node-secret", "enroll-secret", "issued-secret"):
+    for secret in ("node-secret", "issued-secret"):
         assert secret not in caplog.text + "".join(getattr(record, "error", "") for record in records)
 
 
@@ -1621,7 +1589,7 @@ async def test_heartbeat_failure_disconnects(
     env: AgentEnv, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     sampled = asyncio.Event()
-    error = OSError("resource sample failed enroll-secret")
+    error = OSError("resource sample failed node-secret")
 
     async def sample(_previous):
         sampled.set()
@@ -1633,7 +1601,7 @@ async def test_heartbeat_failure_disconnects(
     monkeypatch.setattr(agent_module, "resource_sample", sample)
     monkeypatch.setattr(agent_module.asyncio, "sleep", sleep)
     caplog.set_level(logging.ERROR, logger="node.agent")
-    agent = Agent(make_config(env))
+    agent = Agent(make_config(env, token="node-secret"))
     conn = FakeHubConn([Welcome(timezone="UTC", active_attempts=[]).model_dump(mode="json")])
     try:
         with pytest.raises(OSError) as raised:
@@ -1647,8 +1615,8 @@ async def test_heartbeat_failure_disconnects(
         assert "resource sample failed" in getattr(failed, "error")
         traceback = getattr(failed, "traceback")
         assert traceback and traceback not in failed.getMessage()
-        assert "enroll-secret" not in traceback
-        assert "enroll-secret" not in caplog.text + getattr(failed, "error")
+        assert "node-secret" not in traceback
+        assert "node-secret" not in caplog.text + getattr(failed, "error")
     finally:
         await asyncio.wait_for(agent.aclose(), 2)
 

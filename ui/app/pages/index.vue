@@ -110,7 +110,7 @@
         :value="nodeStatus(node)"
         :hint="nodeUsageSummary(node)"
         hint-wrap
-        :tooltip="`${nodeUsageSummary(node)}. Usage reflects the whole system, not just Millwright.`"
+        :tooltip="`${nodeUsageSummary(node)}. Usage reflects the whole system`"
         icon="i-lucide-server"
       >
         <template #label>

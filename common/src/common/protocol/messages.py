@@ -82,7 +82,7 @@ class Hello(_MessageBase):
     type: Literal["hello"] = "hello"
 
     node_id: str | None = Field(default=None, min_length=1)
-    token: str = Field(min_length=1)
+    token: str = ""
     capabilities: NodeCapabilities = Field(default_factory=NodeCapabilities)
     active_attempts: list[ActiveAttempt]
 
@@ -109,15 +109,21 @@ class WorkspaceResponse(_MessageBase):
     _validate_path = field_validator("response_path")(_workspace_path)
 
 
-class Enrolled(_MessageBase):
-    type: Literal["enrolled"] = "enrolled"
+class RegistrationPending(_MessageBase):
+    type: Literal["registration_pending"] = "registration_pending"
+
+    request_id: str = Field(min_length=1)
+
+
+class Registered(_MessageBase):
+    type: Literal["registered"] = "registered"
 
     node_id: str = Field(min_length=1)
     token: str = Field(min_length=1)
 
 
-class EnrollmentSaved(_MessageBase):
-    type: Literal["enrollment_saved"] = "enrollment_saved"
+class CredentialsSaved(_MessageBase):
+    type: Literal["credentials_saved"] = "credentials_saved"
 
     node_id: str = Field(min_length=1)
 
@@ -340,8 +346,9 @@ Message = Annotated[
     Hello
     | WorkspaceChallenge
     | WorkspaceResponse
-    | Enrolled
-    | EnrollmentSaved
+    | RegistrationPending
+    | Registered
+    | CredentialsSaved
     | Heartbeat
     | Progress
     | Finished
@@ -361,8 +368,9 @@ _MESSAGE_MODELS = (
     Hello,
     WorkspaceChallenge,
     WorkspaceResponse,
-    Enrolled,
-    EnrollmentSaved,
+    RegistrationPending,
+    Registered,
+    CredentialsSaved,
     Heartbeat,
     Progress,
     Finished,

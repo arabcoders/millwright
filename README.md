@@ -66,7 +66,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/arabcoders/millwright/dev/in
 
 See the [installation guide](docs/installation.md) for requirements, storage, GPU access, and remote nodes.
 
-After starting Millwright, open `http://<server-ip>:8000`, create your account, and [add your first library](docs/usage.md#add-a-library).
+After starting Millwright, open `http://<server-ip>:8000`, create your account, claim the pending node on **Nodes**, and [add your first library](docs/usage.md#add-a-library).
 
 ## Security
 

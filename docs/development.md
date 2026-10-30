@@ -32,10 +32,11 @@ Then start the server and a local node from the repository root:
 uv run python run.py --role all
 ```
 
-Open `http://localhost:8000`. Use `--role server` if you don't need a local node.
+Open `http://localhost:8000` and claim the pending node on **Nodes**. Use `--role server` if you don't
+need a local node.
 
-For a separate source node, set `MW_NODE_SERVER_URL`, `MW_NODE_ENROLLMENT_TOKEN`, and
-`MW_NODE_WORKSPACE_DIR`, then run `uv run python -m node` from `node/`. See
+For a separate source node, set `MW_NODE_SERVER_URL` and `MW_NODE_WORKSPACE_DIR`, then run
+`uv run python -m node` from `node/`. Claim it on **Nodes**. See
 [Add a node](installation.md#add-a-node) for connection and shared-storage setup.
 
 ## Use the CLI

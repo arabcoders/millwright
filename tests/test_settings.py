@@ -20,11 +20,17 @@ async def test_settings_persist(database_factory: async_sessionmaker[AsyncSessio
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
             assert (await client.get("/api/settings")).status_code == 401
             assert (await client.patch("/api/settings", json={"max_probes": 2})).status_code == 401
+            assert (await client.patch("/api/settings", json={"node_registration_enabled": False})).status_code == 401
             client.headers["Authorization"] = "Bearer test-key"
             original = (await client.get("/api/settings")).json()
             response = await client.patch(
                 "/api/settings",
-                json={"max_probes": 2, "healthcheck_location": "node", "scanner": {"ignore_dirs": ["Extras"]}},
+                json={
+                    "max_probes": 2,
+                    "healthcheck_location": "node",
+                    "scanner": {"ignore_dirs": ["Extras"]},
+                    "node_registration_enabled": False,
+                },
             )
             assert response.status_code == 200, response.text
             updated = response.json()
@@ -33,11 +39,13 @@ async def test_settings_persist(database_factory: async_sessionmaker[AsyncSessio
             assert app.state.scanner.scanner.ignore_dirs == ["Extras"]
             assert app.state.events.healthcheck_slots == 0
             assert app.state.events.healthchecks_on_nodes
+            assert not app.state.hub.registration_enabled
             assert await app.state.store.get(SETTINGS_KEY) == updated
     restarted = create_app(database_factory, config=config, cache_root=tmp_path / "restarted")
     async with restarted.router.lifespan_context(restarted):
         assert restarted.state.settings.current.model_dump(mode="json") == updated
         assert restarted.state.scanner.scanner.ignore_dirs == ["Extras"]
+        assert not restarted.state.hub.registration_enabled
 
 
 @pytest.mark.asyncio

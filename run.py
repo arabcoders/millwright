@@ -254,18 +254,12 @@ def node_environment(config_path: Path, *, port: int) -> dict[str, str]:
         var = f"MW_NODE_{key.upper()}"
         if var not in env and key not in settings:
             env[var] = value
-    if config.node_enrollment_token is not None and (
-        "MW_NODE_ENROLLMENT_TOKEN" in env or "enrollment_token" not in settings
-    ):
-        # Shared file references resolve beside the server's selected config,
-        # which can differ from the node's config directory in all-in-one mode.
-        env["MW_NODE_ENROLLMENT_TOKEN"] = config.node_enrollment_token
     return env
 
 
 def healthcheck(command: Sequence[str], *, urlopen: Urlopen = urllib.request.urlopen) -> int:
     # A standalone node has no HTTP endpoint. Its PID 1 is the node process,
-    # so reading that command confirms it is running without testing enrollment.
+    # so reading that command confirms it is running without requiring registration.
     if any(Path(part).name == NODE_BIN for part in command[:2]):
         return 0
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)

@@ -97,21 +97,18 @@ def test_restores_config_secrets(tmp_path: Path) -> None:
     exported = export_config(path)
     assert exported is not None
     assert tomllib.loads(exported)["api_key"] == original.api_key
-    assert tomllib.loads(exported)["node_enrollment_token"] == original.node_enrollment_token
     restore_config(
         path,
-        'api_key = "other-key"\nnode_enrollment_token = "other-token"\n'
+        'api_key = "other-key"\n'
         '[auth.oidc]\nissuer = "https://sso.example.test"\nclient_id = "client"\n'
         'secret = "oidc-secret"\nredirect_uri = "https://example.test/cb"\n',
     )
     restored = load_config(path)
     assert restored.api_key == "other-key"
-    assert restored.node_enrollment_token == "other-token"
     assert restored.auth.oidc is not None and restored.auth.oidc.secret == "oidc-secret"
     config = tomllib.loads(path.read_text(encoding="utf-8"))
     references = [
         config["api_key"],
-        config["node_enrollment_token"],
         config["auth"]["oidc"]["secret"],
         config["auth"]["oidc"]["client_id"],
     ]
@@ -132,7 +129,8 @@ def test_rejects_secret_symlink(tmp_path: Path) -> None:
 @pytest.mark.parametrize("stage", ["secret", "config"])
 def test_config_publish_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str) -> None:
     path = tmp_path / "config.toml"
-    restore_config(path, 'api_key = "old-key"\nnode_enrollment_token = "old-token"\n')
+    monkeypatch.delenv("MW_DATABASE_URL", raising=False)
+    restore_config(path, 'api_key = "old-key"\ndatabase_url = "postgresql://user:old-password@db/millwright"\n')
     before = path.read_bytes()
     files = {file.name: file.read_bytes() for file in (tmp_path / "secrets").iterdir()}
 
@@ -157,9 +155,10 @@ def test_config_publish_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 
         monkeypatch.setattr("server.backup.os.link", fail_second)
     with pytest.raises(OSError):
-        restore_config(path, 'api_key = "new-key"\nnode_enrollment_token = "new-token"\n')
+        restore_config(path, 'api_key = "new-key"\ndatabase_url = "postgresql://user:new-password@db/millwright"\n')
     assert path.read_bytes() == before
-    assert load_config(path).api_key == "old-key" and load_config(path).node_enrollment_token == "old-token"
+    config = load_config(path)
+    assert config.api_key == "old-key" and config.database_url == "postgresql://user:old-password@db/millwright"
     assert {file.name: file.read_bytes() for file in (tmp_path / "secrets").iterdir()} == files
 
 
@@ -487,10 +486,8 @@ async def backup_env(
     (tmp_path / "oidc.txt").write_text("secret-from-file\n", encoding="utf-8")
     (tmp_path / "client-id.txt").write_text("millwright\n", encoding="utf-8")
     (tmp_path / "api-key.txt").write_text("api-secret-from-file\n", encoding="utf-8")
-    (tmp_path / "enrollment.txt").write_text("node-private-token\n", encoding="utf-8")
     config_path.write_text(
         '# My server settings\napi_key = "file:api-key.txt"\n'
-        'node_enrollment_token = "file:enrollment.txt"\n'
         '[auth.oidc]\nissuer = "https://sso.example.test"\n'
         'client_id = "file:client-id.txt"\nsecret = "file:oidc.txt"\nredirect_uri = "https://example.test/cb"\n',
         encoding="utf-8",
@@ -1078,7 +1075,6 @@ async def test_backup_selective_restore(
     assert 'client_id = "millwright"' in payload["config"]
     assert "# My server settings" in payload["config"]
     assert 'api_key = "api-secret-from-file"' in payload["config"]
-    assert 'node_enrollment_token = "node-private-token"' in payload["config"]
     preview = await client.post(
         "/api/backups/preview",
         files={"file": ("backup.mwbackup", exported.content)},
@@ -1139,7 +1135,6 @@ async def test_backup_selective_restore(
     )
     restored_config = load_config(config_path)
     assert restored_config.api_key == "api-secret-from-file"
-    assert restored_config.node_enrollment_token == "node-private-token"
     assert restored_config.auth.oidc is not None and restored_config.auth.oidc.secret == "secret-from-file"
     assert config_path.stat().st_mode & 0o077 == 0
     restored = await client.post(

@@ -48,7 +48,6 @@ services:
     environment:
       MW_ROLE: node
       MW_NODE_SERVER_URL: http://server:8000
-      MW_NODE_ENROLLMENT_TOKEN: file:/run/node_enrollment_token
       MW_NODE_WORKSPACE_DIR: /workspace
       UMASK: ${UMASK:-0002}
       TZ: ${TZ:-UTC}
@@ -56,7 +55,6 @@ services:
       - ./node-config:/config
       - ./node-data:/data
       - ./workspace:/workspace
-      - ./config/millwright/secrets/node_enrollment_token:/run/node_enrollment_token:ro
     restart: unless-stopped
 
 volumes:

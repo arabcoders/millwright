@@ -38,19 +38,17 @@ EOF
 fi
 
 mkdir -p config/millwright/secrets server-data node-config node-data workspace
-for name in api_key node_enrollment_token; do
-  if [[ ! -f "config/millwright/secrets/$name" ]]; then
-    secret=$(openssl rand -hex 32)
-    printf '%s\n' "$secret" > "config/millwright/secrets/$name"
-  fi
-done
+if [[ ! -f config/millwright/secrets/api_key ]]; then
+  secret=$(openssl rand -hex 32)
+  printf '%s\n' "$secret" > config/millwright/secrets/api_key
+fi
 
 printf '\nInstallation directory: %s\n' "$PWD"
 if IFS= read -r -p 'Start Millwright containers now? [y/N] ' answer && [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]; then
   docker compose -f compose.yml up -d --pull always --wait
   printf '\nMillwright is ready on port 8000.\n'
   printf 'Open http://<server-ip>:8000\n'
-  printf 'Create your account, then add /media as a library.\n'
+  printf 'Create your account, claim the pending node on Nodes, then add /media as a library.\n'
 else
   printf '\nContainers were not started.\n'
   printf 'To start them, run this from the installation directory:\n'

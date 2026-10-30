@@ -26,7 +26,6 @@ from common.dates import Dates
 from common.diagnostics import error_message
 from common.logging import setup_logging
 from common.protocol import NodeCapabilities
-from common.secrets import resolve_secret
 from pydantic import TypeAdapter, ValidationError
 
 from node.agent import Agent, AgentConfig, safe_endpoint
@@ -44,7 +43,6 @@ ENV_CONFIG = "MW_NODE_CONFIG"
 ENV_STATE = "MW_NODE_STATE_PATH"
 
 ENV_OVERRIDES = {
-    "enrollment_token": "MW_NODE_ENROLLMENT_TOKEN",
     "server_url": "MW_NODE_SERVER_URL",
     "workspace_dir": "MW_NODE_WORKSPACE_DIR",
     "ffmpeg_bin": "MW_NODE_FFMPEG_BIN",
@@ -168,17 +166,13 @@ def _build_settings(data: dict[str, Any], path: Path) -> AgentConfig:
     data.pop("max_transcodes", None)
     data.pop("credentials_path", None)
     data.pop("token", None)
-    if isinstance(data.get("enrollment_token"), str):
-        data["enrollment_token"] = resolve_secret(data["enrollment_token"], base_dir=path.parent)
     credentials = _load_credentials()
     if credentials is not None:
         data["node_id"], data["token"] = credentials
-    else:
-        data["token"] = data.get("enrollment_token")
     missing = ", ".join(
         f"{key} (config key {key!r} or env {ENV_OVERRIDES[key]})"
-        for key in ("enrollment_token", "server_url", "workspace_dir")
-        if not data.get(key) and (key != "enrollment_token" or credentials is None)
+        for key in ("server_url", "workspace_dir")
+        if not data.get(key)
     )
     if missing:
         msg = f"Node settings incomplete ({path}). Missing: {missing}"
@@ -263,7 +257,7 @@ async def _amain(args: argparse.Namespace, dates: Dates) -> int:
             handlers[sig] = previous
         LOG.info(
             "Starting node %s. Hub endpoint: %s. Worker tags: %s",
-            config.node_id or "awaiting enrollment",
+            config.node_id or "awaiting claim",
             safe_endpoint(config.server_url),
             ", ".join(config.capabilities.worker_tags) or "none",
         )

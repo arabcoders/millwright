@@ -67,6 +67,19 @@ async def get_nodes(request: Request) -> list[dict]:
         ]
 
 
+@router.get("/registration", summary="Read live node registration requests")
+async def get_registration(request: Request) -> dict:
+    return request.app.state.hub.registration_status()
+
+
+@router.post("/pending/{request_id}/claim", status_code=status.HTTP_202_ACCEPTED, summary="Claim a pending node")
+async def claim_node(request_id: str, request: Request) -> None:
+    async with request.app.state.reset_lock:
+        if not request.app.state.hub.claim_node(request_id):
+            raise HTTPException(status_code=404, detail="Pending node is no longer connected.")
+    LOG.info("Node registration request %s claimed.", request_id)
+
+
 @router.patch("/{node_id}", summary="Update a node's workload limits, name, or paused state")
 async def patch_node(node_id: int, body: NodePatchBody, request: Request) -> dict:
     db: async_sessionmaker = request.app.state.db

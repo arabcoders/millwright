@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from common.media.probe import probe_from_raw
 from common.plan.models import FFmpegPlan, VideoTarget
-from common.protocol import NodeCapabilities
+from common.protocol import Hello, NodeCapabilities
 from common.enums import JobStatus
 from tests.helpers import api_client
 from tests.helpers import create_test_app as create_app
@@ -57,6 +57,7 @@ from server.serialize import iso_utc
 from server.staging import StagingService
 from common.fs.identity import source_identity
 from tests.helpers import database_context, graph_flow, make_test_temp_dir
+from tests.hub_helpers import FakeConn
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -3672,6 +3673,47 @@ async def test_attempt_history_and(api_env: ApiEnv) -> None:
         attempt.log_path = "jobs/1/attempts/2/run.log"
         await session.commit()
     assert (await api_env.client.get(f"/api/jobs/{job_id}/attempts/{second_id}/log")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_registration_claim(api_env: ApiEnv) -> None:
+    hub = api_env.app.state.hub
+    conn = FakeConn(
+        [Hello(capabilities=NodeCapabilities(hostname="encoder"), active_attempts=[]).model_dump(mode="json")]
+    )
+    task = asyncio.create_task(hub.serve_connection(conn))
+    sub = api_env.app.state.events.subscribe()
+    try:
+        async with asyncio.timeout(3):
+            while not conn.messages("registration_pending"):
+                conn.changed.clear()
+                await conn.changed.wait()
+        request_id = conn.messages("registration_pending")[0]["request_id"]
+        response = await api_env.client.get("/api/nodes/registration")
+        assert response.status_code == 200
+        pending = response.json()["pending"]
+        assert [(item["request_id"], item["capabilities"]["hostname"]) for item in pending] == [(request_id, "encoder")]
+        assert (await api_env.client.get("/api/nodes")).json() == []
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api_env.app), base_url=UI_BASE) as anonymous:
+            assert (await anonymous.get("/api/nodes/registration")).status_code == 401
+            assert (await anonymous.post(f"/api/nodes/pending/{request_id}/claim")).status_code == 401
+        response = await api_env.client.post(f"/api/nodes/pending/{request_id}/claim")
+        assert response.status_code == 202
+        assert (await api_env.client.post(f"/api/nodes/pending/{request_id}/claim")).status_code == 404
+        async with asyncio.timeout(3):
+            while not conn.messages("workspace_challenge"):
+                conn.changed.clear()
+                await conn.changed.wait()
+        assert not conn.messages("registered")
+        async with asyncio.timeout(3):
+            event = await sub.next()
+            while event is not None and event.type != "node.registration":
+                event = await sub.next()
+        assert event is not None and event.payload["pending"][0]["request_id"] == request_id
+    finally:
+        conn.disconnect()
+        await asyncio.wait_for(task, 3)
+        api_env.app.state.events.unsubscribe(sub)
 
 
 @pytest.mark.asyncio

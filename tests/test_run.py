@@ -28,7 +28,6 @@ def local_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         "MW_NODE_CONFIG",
         "MW_NODE_SERVER_URL",
         "MW_NODE_WORKSPACE_DIR",
-        "MW_NODE_ENROLLMENT_TOKEN",
         "MW_TZ",
         "TZ",
         "IN_CONTAINER",
@@ -37,7 +36,7 @@ def local_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("MW_CONFIG_PATH", str(tmp_path))
     path = tmp_path / "config.toml"
-    path.write_text('node_enrollment_token = "configured-token"\n')
+    path.write_text("")
 
     yield path
 
@@ -286,7 +285,6 @@ def test_container_permission_failure(
     (tmp_path / "node.toml").write_text(f'workspace_dir = "{workspace}"\n')
     monkeypatch.setenv("IN_CONTAINER", "1")
     monkeypatch.setenv("MW_NODE_SERVER_URL", "http://server:8000")
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "test-enrollment")
     directory = local_config.parent if blocked == "config" else workspace
     access = os.access
     # CI can run as root, so simulate the OS denial without depending on chmod bypasses.
@@ -304,49 +302,6 @@ def test_container_permission_failure(
     assert f"Running as {os.geteuid()}:{os.getegid()}" in message
     assert f"owned by {owner.st_uid}:{owner.st_gid}" in message
     assert f'Compose user: "{owner.st_uid}:{owner.st_gid}"' in message
-
-
-def test_token_override_wins(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("MW_NODE_ENROLLMENT_TOKEN", raising=False)
-    monkeypatch.delenv("MW_PORT", raising=False)
-    monkeypatch.setattr(run, "resolve_bin", lambda name: f"/bin/{name}")
-    envs: list[dict[str, str] | None] = []
-
-    def fake_popen(argv: list[str], env: dict[str, str] | None = None) -> Any:
-        envs.append(env)
-        return FakeProc(argv[0])
-
-    monkeypatch.setattr(run.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(run, "wait_healthy", lambda *a, stopped=None: True)
-    monkeypatch.setattr(run, "supervise", lambda *a, **k: 0)
-    assert run.run_all() == 0
-    assert envs[0] is None
-    node_env = envs[1]
-    assert node_env is not None and node_env["MW_NODE_ENROLLMENT_TOKEN"] == "configured-token"
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "tok")
-    assert run.run_all() == 0
-    node_env = envs[3]
-    assert node_env is not None and node_env["MW_NODE_ENROLLMENT_TOKEN"] == "tok"
-
-
-def test_local_enrollment(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    monkeypatch.setenv("MW_CONFIG_PATH", str(tmp_path))
-    monkeypatch.delenv("MW_NODE_ENROLLMENT_TOKEN", raising=False)
-    (tmp_path / "secrets").mkdir()
-    (tmp_path / "secrets" / "node_enrollment_token").write_text("fleet-token\n", encoding="utf-8")
-    (tmp_path / "config.toml").write_text('node_enrollment_token = "file:secrets/node_enrollment_token"\n')
-    monkeypatch.setattr(run, "resolve_bin", lambda name: f"/bin/{name}")
-    envs = []
-
-    def fake_popen(argv, env=None):
-        envs.append(env)
-        return FakeProc(argv[0])
-
-    monkeypatch.setattr(run.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(run, "wait_healthy", lambda *a, stopped=None: True)
-    monkeypatch.setattr(run, "supervise", lambda *a, **k: 0)
-    assert run.run_all() == 0
-    assert envs[1]["MW_NODE_ENROLLMENT_TOKEN"] == "fleet-token"
 
 
 def test_all_role_dev(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -376,7 +331,6 @@ def test_all_role_dev(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_dev_drains_children(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("MW_CONFIG_PATH", str(tmp_path))
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "test-token")
     monkeypatch.setattr(run, "resolve_bin", lambda name: name)
     monkeypatch.setattr(run, "wait_healthy", lambda *args, **kwargs: True)
     children = []
@@ -420,16 +374,13 @@ def test_dev_drains_children(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
 
 def test_node_inherits_server(local_config: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = tmp_path / "shared"
-    local_config.write_text(f'workspace_dir = "{root}"\nnode_enrollment_token = "custom-token"\n')
+    local_config.write_text(f'workspace_dir = "{root}"\n')
     env = run.node_environment(local_config, port=9000)
     assert env["MW_NODE_WORKSPACE_DIR"] == str(root)
-    assert env["MW_NODE_ENROLLMENT_TOKEN"] == "custom-token"
     assert env["MW_NODE_SERVER_URL"] == "http://127.0.0.1:9000"
     monkeypatch.setenv("MW_WORKSPACE_DIR", str(tmp_path / "overridden"))
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "overridden-token")
     env = run.node_environment(local_config, port=9000)
     assert env["MW_NODE_WORKSPACE_DIR"] == str(tmp_path / "overridden")
-    assert env["MW_NODE_ENROLLMENT_TOKEN"] == "overridden-token"
 
 
 def test_node_inherits_timezone(local_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -443,53 +394,27 @@ def test_node_inherits_timezone(local_config: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_node_overrides_preserved(local_config: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "node.toml").write_text(
-        'workspace_dir = "/node/workspace"\nenrollment_token = "node-token"\nserver_url = "https://custom"\n'
-    )
+    (tmp_path / "node.toml").write_text('workspace_dir = "/node/workspace"\nserver_url = "https://custom"\n')
     env = run.node_environment(local_config, port=8000)
-    assert all(key not in env for key in ("MW_NODE_ENROLLMENT_TOKEN", "MW_NODE_WORKSPACE_DIR", "MW_NODE_SERVER_URL"))
+    assert all(key not in env for key in ("MW_NODE_WORKSPACE_DIR", "MW_NODE_SERVER_URL"))
     monkeypatch.setenv("MW_NODE_WORKSPACE_DIR", "/explicit/workspace")
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "explicit-token")
     monkeypatch.setenv("MW_NODE_SERVER_URL", "https://explicit")
     env = run.node_environment(local_config, port=8000)
     assert env["MW_NODE_WORKSPACE_DIR"] == "/explicit/workspace"
-    assert env["MW_NODE_ENROLLMENT_TOKEN"] == "explicit-token"
     assert env["MW_NODE_SERVER_URL"] == "https://explicit"
 
 
 def test_explicit_node_config(local_config: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "custom-node.toml"
-    path.write_text('enrollment_token = "custom-enrollment"\n')
+    path.write_text('workspace_dir = "/custom/workspace"\nserver_url = "https://custom"\n')
     monkeypatch.setenv("MW_NODE_CONFIG", str(path))
     env = run.node_environment(local_config, port=8000)
-    assert "MW_NODE_ENROLLMENT_TOKEN" not in env
-    assert env["MW_NODE_SERVER_URL"] == "http://127.0.0.1:8000"
-
-
-def test_shared_secret_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from node.cli import load_settings
-
-    server_dir = tmp_path / "server"
-    server_dir.mkdir()
-    path = server_dir / "config.toml"
-    path.write_text("")
-    (server_dir / "enrollment").write_text("shared-secret\n")
-    node_path = tmp_path / "node.toml"
-    node_path.write_text('enrollment_token = "file:missing-secret"\n')
-    monkeypatch.setenv("MW_NODE_CONFIG", str(node_path))
-    monkeypatch.setenv("MW_NODE_ENROLLMENT_TOKEN", "file:enrollment")
-    env = run.node_environment(path, port=8000)
-    assert env["MW_NODE_ENROLLMENT_TOKEN"] == "shared-secret"
-    for key in ("MW_NODE_ENROLLMENT_TOKEN", "MW_NODE_SERVER_URL", "MW_NODE_WORKSPACE_DIR"):
-        monkeypatch.setenv(key, env[key])
-    settings = load_settings(node_path)
-    assert settings.enrollment_token == "shared-secret"
-    assert settings.server_url == "ws://127.0.0.1:8000/api/hub"
+    assert all(key not in env for key in ("MW_NODE_WORKSPACE_DIR", "MW_NODE_SERVER_URL"))
 
 
 def test_aio_explicit_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = tmp_path / "custom.toml"
-    config.write_text(f'workspace_dir = "{tmp_path / "custom-workspace"}"\nnode_enrollment_token = "custom-token"\n')
+    config.write_text(f'workspace_dir = "{tmp_path / "custom-workspace"}"\n')
     monkeypatch.setenv("MW_PORT", "9000")
     monkeypatch.setattr(run, "resolve_bin", lambda name: f"/bin/{name}")
     spawns = []
@@ -503,7 +428,6 @@ def test_aio_explicit_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert health_ports == [9100]
     assert spawns[1][1]["MW_NODE_SERVER_URL"] == "http://127.0.0.1:9100"
     assert spawns[1][1]["MW_NODE_WORKSPACE_DIR"] == str(tmp_path / "custom-workspace")
-    assert spawns[1][1]["MW_NODE_ENROLLMENT_TOKEN"] == "custom-token"
 
 
 @pytest.mark.parametrize(

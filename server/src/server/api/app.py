@@ -304,8 +304,6 @@ def create_app(
         root.mkdir(parents=True, exist_ok=True)
     hub_kwargs.setdefault("timezone", ZoneInfo(config.tz))
     hub_kwargs.setdefault("min_free_gb", operational.min_free_gb)
-    if config.node_enrollment_token is not None:
-        hub_kwargs.setdefault("enrollment_token", config.node_enrollment_token)
     hub = hub if hub is not None else NodeHub(sessionmaker, events=events, **hub_kwargs)
     if hub.events is None:
         hub.events = events
@@ -453,6 +451,7 @@ def create_app(
     scheduler.add(partial(cleanup_trash, sessionmaker, root), every=3600, name="trash")
 
     def apply_settings(value: OperationalSettings) -> None:
+        hub.set_registration_enabled(value.node_registration_enabled)
         healthchecks.configure(
             max_concurrency=value.max_healthchecks,
             hwaccel=value.healthcheck_hwaccel,
@@ -697,7 +696,6 @@ def create_app(
         value
         for value in (
             config.api_key,
-            config.node_enrollment_token,
             config.auth.oidc.secret if config.auth.oidc is not None else None,
         )
         if value

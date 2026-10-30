@@ -475,6 +475,7 @@ export type WebhookRegistration = {
 export type ExecutionLocation = 'local' | 'node' | 'node_local';
 
 export type OperationalSettings = {
+  node_registration_enabled: boolean;
   max_healthchecks: number;
   max_probes: number;
   max_mkv_stats: number;
@@ -561,6 +562,11 @@ export type NodeRow = {
   usage: NodeUsage | null;
   workspace_ready: boolean;
   workspace_free_bytes: number | null;
+};
+
+export type NodeRegistration = {
+  enabled: boolean;
+  pending: { request_id: string; capabilities: NodeCapabilities }[];
 };
 
 export type NodeChanges = Partial<

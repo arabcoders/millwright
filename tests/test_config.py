@@ -39,18 +39,15 @@ def test_first_start_config(tmp_path: Path) -> None:
     path = tmp_path / "millwright" / "config.toml"
     ensure_config(path)
     config = load_config(path)
-    assert config.api_key and config.node_enrollment_token
-    assert config.api_key != config.node_enrollment_token
+    assert config.api_key
     content = path.read_text(encoding="utf-8")
     assert 'api_key = "file:secrets/api_key"' in content
     assert path.parent.stat().st_mode & 0o777 == 0o700
     assert (path.parent / "secrets").stat().st_mode & 0o777 == 0o700
     assert path.stat().st_mode & 0o777 == 0o600
-    for name in ("api_key", "node_enrollment_token"):
-        assert (path.parent / "secrets" / name).stat().st_mode & 0o777 == 0o600
+    assert (path.parent / "secrets" / "api_key").stat().st_mode & 0o777 == 0o600
     ensure_config(path)
     assert load_config(path).api_key == config.api_key
-    assert load_config(path).node_enrollment_token == config.node_enrollment_token
 
 
 def test_existing_config_preserved(tmp_path: Path) -> None:
@@ -184,15 +181,6 @@ def test_unknown_keys_warn(caplog: pytest.LogCaptureFixture) -> None:
     assert len(records) == 3 and all(record.levelno == logging.WARNING for record in records)
 
 
-def test_node_enrollment_token() -> None:
-    default = load_config(write_config(""))
-    assert default.node_enrollment_token is None
-    secret = make_test_temp_dir("config") / "enrollment"
-    secret.write_text("  fleet-secret  \n", encoding="utf-8")
-    config = load_config(write_config(f'node_enrollment_token = "file:{secret}"\n'))
-    assert config.node_enrollment_token == "fleet-secret"
-
-
 def test_missing_secret_file() -> None:
     missing = make_test_temp_dir("config") / "nope"
     with pytest.raises(ValueError):
@@ -241,7 +229,6 @@ def test_env_overrides_toml(monkeypatch: pytest.MonkeyPatch) -> None:
         "enable_docs": "true",
         "workspace_dir": "/env/workspace",
         "trash_dir": "/env/trash",
-        "node_enrollment_token": "env-enrollment",
         "api_key": "env-api-key",
         "uploaded_plugins_dir": "/env/plugins",
         "tz": "Europe/Berlin",
@@ -267,7 +254,6 @@ def test_env_overrides_toml(monkeypatch: pytest.MonkeyPatch) -> None:
         "enable_docs": True,
         "workspace_dir": "/env/workspace",
         "trash_dir": "/env/trash",
-        "node_enrollment_token": "env-enrollment",
         "api_key": "env-api-key",
         "uploaded_plugins_dir": "/env/plugins",
         "tz": "Europe/Berlin",
@@ -319,18 +305,17 @@ def test_env_secret_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_env_secret_resolution(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     path.write_text(
-        'api_key = "file:missing"\nnode_enrollment_token = "file:missing"\n'
+        'api_key = "file:missing"\n'
         + FULL_OIDC.replace("literal-secret", "file:missing").replace(
             'client_id = "transcode"', 'client_id = "file:missing"'
         ),
         encoding="utf-8",
     )
-    for field in ("API_KEY", "NODE_ENROLLMENT_TOKEN", "AUTH_OIDC_SECRET", "AUTH_OIDC_CLIENT_ID"):
+    for field in ("API_KEY", "AUTH_OIDC_SECRET", "AUTH_OIDC_CLIENT_ID"):
         (tmp_path / field).write_text(f"  {field.lower()}  \n", encoding="utf-8")
         monkeypatch.setenv(f"MW_{field}", f"file:{field}")
     config = load_config(path)
     assert config.api_key == "api_key"
-    assert config.node_enrollment_token == "node_enrollment_token"
     assert config.auth.oidc is not None
     assert config.auth.oidc.secret == "auth_oidc_secret"
     assert config.auth.oidc.client_id == "auth_oidc_client_id"
