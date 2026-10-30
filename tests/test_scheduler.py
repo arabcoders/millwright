@@ -397,7 +397,7 @@ async def test_scan_scope_logging(factory, staging, tmp_path, scan_log, caplog, 
     identifier = await add_library(factory, tmp_path, "logging")
     scheduler = ScannerService(factory, staging=staging)
     media = tmp_path / "movie.mkv"
-    with caplog.at_level(logging.INFO, logger=scheduler_service.__name__):
+    with caplog.at_level(logging.DEBUG, logger=scheduler_service.__name__):
         scheduler.queue_scan(identifier, "watch" if scoped else "manual", target_paths={media} if scoped else None)
         await asyncio.wait_for(scheduler._scan_tasks[identifier], 2)
     records = [record for record in caplog.records if record.name == scheduler_service.__name__]

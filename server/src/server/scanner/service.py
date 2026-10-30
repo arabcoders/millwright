@@ -184,6 +184,7 @@ class ScannerService:
         intervals = {
             library.id: library.scan_interval_s for library in libraries if library.scan_interval_s is not None
         }
+        scheduled: dict[int, asyncio.Task[ScanReport | None]] = {}
         for identifier in self._due.keys() - intervals.keys():
             self._due.pop(identifier, None)
             if self.events is not None:
@@ -191,14 +192,37 @@ class ScannerService:
         for identifier, interval in intervals.items():
             if self._intervals.get(identifier) != interval or identifier not in self._due:
                 self._due[identifier] = self._full_completed.get(identifier, now) + timedelta(seconds=interval)
-            if self._due[identifier] <= now and not self.paused:
-                self.queue_scan(identifier, "interval")
+            if self._due[identifier] <= now and not self.paused and self.queue_scan(identifier, "interval") == "queued":
+                scheduled[identifier] = self._scan_tasks[identifier]
             if self.events is not None:
                 self.events.update_library_progress(
                     identifier,
                     scanner={"next_run_at": None if identifier in self._scan_tasks else iso_utc(self._due[identifier])},
                 )
         self._intervals = intervals
+        if scheduled:
+            asyncio.gather(*scheduled.values(), return_exceptions=True).add_done_callback(
+                lambda completed: self._log_scan_batch(list(scheduled), completed.result())
+            )
+
+    @staticmethod
+    def _log_scan_batch(library_ids: list[int], results: list[ScanReport | BaseException | None]) -> None:
+        reports = [result for result in results if isinstance(result, ScanReport)]
+        cancelled = sum(isinstance(result, asyncio.CancelledError) for result in results)
+        failed = len(results) - len(reports) - cancelled
+        cancelled += sum(report.cancelled for report in reports)
+        LOG.info(
+            "Scheduled scans finished for libraries %s: %s files found, %s changed, %s removed, "
+            "%s errors, %s failed, %s cancelled.",
+            library_ids,
+            sum(report.found for report in reports),
+            sum(report.added + report.updated for report in reports),
+            sum(report.pruned for report in reports),
+            sum(len(report.errors) for report in reports),
+            failed,
+            cancelled,
+            extra={"operation": "library_scan_batch", "library_ids": library_ids},
+        )
 
     async def update_watchers(self) -> None:
         async with self._watch_lock:
@@ -323,7 +347,7 @@ class ScannerService:
                     self.events.update_library_progress(library.id, discovery={"reason": reason})
                 scope = "full" if target_paths is None else "scoped"
                 paths = library.roots if target_paths is None else sorted(str(path) for path in target_paths)
-                LOG.info(
+                LOG.debug(
                     "Scanning library %s (%s, paths %s), reason %s",
                     library.id,
                     scope,
@@ -355,15 +379,34 @@ class ScannerService:
             self._scan_progress(
                 library.id, "cancelled" if report.cancelled else "failed" if report.errors else "completed", report
             )
-            LOG.info(
-                "Scanned library %s (%s, paths %s): found %s files, %s changed, %s errors in %.2fs",
+            level = logging.DEBUG
+            if report.errors:
+                level = logging.WARNING
+            elif (
+                reason not in {"interval", "watch"}
+                or report.added
+                or report.updated
+                or report.pruned
+                or report.cancelled
+            ):
+                level = logging.INFO
+            details = ""
+            if report.errors:
+                details = f" Errors: {report.errors}"
+            elif report.cancelled:
+                details = " Scan cancelled."
+            LOG.log(
+                level,
+                "Scanned library %s (%s, paths %s): found %s files, %s changed, %s removed, %s errors in %.2fs.%s",
                 library.id,
                 scope,
                 paths,
                 report.found,
                 report.added + report.updated,
+                report.pruned,
                 len(report.errors),
                 time.perf_counter() - started,
+                details,
                 extra={
                     "operation": "library_scan",
                     "reason": reason,
@@ -551,7 +594,7 @@ class ScannerService:
             raise
         except Exception as exc:
             reason = self._requests[library_id][0]
-            LOG.exception("scan failed for library %s", library_id)
+            LOG.exception("Scan failed for library %s: %s", library_id, exc)
             if library is None:
                 self._scan_progress(library_id, "failed", error=f"{type(exc).__name__}: {exc}")
             if self.events is not None:
