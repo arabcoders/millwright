@@ -6,7 +6,7 @@
     <div class="flex items-start gap-3">
       <UCheckbox
         v-if="selectable"
-        class="shrink-0 self-center"
+        class="shrink-0"
         :model-value="selected"
         :aria-label="`Select file ${fileName(file.path)}`"
         :disabled="busy"
@@ -28,18 +28,9 @@
           </button>
         </UTooltip>
       </h2>
-      <JobProgressRing
-        v-if="ringProgress"
-        v-bind="ringProgress"
-        :label="file.active_job_status ? `${file.active_job_kind} job progress` : 'File progress'"
-        :color="file.active_job_kind === 'healthcheck' ? 'success' : 'primary'"
-      />
-      <span
-        v-else
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-      >
-        <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
-      </span>
+      <StatusIndicator :info="indicator">
+        <JobProgressRing v-if="ringProgress" v-bind="ringProgress" :label="indicator.label" />
+      </StatusIndicator>
     </div>
     <div class="flex flex-wrap items-center gap-1.5">
       <UTooltip :text="libraryName">
@@ -171,6 +162,7 @@ import { formatDate, toIsoString } from '~/utils/date';
 import { relativeDirectory } from '~/utils/location';
 import { formatRelativeTime } from '~/utils/relativeTime';
 import { fileRingProgress } from '~/utils/progress';
+import { fileIndicatorInfo } from '~/utils/status';
 import {
   canSkipCooldown,
   manualTranscodePrerequisite,
@@ -215,6 +207,7 @@ const library = computed(() =>
 const libraryName = computed(() => library.value?.name ?? 'Library unavailable');
 const { now, pause, resume } = useNow({ interval: 1000, controls: true, immediate: false });
 const ringProgress = computed(() => fileRingProgress(props.file, now.value));
+const indicator = computed(() => fileIndicatorInfo(props.file));
 watch(
   () => !props.file.active_job_status && ringProgress.value !== null,
   (waiting) => (waiting ? resume() : pause()),

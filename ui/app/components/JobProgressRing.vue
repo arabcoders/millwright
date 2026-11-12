@@ -26,11 +26,10 @@
         :class="[
           props.status === 'hold' || remaining !== null
             ? cooldownColor(percent)
-            : color === 'success'
-              ? 'stroke-success'
-              : 'stroke-primary',
-          percent === null ? 'origin-center stroke-(--ui-text-muted)' : '',
-          percent === null && props.status !== 'hold' ? 'animate-spin' : '',
+            : waiting
+              ? 'stroke-(--ui-text-muted)'
+              : 'stroke-info',
+          percent === null && !waiting ? 'origin-center animate-spin' : '',
         ]"
         stroke-width="3.5"
         stroke-linecap="round"
@@ -72,16 +71,15 @@ const props = withDefaults(
     cooldownStartedAt?: string | null;
     cooldownUntil?: string | null;
     label?: string;
-    color?: 'primary' | 'success';
   }>(),
   {
     cooldownStartedAt: null,
     cooldownUntil: null,
     label: 'Job progress',
-    color: 'primary',
   },
 );
 const { now, pause, resume } = useNow({ interval: 1000, controls: true, immediate: false });
+const waiting = computed(() => ['pending', 'queued', 'hold'].includes(props.status));
 const remaining = computed(() =>
   cooldownRemaining(props.status, props.cooldownStartedAt, props.cooldownUntil, now.value),
 );
@@ -95,7 +93,7 @@ watch(cooldownActive, (active) => (active ? resume() : pause()), { immediate: tr
 const percent = computed(() =>
   props.status === 'hold' || remaining.value !== null
     ? cooldown.value
-    : props.status === 'pending'
+    : props.status === 'pending' || props.status === 'queued'
       ? null
       : props.percent,
 );
@@ -110,6 +108,8 @@ const ariaValueText = computed(() =>
 );
 const statusLabel = computed(() => {
   if (props.status === 'pending') return 'Wait';
+  if (props.status === 'staging') return 'Prep';
+  if (props.status === 'queued') return 'Queue';
   if (props.status === 'claimed') return 'Claim';
   if (props.status === 'running') return 'Run';
   if (props.status === 'verifying') return 'Verify';

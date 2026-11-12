@@ -37,64 +37,65 @@
         <section class="space-y-3">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 items-start gap-3">
-              <JobProgressRing
-                v-if="detail.status === 'hold' || detail.status === 'pending'"
-                :status="detail.status"
-                :percent="null"
-                :cooldown-started-at="detail.cooldown_started_at"
-                :cooldown-until="detail.hold_until"
-                label="Job wait progress"
-                :color="detail.kind === 'healthcheck' ? 'success' : 'primary'"
-              />
-              <div
-                v-else-if="detailActive"
-                class="relative size-12 shrink-0"
-                role="progressbar"
-                aria-label="Job progress"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                :aria-valuenow="detailProgress === null ? undefined : Math.round(detailProgress)"
-                :aria-valuetext="
-                  detailProgress === null
-                    ? `${detailProgressLabel} progress`
-                    : `${Math.round(detailProgress)}%`
-                "
-              >
-                <svg class="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="15.5"
-                    fill="none"
-                    stroke="var(--ui-border-accented)"
-                    stroke-width="3.5"
-                    pathLength="100"
-                  />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="15.5"
-                    fill="none"
-                    :class="[
-                      detail.kind === 'healthcheck' ? 'stroke-success' : 'stroke-primary',
-                      detailProgress === null ? 'origin-center stroke-(--ui-text-muted)' : '',
-                      detailProgress === null ? 'animate-spin' : '',
-                    ]"
-                    stroke-width="3.5"
-                    stroke-linecap="round"
-                    pathLength="100"
-                    :stroke-dasharray="detailProgress === null ? '28 72' : `${detailProgress} 100`"
-                  />
-                </svg>
-                <span
-                  class="absolute inset-0 flex items-center justify-center text-center text-xs font-semibold text-highlighted tabular-nums"
+              <StatusIndicator v-if="indicator" :info="indicator">
+                <JobProgressRing
+                  v-if="detail.status === 'hold' || detail.status === 'pending'"
+                  :status="detail.status"
+                  :percent="null"
+                  :cooldown-started-at="detail.cooldown_started_at"
+                  :cooldown-until="detail.hold_until"
+                  :label="indicator.label"
+                />
+                <div
+                  v-else-if="detailActive"
+                  class="relative size-12 shrink-0"
+                  role="progressbar"
+                  :aria-label="indicator.label"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-valuenow="detailProgress === null ? undefined : Math.round(detailProgress)"
+                  :aria-valuetext="
+                    detailProgress === null
+                      ? `${detailProgressLabel} progress`
+                      : `${Math.round(detailProgress)}%`
+                  "
                 >
-                  {{ detailProgressLabel }}
-                </span>
-              </div>
-              <span v-else class="mw-detail-icon size-10 shrink-0"
-                ><UIcon :name="statusInfo(detail.kind, 'kind').icon" class="size-5"
-              /></span>
+                  <svg class="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      stroke="var(--ui-border-accented)"
+                      stroke-width="3.5"
+                      pathLength="100"
+                    />
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      :class="[
+                        detail.status === 'queued' ? 'stroke-(--ui-text-muted)' : 'stroke-info',
+                        detailProgress === null && detail.status !== 'queued'
+                          ? 'origin-center animate-spin'
+                          : '',
+                      ]"
+                      stroke-width="3.5"
+                      stroke-linecap="round"
+                      pathLength="100"
+                      :stroke-dasharray="
+                        detailProgress === null ? '28 72' : `${detailProgress} 100`
+                      "
+                    />
+                  </svg>
+                  <span
+                    class="absolute inset-0 flex items-center justify-center text-center text-xs font-semibold text-highlighted tabular-nums"
+                  >
+                    {{ detailProgressLabel }}
+                  </span>
+                </div>
+              </StatusIndicator>
               <div class="min-w-0">
                 <h2 class="truncate text-lg font-semibold text-highlighted">
                   {{ detail.file ? fileName(detail.file.path) : 'File unavailable' }}
@@ -167,20 +168,21 @@
               label="Status"
               :value="statusInfo(detail.status).label"
               icon="i-lucide-activity"
-              :color="detail.error || detail.status === 'failed' ? 'error' : 'success'"
+              :color="indicator?.color"
             />
-            <StatCard label="Kind" :value="detail.kind" icon="i-lucide-workflow">
+            <StatCard label="Kind" :value="detail.kind" icon="i-lucide-workflow" color="neutral">
               <template #value>
                 <span class="flex items-baseline gap-1.5">
                   <bdi>{{ statusInfo(detail.kind, 'kind').label }}</bdi>
                   <UBadge
                     v-if="
-                      detail.kind === 'healthcheck' && selectedAttempt?.health?.['healthy'] === true
+                      detail.kind === 'healthcheck' &&
+                      typeof selectedAttempt?.health?.['healthy'] === 'boolean'
                     "
-                    color="success"
+                    :color="selectedAttempt?.health?.['healthy'] ? 'success' : 'error'"
                     variant="soft"
                     size="sm"
-                    >Healthy</UBadge
+                    >{{ selectedAttempt?.health?.['healthy'] ? 'Healthy' : 'Corrupt' }}</UBadge
                   >
                 </span>
               </template>
@@ -634,7 +636,7 @@ import { healthSamples } from '~/utils/health';
 import { jobLogLines, LOG_WINDOW } from '~/utils/logs';
 import { formatRelativeTime } from '~/utils/relativeTime';
 import { estimatedJobCompletion, progressPercent, progressStage } from '~/utils/progress';
-import { statusInfo } from '~/utils/status';
+import { jobIndicatorInfo, statusInfo } from '~/utils/status';
 import { useEvents, type ServerEvent } from '~/composables/useEvents';
 import { useJobs } from '~/composables/useJobs';
 import { useJobRequeue } from '~/composables/useJobRequeue';
@@ -660,6 +662,11 @@ defineEmits<{ 'open-file': [id: number] }>();
 const open = defineModel<boolean>('open', { default: false });
 const fullscreen = useStorage('job_details_fullscreen', false);
 const detail = ref<JobDetail | null>(null);
+const indicator = computed(() =>
+  detail.value
+    ? jobIndicatorInfo(detail.value, detail.value.attempts.at(-1)?.health?.['healthy'])
+    : null,
+);
 const reason = computed(() => (detail.value ? jobReason(detail.value) : null));
 const jobTitle = computed(() => {
   const id = props.imported?.id ?? props.jobId;
@@ -1168,13 +1175,14 @@ watch(selectedAttemptId, () => {
 
 const detailProgress = computed<number | null>(() => {
   const job = detail.value;
-  if (!job || job.status === 'pending') return null;
+  if (!job || job.status === 'pending' || job.status === 'queued') return null;
   return progressPercent(job.progress);
 });
 
 const estimatedEnd = computed(() => (detail.value ? estimatedJobCompletion(detail.value) : null));
 
 const detailProgressLabel = computed(() => {
+  if (detail.value?.status === 'queued') return 'Queue';
   if (detailProgress.value !== null) return `${Math.round(detailProgress.value)}%`;
   if (detail.value?.progress?.['tool'] === 'ffprobe') return 'Probe';
   if (detail.value?.progress?.['tool'] === 'mkvpropedit') return 'Stats';
@@ -1182,6 +1190,7 @@ const detailProgressLabel = computed(() => {
   if (stage === 'probe') return 'Probe';
   if (stage === 'decode') return 'Decode';
   const status = detail.value?.status;
+  if (status === 'staging') return 'Prep';
   if (status === 'claimed') return 'Claim';
   if (status === 'running') return 'Run';
   if (status === 'verifying') return 'Verify';

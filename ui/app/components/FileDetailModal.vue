@@ -10,19 +10,13 @@
         <section class="space-y-3">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 items-start gap-3">
-              <JobProgressRing
-                v-if="ringProgress"
-                v-bind="ringProgress"
-                :label="
-                  detail.active_job_status
-                    ? `${detail.active_job_kind} job progress`
-                    : 'File progress'
-                "
-                :color="detail.active_job_kind === 'healthcheck' ? 'success' : 'primary'"
-              />
-              <span v-else class="mw-detail-icon size-10 shrink-0"
-                ><UIcon name="i-lucide-file-video" class="size-5"
-              /></span>
+              <StatusIndicator v-if="indicator" :info="indicator">
+                <JobProgressRing
+                  v-if="ringProgress"
+                  v-bind="ringProgress"
+                  :label="indicator.label"
+                />
+              </StatusIndicator>
               <div class="min-w-0">
                 <UTooltip :text="fileName(detail.path)">
                   <h2 class="cursor-help truncate text-lg font-semibold text-highlighted">
@@ -272,7 +266,7 @@ import { formatDate, toIsoString } from '~/utils/date';
 import { healthSamples } from '~/utils/health';
 import { formatRelativeTime } from '~/utils/relativeTime';
 import { fileRingProgress } from '~/utils/progress';
-import { statusInfo } from '~/utils/status';
+import { fileIndicatorInfo, statusInfo } from '~/utils/status';
 import { canSkipCooldown } from '~/composables/useFiles';
 
 const props = defineProps<{
@@ -436,6 +430,7 @@ const { now, pause, resume } = useNow({ interval: 1000, controls: true, immediat
 const ringProgress = computed(() =>
   props.detail ? fileRingProgress(props.detail, now.value) : null,
 );
+const indicator = computed(() => (props.detail ? fileIndicatorInfo(props.detail) : null));
 watch(
   () => open.value && !props.detail?.active_job_status && ringProgress.value !== null,
   (waiting) => (waiting ? resume() : pause()),

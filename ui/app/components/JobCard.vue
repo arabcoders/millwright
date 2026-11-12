@@ -6,7 +6,7 @@
     <div class="flex items-start gap-3">
       <UCheckbox
         v-if="selectable"
-        class="shrink-0 self-center"
+        class="shrink-0"
         :model-value="selected"
         :aria-label="`Select job #${job.id}`"
         :disabled="busy"
@@ -34,28 +34,16 @@
           File unavailable
         </button>
       </h2>
-      <JobProgressRing
-        v-if="isActive(job.status)"
-        :status="job.status"
-        :percent="progressPercent(job.progress)"
-        :cooldown-started-at="job.cooldown_started_at"
-        :cooldown-until="job.hold_until"
-        :label="`${statusInfo(job.kind, 'kind').label} job progress`"
-        :color="job.kind === 'healthcheck' ? 'success' : 'primary'"
-      />
-      <div
-        v-else
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg"
-        :class="
-          job.status === 'failed' || healthResult === 'Corrupt'
-            ? 'bg-error/10 text-error'
-            : job.kind === 'healthcheck'
-              ? 'bg-success/10 text-success'
-              : 'bg-primary/10 text-primary'
-        "
-      >
-        <UIcon :name="statusInfo(job.kind, 'kind').icon" class="size-5" />
-      </div>
+      <StatusIndicator :info="indicator">
+        <JobProgressRing
+          v-if="isActive(job.status)"
+          :status="job.status"
+          :percent="progressPercent(job.progress)"
+          :cooldown-started-at="job.cooldown_started_at"
+          :cooldown-until="job.hold_until"
+          :label="indicator.label"
+        />
+      </StatusIndicator>
     </div>
     <div class="flex flex-wrap items-center gap-1.5">
       <UTooltip :text="libraryName">
@@ -297,7 +285,7 @@ import { elapsedSeconds, formatDate, toIsoString } from '~/utils/date';
 import { relativeDirectory } from '~/utils/location';
 import { formatRelativeTime } from '~/utils/relativeTime';
 import { estimatedJobCompletion, progressPercent, progressStage } from '~/utils/progress';
-import { statusInfo } from '~/utils/status';
+import { jobIndicatorInfo } from '~/utils/status';
 import { canJobAction, jobReason } from '~/utils/jobList';
 import type { JobRow, JobStatus, LibraryRow } from '~/types/api';
 import { ACTIVE_JOB_STATUSES } from '~/types/api';
@@ -359,6 +347,9 @@ const healthResult = computed(() => {
   const healthy = props.job.latest_attempt?.health?.['healthy'];
   return healthy === true ? 'Healthy' : healthy === false ? 'Corrupt' : null;
 });
+const indicator = computed(() =>
+  jobIndicatorInfo(props.job, props.job.latest_attempt?.health?.['healthy']),
+);
 const healthErrors = computed(() => {
   const count = props.job.latest_attempt?.health?.['error_count'];
   return healthResult.value && typeof count === 'number' && Number.isFinite(count) && count >= 0
