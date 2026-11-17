@@ -1,8 +1,8 @@
 <template>
   <NuxtLayout name="error-layout">
     <div class="flex min-h-full flex-1 items-start justify-center py-4 sm:py-8">
-      <div class="mw-card p-0 w-full">
-        <div class="space-y-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-7">
+      <UCard class="w-full">
+        <div class="space-y-6">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0 space-y-2">
               <div class="flex flex-wrap items-center gap-2 text-sm text-toned">
@@ -39,8 +39,10 @@
             :title="'Details'"
             :description="error.message"
           />
+        </div>
 
-          <section v-if="error.stack" class="space-y-3 border-t border-default pt-5">
+        <template v-if="error.stack" #footer>
+          <section class="space-y-3">
             <button
               type="button"
               class="flex w-full items-center justify-end gap-2 text-sm font-semibold text-highlighted transition hover:text-primary"
@@ -63,8 +65,8 @@
               ><code>{{ error.stack }}</code></pre>
             </div>
           </section>
-        </div>
-      </div>
+        </template>
+      </UCard>
     </div>
   </NuxtLayout>
 </template>

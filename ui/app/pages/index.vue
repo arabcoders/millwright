@@ -27,11 +27,11 @@
         </UButton>
       </template>
     </PageHeader>
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" :aria-busy="statsLoading">
       <template v-if="showBacklog">
         <StatCard
           label="Files awaiting completion"
-          :value="stats?.backlog.remaining_files ?? 'Loading'"
+          :value="stats?.backlog.remaining_files ?? summaryPlaceholder"
           icon="i-lucide-files"
           tooltip="Counts each indexed file once while probing, healthchecks, flow decisions, or processing remain unfinished. Files not yet discovered aren't included."
           color="primary"
@@ -152,6 +152,27 @@
     </div>
 
     <UAlert
+      v-if="statsError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      title="Could not load statistics"
+      :description="statsError"
+    >
+      <template #actions>
+        <UButton
+          color="neutral"
+          variant="outline"
+          size="sm"
+          icon="i-lucide-refresh-cw"
+          :loading="statsLoading"
+          @click="loadStats"
+          >Retry</UButton
+        >
+      </template>
+    </UAlert>
+
+    <UAlert
       v-if="progressError"
       color="error"
       variant="soft"
@@ -190,9 +211,14 @@
       <template v-if="!collapsedSections.newFiles">
         <div
           v-if="recentFilesLoading && !recentFiles.length"
-          class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+          class="mw-card divide-y divide-default"
+          aria-label="Loading recent files"
         >
-          <USkeleton v-for="item in 6" :key="item" class="h-64 rounded-xl" />
+          <div v-for="item in 6" :key="item" class="space-y-3 p-4 sm:p-5">
+            <USkeleton class="h-5 w-2/3" />
+            <USkeleton class="h-4 w-1/3" />
+            <USkeleton v-if="!compact" class="h-20 w-full" />
+          </div>
         </div>
         <UAlert
           v-if="recentFilesError"
@@ -204,7 +230,8 @@
         />
         <div
           v-if="recentFiles.length"
-          class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+          class="mw-card divide-y divide-default"
+          :aria-busy="recentFilesLoading || fileActionBusy"
         >
           <FileCard
             v-for="file in recentFiles"
@@ -227,18 +254,9 @@
         <UEmpty
           v-else-if="!recentFilesLoading && !recentFilesError"
           title="No files indexed yet."
-          variant="naked"
-          :ui="{
-            root: 'gap-1 p-0 sm:p-0 lg:p-0',
-            header: 'max-w-none gap-1',
-            title: 'text-sm font-normal text-toned',
-          }"
-          class="mw-card py-10 sm:py-10 lg:py-10"
-        >
-          <template #leading>
-            <UIcon name="i-lucide-files" class="size-6 text-toned" />
-          </template>
-        </UEmpty>
+          icon="i-lucide-files"
+          size="sm"
+        />
       </template>
     </section>
 
@@ -280,19 +298,25 @@
         />
         <div
           v-if="processingLoading && !processingJobs.length"
-          class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+          class="mw-card divide-y divide-default"
+          aria-label="Loading active jobs"
         >
-          <USkeleton v-for="item in 6" :key="item" class="h-64 rounded-xl" />
+          <div v-for="item in 6" :key="item" class="space-y-3 p-4 sm:p-5">
+            <USkeleton class="h-5 w-2/3" />
+            <USkeleton class="h-4 w-1/3" />
+            <USkeleton v-if="!compact" class="h-20 w-full" />
+          </div>
         </div>
         <div
           v-else-if="processingJobs.length"
-          class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+          class="mw-card divide-y divide-default"
+          :aria-busy="processingLoading"
         >
           <DeferredContent
             v-for="job in processingJobs"
             :key="job.id"
-            :min-height="compact ? 208 : 384"
-            class="min-w-0"
+            :min-height="compact ? 144 : 280"
+            class="w-full min-w-0 max-w-full"
           >
             <JobCard
               :job="job"
@@ -309,18 +333,9 @@
         <UEmpty
           v-else-if="!processingLoading && !processingError"
           title="No active jobs"
-          variant="naked"
-          :ui="{
-            root: 'gap-1 p-0 sm:p-0 lg:p-0',
-            header: 'max-w-none gap-1',
-            title: 'text-sm font-normal text-toned',
-          }"
-          class="mw-card py-10 sm:py-10 lg:py-10"
-        >
-          <template #leading>
-            <UIcon name="i-lucide-inbox" class="size-6 text-toned" />
-          </template>
-        </UEmpty>
+          icon="i-lucide-inbox"
+          size="sm"
+        />
         <p v-if="processingTotal > processingJobs.length" class="text-sm text-toned">
           Showing {{ processingJobs.length }} of {{ processingTotal }} processing jobs.
           <NuxtLink :to="`/jobs?status=${processingJobStatuses.join(',')}`" class="text-primary"
@@ -424,7 +439,13 @@ const jobsLink = computed(() => {
     },
   };
 });
-const { summary: stats, loadSummary: loadStats, setSummary } = useStats();
+const {
+  summary: stats,
+  isLoadingSummary: statsLoading,
+  summaryError: statsError,
+  loadSummary: loadStats,
+  setSummary,
+} = useStats();
 const {
   recentItems: recentFiles,
   recentLoading: recentFilesLoading,
@@ -828,9 +849,10 @@ onBeforeUnmount(() => {
 });
 
 const showBacklog = computed(() => !stats.value || stats.value.backlog.remaining_files > 0);
+const summaryPlaceholder = computed(() => (statsError.value ? 'Unavailable' : 'Loading'));
 const finishValue = computed(() => {
   const estimate = stats.value?.backlog;
-  if (!estimate) return 'Loading';
+  if (!estimate) return summaryPlaceholder.value;
   return estimate.estimated_finish_at
     ? formatRelativeTime(estimate.estimated_finish_at, 'en')
     : 'Unavailable';
@@ -842,7 +864,7 @@ const finishTooltip = computed(() => {
     ? `${scope} ${formatDate(estimate.estimated_finish_at, 'detail')}`
     : scope;
 });
-const jobsSucceeded24h = computed(() => stats.value?.jobs.count ?? 0);
+const jobsSucceeded24h = computed(() => stats.value?.jobs.count ?? summaryPlaceholder.value);
 const avgDurationHint = computed(() => {
   const avg = stats.value?.jobs.avg_duration_s ?? 0;
   return avg > 0 ? `avg ${formatTime(avg)} per job` : '';
@@ -850,7 +872,9 @@ const avgDurationHint = computed(() => {
 const spaceSavedTotal = computed(() =>
   Object.values(stats.value?.space_saved_by_library ?? {}).reduce((sum, n) => sum + n, 0),
 );
-const spaceSavedLabel = computed(() => formatBytes(spaceSavedTotal.value));
+const spaceSavedLabel = computed(() =>
+  stats.value ? formatBytes(spaceSavedTotal.value) : summaryPlaceholder.value,
+);
 const spaceSavedHint = computed(() => {
   const count = Object.keys(stats.value?.space_saved_by_library ?? {}).length;
   return count ? `across ${count} ${count === 1 ? 'library' : 'libraries'}` : '';

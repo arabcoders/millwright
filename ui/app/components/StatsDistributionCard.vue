@@ -4,9 +4,9 @@
       <UIcon :name="icon" class="size-4 text-toned" />
       <h3 class="font-semibold text-highlighted">{{ title }}</h3>
     </div>
-    <p v-if="!rows.length" class="text-sm text-toned">
-      <slot name="empty">No data available.</slot>
-    </p>
+    <UEmpty v-if="!rows.length" size="sm" variant="naked" :icon="icon">
+      <template #title><slot name="empty">No data available.</slot></template>
+    </UEmpty>
     <div v-else class="space-y-2">
       <div v-for="row in rows" :key="row.label" class="space-y-1">
         <div class="flex justify-between text-xs">

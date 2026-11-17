@@ -30,10 +30,19 @@
         aria-label="Snapshot attempt or stage"
         class="w-full sm:w-64"
       />
-      <p v-if="!current" class="text-sm text-toned">No attempt recorded.</p>
+      <UEmpty
+        v-if="!current"
+        variant="naked"
+        size="sm"
+        icon="i-lucide-camera"
+        title="No attempt recorded."
+      />
       <template v-else>
         <StatusBadge v-if="current.result" :status="current.result" />
-        <div class="grid items-start gap-3 xl:grid-cols-2">
+        <div
+          class="grid min-w-0 items-start gap-3 xl:grid-cols-2"
+          @scroll.capture.passive="syncTableScroll"
+        >
           <section v-for="side in sides" :key="side.label" class="mw-frame min-w-0 space-y-3 p-3">
             <h4 class="flex items-center gap-2 font-semibold text-highlighted">
               <UIcon :name="side.icon" class="size-4" />{{ side.label }}
@@ -50,13 +59,17 @@
                   <dd class="break-all">{{ row.value }}</dd>
                 </div>
               </dl>
-              <div class="max-h-80 overflow-auto">
-                <UTable
-                  :data="side.probe.streams"
-                  :columns="streamColumns"
-                  :ui="{ tbody: '[&>tr]:transition-colors [&>tr:hover]:bg-elevated/60' }"
-                />
-              </div>
+              <UTable
+                data-stream-table
+                :data="side.probe.streams"
+                :columns="streamColumns"
+                :style="{ '--stream-table-width': `${streamTableWidth}px` }"
+                :ui="{
+                  base: 'table-fixed w-(--stream-table-width)',
+                  th: 'whitespace-nowrap wrap-normal',
+                  td: 'whitespace-normal wrap-break-word',
+                }"
+              />
               <UCollapsible :key="`${attempt?.id}-${current.value}-${side.label}`">
                 <template #default="{ open: expanded }">
                   <UButton
@@ -70,7 +83,7 @@
                   >
                 </template>
                 <template #content>
-                  <pre class="mt-2 max-h-72 overflow-auto font-mono text-xs text-toned">{{
+                  <pre class="mw-terminal mt-2 max-h-72 overflow-auto font-mono text-xs">{{
                     JSON.stringify(side.probe, null, 2)
                   }}</pre>
                 </template>
@@ -104,6 +117,27 @@ const props = defineProps<{
 }>();
 const visible = useStorage('job_media_snapshots_visible', true);
 const selected = ref('attempt');
+const syncedScrollPositions = new WeakMap<HTMLElement, number>();
+const syncTableScroll = (event: Event): void => {
+  const source = event.target;
+  const container = event.currentTarget;
+  if (
+    !(source instanceof HTMLElement) ||
+    !(container instanceof HTMLElement) ||
+    !source.hasAttribute('data-stream-table')
+  )
+    return;
+  const syncedPosition = syncedScrollPositions.get(source);
+  syncedScrollPositions.delete(source);
+  // Mirrored scroll events must not push an older position back into the table being scrolled.
+  if (syncedPosition !== undefined && Math.abs(source.scrollLeft - syncedPosition) < 1) return;
+  for (const table of container.querySelectorAll<HTMLElement>('[data-stream-table]')) {
+    if (table !== source && Math.abs(table.scrollLeft - source.scrollLeft) > 1) {
+      table.scrollLeft = source.scrollLeft;
+      syncedScrollPositions.set(table, table.scrollLeft);
+    }
+  }
+};
 const snapshots = computed(() => jobSnapshots(props.attempt, props.events));
 const snapshotOptions = computed(() =>
   snapshots.value.map(({ value, label }) => ({ value, label })),
@@ -135,39 +169,53 @@ watch(
 );
 
 const streamColumns: TableColumn<ProbeStream>[] = [
-  { accessorKey: 'index', header: '#' },
+  { accessorKey: 'index', header: '#', size: 48 },
   {
     accessorKey: 'codec_type',
     header: 'Type',
+    size: 96,
     cell: ({ row }) =>
       row.original.disposition_attached_pic ? 'Artwork' : row.original.codec_type,
   },
-  { accessorKey: 'codec', header: 'Codec' },
-  { accessorKey: 'language', header: 'Language' },
-  { accessorKey: 'title', header: 'Title' },
+  {
+    accessorKey: 'codec',
+    header: 'Codec',
+    size: 192,
+    meta: { class: { td: 'whitespace-nowrap wrap-normal' } },
+  },
+  { accessorKey: 'language', header: 'Language', size: 96 },
+  { accessorKey: 'title', header: 'Title', size: 288 },
   {
     id: 'resolution',
     header: 'Resolution',
+    size: 128,
     cell: ({ row }) =>
       row.original.width && row.original.height
         ? `${row.original.width}×${row.original.height}`
         : '',
   },
-  { accessorKey: 'fps', header: 'FPS' },
-  { accessorKey: 'pix_fmt', header: 'Pixel format' },
-  { accessorKey: 'profile', header: 'Profile' },
-  { accessorKey: 'channels', header: 'Channels' },
-  { accessorKey: 'channel_layout', header: 'Layout' },
-  { accessorKey: 'sample_rate', header: 'Sample rate (Hz)' },
+  { accessorKey: 'channels', header: 'Channels', size: 96 },
   {
     accessorKey: 'bit_rate',
     header: 'Bitrate',
+    size: 112,
     cell: ({ row }) =>
       row.original.codec_type === 'attachment' ? '' : formatBitrate(row.original.bit_rate),
   },
   {
+    accessorKey: 'fps',
+    header: 'FPS',
+    size: 80,
+    cell: ({ row }) => (row.original.fps == null ? '' : row.original.fps.toFixed(2)),
+  },
+  { accessorKey: 'channel_layout', header: 'Layout', size: 160 },
+  { accessorKey: 'sample_rate', header: 'Sample rate (Hz)', size: 160 },
+  { accessorKey: 'pix_fmt', header: 'Pixel format', size: 144 },
+  { accessorKey: 'profile', header: 'Profile', size: 160 },
+  {
     id: 'dispositions',
     header: 'Dispositions',
+    size: 192,
     cell: ({ row }) =>
       [
         row.original.disposition_default ? 'Default' : '',
@@ -178,7 +226,19 @@ const streamColumns: TableColumn<ProbeStream>[] = [
         .filter(Boolean)
         .join(', '),
   },
-  { accessorKey: 'filename', header: 'Filename' },
-  { accessorKey: 'mimetype', header: 'MIME type' },
+  {
+    accessorKey: 'filename',
+    header: 'Filename',
+    size: 288,
+  },
+  {
+    accessorKey: 'mimetype',
+    header: 'MIME type',
+    size: 192,
+  },
 ];
+for (const column of streamColumns) {
+  column.meta = { ...column.meta, style: { th: { width: `${column.size}px` } } };
+}
+const streamTableWidth = streamColumns.reduce((width, column) => width + (column.size ?? 0), 0);
 </script>

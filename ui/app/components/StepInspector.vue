@@ -153,7 +153,21 @@
           :items="pluginOptions"
           value-key="value"
           class="w-full"
-          @update:model-value="pick(String($event))" /></UFormField
+          @update:model-value="pick(String($event))"
+      /></UFormField>
+      <template v-if="!pluginManifest">
+        <UAlert
+          color="warning"
+          variant="soft"
+          icon="i-lucide-triangle-alert"
+          title="Plugin metadata is unavailable"
+          description="Stored inputs are kept unchanged."
+        />
+        <UFormField label="Stored inputs (JSON)">
+          <pre class="text-xs whitespace-pre-wrap wrap-anywhere">{{
+            JSON.stringify(node.rawInputs, null, 2)
+          }}</pre>
+        </UFormField> </template
       ><UFormField
         v-for="field in editableFields"
         :key="field.name"

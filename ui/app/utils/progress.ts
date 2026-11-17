@@ -107,10 +107,16 @@ export const cooldownRemaining = (
   return status === 'pending' && remaining === 0 ? null : remaining;
 };
 
-export const formatCountdown = (seconds: number): string => {
+export const formatCountdown = (
+  seconds: number,
+  format: 'compact' | 'full' = 'compact',
+): string => {
   const total = Math.floor(seconds);
   const pad = (value: number): string => String(value).padStart(2, '0');
-  if (total >= 3600) return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}`;
+  if (total >= 3600) {
+    const hoursMinutes = `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}`;
+    return format === 'full' ? `${hoursMinutes}:${pad(total % 60)}` : hoursMinutes;
+  }
   if (total >= 60) return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
   return pad(total);
 };

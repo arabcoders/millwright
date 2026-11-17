@@ -1,4 +1,4 @@
-import { onBeforeRouteLeave, onBeforeRouteUpdate } from '#app';
+import { useRouter } from '#app';
 import { computed, onBeforeUnmount, toValue, type MaybeRefOrGetter, type Ref } from 'vue';
 
 export const useDirtyCloseGuard = (
@@ -22,10 +22,8 @@ export const useDirtyCloseGuard = (
   };
   const request = () => (pending ??= requestClose().finally(() => (pending = null)));
   const handleOpenChange = (value: boolean) => (value ? (open.value = true) : request());
-  const guard = async (_to: unknown, _from: unknown, next: (value?: false) => void) =>
-    next((await request()) ? undefined : false);
-  onBeforeRouteLeave((_to, _from, next) => (guarded.value ? guard(_to, _from, next) : next()));
-  onBeforeRouteUpdate((_to, _from, next) => (guarded.value ? guard(_to, _from, next) : next()));
+  const removeGuard = useRouter().beforeEach(() => (guarded.value ? request() : true));
+  onBeforeUnmount(removeGuard);
   if (typeof window !== 'undefined') {
     const unload = (event: BeforeUnloadEvent) => {
       if (guarded.value) {

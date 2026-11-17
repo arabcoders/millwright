@@ -1,11 +1,5 @@
 <template>
-  <UPopover
-    :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
-    :ui="{
-      content:
-        'mw-card rounded-lg border-(--mw-surface-border-soft) bg-elevated/20 backdrop-blur-xl ring-0',
-    }"
-  >
+  <UPopover :content="{ align: 'end', side: 'bottom', sideOffset: 8 }">
     <UButton
       color="neutral"
       variant="ghost"
@@ -14,7 +8,7 @@
       aria-label="Notifications"
       title="Notifications"
     >
-      <span class="hidden sm:inline">Notifications</span>
+      <span class="hidden xl:inline">Notifications</span>
       <UBadge :color="badgeColor" variant="soft" size="sm">
         {{ center.unreadCount }}/{{ center.notifications.length }}
       </UBadge>
@@ -22,7 +16,7 @@
 
     <template #content>
       <section class="w-md max-w-[calc(100vw-1rem)]" aria-label="Notifications">
-        <header class="mw-border-bottom-soft p-4 sm:px-6">
+        <header class="mw-border-bottom-soft p-4">
           <div class="flex items-center justify-between gap-3">
             <div>
               <p class="text-sm font-semibold text-highlighted">Notifications</p>
@@ -58,7 +52,7 @@
           <li
             v-for="item in center.sortedNotifications"
             :key="item.id"
-            class="mw-card flex items-start gap-2.5 rounded-none border-l-4 p-3"
+            class="flex min-w-0 max-w-full items-start gap-2.5 rounded-none border border-default border-l-4 bg-transparent px-3 py-2 transition-colors hover:bg-elevated/20"
             :class="[
               levelBorder[item.level],
               expandedId === item.id ? 'ring-1 ring-primary/30' : '',
@@ -126,15 +120,9 @@
             </div>
           </li>
         </ul>
-        <UEmpty
-          v-else
-          variant="naked"
-          icon="i-lucide-inbox"
-          title="No notifications"
-          class="px-4 py-8"
-        />
+        <UEmpty v-else variant="naked" size="sm" icon="i-lucide-inbox" title="No notifications" />
 
-        <footer class="mw-border-top-soft flex flex-wrap justify-end gap-2 p-4 sm:px-6">
+        <footer class="mw-border-top-soft flex flex-wrap justify-end gap-2 p-4">
           <UButton
             color="neutral"
             variant="ghost"

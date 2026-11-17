@@ -1,4 +1,4 @@
-import type { PathMapping, PluginInputField } from '~/types/api';
+import type { PathMapping, PluginInputField, PluginRow } from '~/types/api';
 import { emptyCondition, type DraftCondition } from '~/utils/condition';
 
 export type DraftInput = string | number | boolean | string[] | PathMapping[];
@@ -21,6 +21,18 @@ export type DraftTerminalNode = {
 export type DraftNode = DraftPluginNode | DraftConditionNode | DraftTerminalNode;
 
 export type CanvasSelection = { kind: 'node'; id: string };
+
+export const nodePorts = (node: DraftNode, plugin?: PluginRow): string[] => {
+  if (node.kind === 'condition') return ['true', 'false'];
+  if (node.kind === 'terminal') return ['next'];
+  if (!plugin) return [];
+  return {
+    filter: ['match', 'veto'],
+    inspector: ['match', 'skip', 'veto'],
+    transcode: ['plan', 'skip'],
+    action: ['next'],
+  }[plugin.manifest.kind];
+};
 
 let uidCounter = 0;
 

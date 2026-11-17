@@ -31,12 +31,13 @@
       :description="error ?? metadata?.error ?? undefined"
     />
     <USkeleton v-if="loading && !metadata" class="h-16 rounded-lg" />
-    <p
+    <UEmpty
       v-else-if="metadata && !groups.length && !error && !metadata.error"
-      class="py-2 text-sm text-toned"
-    >
-      No temporary files remain.
-    </p>
+      variant="naked"
+      size="sm"
+      icon="i-lucide-folder"
+      title="No temporary files remain."
+    />
     <section v-for="group in groups" :key="group.label" class="space-y-2">
       <div class="flex flex-wrap items-center gap-2">
         <h3 class="text-sm font-semibold text-highlighted">
@@ -57,16 +58,10 @@
         :columns="columns"
         :aria-label="group.label"
         tabindex="0"
-        class="mw-frame"
-        :ui="{
-          base: 'w-full min-w-[30rem] table-fixed',
-          th: 'px-3 py-2 text-xs',
-          td: 'px-3 py-2 text-xs align-top',
-          tbody: '[&>tr]:transition-colors [&>tr:hover]:bg-elevated/60',
-        }"
+        :ui="{ base: 'w-full min-w-[30rem] table-fixed' }"
       >
         <template #path-cell="{ row }">
-          <span class="whitespace-normal break-all font-mono">{{ row.original.path }}</span>
+          <span class="font-mono">{{ row.original.path }}</span>
         </template>
         <template #size_bytes-cell="{ row }">
           <span class="whitespace-nowrap tabular-nums">{{

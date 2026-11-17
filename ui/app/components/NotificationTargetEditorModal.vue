@@ -4,7 +4,7 @@
     :title="target ? 'Edit notification target' : 'New notification target'"
     :dismissible="!saving"
     :close="{ disabled: saving }"
-    :ui="{ content: 'w-full sm:max-w-lg' }"
+    :ui="{ content: 'w-full sm:max-w-lg', body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5' }"
     @update:open="handleOpenChange"
     @after:leave="clearForm"
   >
@@ -17,6 +17,7 @@
         <UFormField label="Name" required>
           <UInput
             v-model="name"
+            icon="i-lucide-bell"
             class="w-full"
             autocomplete="off"
             :disabled="Boolean(target) || saving"
@@ -24,7 +25,14 @@
           />
         </UFormField>
         <UFormField label="Apprise URL" required>
-          <UInput v-model="url" :disabled="saving" class="w-full" autocomplete="off" required />
+          <UInput
+            v-model="url"
+            icon="i-lucide-link"
+            :disabled="saving"
+            class="w-full"
+            autocomplete="off"
+            required
+          />
         </UFormField>
         <p class="text-xs text-toned">
           Find your service's URL format in the
@@ -36,12 +44,28 @@
             >Apprise documentation</a
           >.
         </p>
-        <p v-if="saveError" class="text-sm text-error">{{ saveError }}</p>
+        <p v-if="saveError" class="wrap-anywhere text-sm text-error">{{ saveError }}</p>
       </form>
     </template>
     <template #footer>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <UButton type="submit" form="notificationTargetForm" icon="i-lucide-save" :loading="saving">
+      <div class="flex w-full flex-wrap items-center justify-end gap-2">
+        <UButton
+          type="button"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          icon="i-lucide-x"
+          :disabled="saving"
+          @click="handleOpenChange(false)"
+          >Cancel</UButton
+        >
+        <UButton
+          type="submit"
+          form="notificationTargetForm"
+          size="sm"
+          icon="i-lucide-save"
+          :loading="saving"
+        >
           {{ target ? 'Save changes' : 'Add target' }}
         </UButton>
       </div>

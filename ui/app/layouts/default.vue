@@ -1,11 +1,11 @@
 <template>
   <AppRoot>
-    <div class="shell-stage shell-surface flex flex-col">
-      <div id="main_container" class="shell-root flex flex-col">
+    <div class="shell-surface flex min-h-dvh flex-col">
+      <div id="main_container" class="flex min-h-dvh flex-col">
         <UDashboardGroup
           storage="local"
           storage-key="mw-shell"
-          class="shell-dashboard flex-1"
+          class="min-h-dvh flex-1"
           :ui="{ base: 'relative flex min-h-full overflow-visible' }"
         >
           <UDashboardSidebar
@@ -22,53 +22,52 @@
             :ui="dashboardSidebarUi"
           >
             <template #header="{ collapsed }">
-              <NuxtLink
-                to="/"
-                class="flex w-full min-w-0 items-center gap-2 rounded-xl transition-colors hover:bg-elevated/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                :class="collapsed ? 'justify-center p-1' : 'px-1.5 py-1'"
-                aria-label="Home"
-              >
-                <span
-                  class="relative inline-flex shrink-0 items-center justify-center transition-all duration-200"
-                  :class="
-                    collapsed
-                      ? 'size-10 rounded-xl bg-elevated/80 ring ring-default shadow-xs'
-                      : 'size-9 rounded-lg'
-                  "
+              <UTooltip :text="connectionStatusLabel">
+                <NuxtLink
+                  to="/"
+                  class="flex w-full min-w-0 items-center gap-3 rounded-md transition-colors hover:bg-elevated/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  :class="collapsed ? 'justify-center' : ''"
+                  :aria-label="`Home. ${connectionStatusLabel}`"
+                  @click="showSidebar = false"
                 >
-                  <img
-                    :src="uri('/images/favicon-192.png')"
-                    alt="Millwright"
-                    class="rounded-lg object-contain"
-                    :class="collapsed ? 'size-6' : 'size-5'"
-                  />
-                </span>
+                  <span
+                    class="relative inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-default bg-elevated/80 shadow-sm"
+                  >
+                    <img
+                      :src="uri('/images/favicon-192.png')"
+                      alt="Millwright"
+                      class="size-7 rounded-md object-contain"
+                    />
+                    <span
+                      aria-hidden="true"
+                      class="absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-default"
+                      :class="connectionStatusDotClass"
+                    />
+                  </span>
 
-                <div v-if="false === collapsed" class="min-w-0">
-                  <p class="truncate text-sm font-semibold">Millwright</p>
-                  <p class="truncate text-xs text-toned">Transcode Automation</p>
-                </div>
-              </NuxtLink>
+                  <div v-if="false === collapsed" class="min-w-0">
+                    <p class="truncate text-sm font-semibold text-highlighted">Millwright</p>
+                    <p class="truncate text-xs text-toned">Transcode Automation</p>
+                  </div>
+                </NuxtLink>
+              </UTooltip>
             </template>
 
             <template #default="{ collapsed }">
-              <div class="flex h-full flex-col gap-6 px-1 py-1">
-                <div v-for="section in sidebarSections" :key="section.id" class="space-y-2">
-                  <p
-                    v-if="false === collapsed && section.label"
-                    class="px-2 text-[11px] font-semibold tracking-[0.22em] text-toned uppercase"
-                  >
-                    {{ section.label }}
-                  </p>
-
-                  <UNavigationMenu
-                    orientation="vertical"
-                    :collapsed="collapsed"
-                    :items="section.items"
-                    :tooltip="true"
-                    :ui="navigationUi(collapsed)"
-                  />
-                </div>
+              <div class="flex h-full flex-col gap-5 px-1 py-1">
+                <UNavigationMenu
+                  v-model="openNavigationGroups"
+                  orientation="vertical"
+                  variant="link"
+                  :collapsed="collapsed"
+                  :items="sidebarItems"
+                  :tooltip="true"
+                  :popover="{
+                    mode: 'click',
+                    content: { side: 'right', align: 'start' },
+                  }"
+                  :ui="navigationUi(collapsed)"
+                />
               </div>
             </template>
           </UDashboardSidebar>
@@ -77,39 +76,45 @@
             <template #header>
               <UDashboardNavbar :toggle="false" :title="pageTitle" :ui="dashboardNavbarUi">
                 <template #left>
-                  <div class="flex items-center gap-2">
+                  <div class="flex min-w-0 shrink-0 items-center gap-2">
                     <UDashboardSidebarToggle class="lg:hidden" />
                     <UDashboardSidebarCollapse class="hidden lg:inline-flex" />
                   </div>
                 </template>
 
                 <template #right>
-                  <div class="flex items-center gap-1 sm:gap-2">
+                  <div class="flex min-w-0 shrink items-center gap-0.5 sm:gap-2">
                     <UButton
                       :color="scanner?.paused ? 'warning' : 'neutral'"
                       variant="ghost"
                       size="sm"
                       class="shrink-0"
                       :icon="scanner?.paused ? 'i-lucide-play' : 'i-lucide-pause'"
-                      :label="scanner?.paused ? 'Resume activity' : 'Pause activity'"
-                      :title="activityDisabledReason || undefined"
+                      :aria-label="scanner?.paused ? 'Resume activity' : 'Pause activity'"
+                      :title="
+                        activityDisabledReason ||
+                        (scanner?.paused ? 'Resume activity' : 'Pause activity')
+                      "
                       :loading="scannerBusy || activityConfirming"
                       :disabled="!!activityDisabledReason"
                       @click="toggleActivity"
-                    />
+                    >
+                      <span class="hidden xl:inline">
+                        {{ scanner?.paused ? 'Resume activity' : 'Pause activity' }}
+                      </span>
+                    </UButton>
 
-                    <UButton
-                      color="neutral"
-                      variant="outline"
-                      size="sm"
-                      icon="i-lucide-search"
-                      aria-label="Search"
-                      title="Search"
-                      class="shrink-0 lg:hidden"
-                      @click="openSearch"
-                    />
-
-                    <UDashboardSearchButton class="hidden shrink-0 lg:inline-flex" />
+                    <UTooltip text="Search">
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        size="sm"
+                        icon="i-lucide-search"
+                        aria-label="Search"
+                        class="shrink-0"
+                        @click="openSearch"
+                      />
+                    </UTooltip>
 
                     <ThemeButton :square="true" :show-label="false" />
 
@@ -124,17 +129,6 @@
                       >
                         <UIcon name="i-lucide-wifi-off" class="size-4" aria-hidden="true" />
                       </span>
-                    </UTooltip>
-
-                    <UTooltip :text="reloadHint">
-                      <UButton
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        icon="i-lucide-refresh-cw"
-                        aria-label="Refresh"
-                        @click="reloadNuxtApp({ force: true })"
-                      />
                     </UTooltip>
 
                     <UDropdownMenu :items="accountMenu" :content="{ align: 'end' }">
@@ -159,8 +153,17 @@
                 <NuxtLoadingIndicator />
 
                 <div
-                  class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col px-4 py-4 sm:px-5 sm:py-5 lg:px-6"
+                  class="relative isolate flex min-h-0 min-w-0 max-w-full flex-1 flex-col px-4 py-4 sm:px-5 sm:py-5 lg:px-6"
                 >
+                  <div
+                    v-if="backgroundImage"
+                    aria-hidden="true"
+                    class="shell-header-artwork pointer-events-none absolute inset-x-0 top-0 -z-10 h-80"
+                    :style="{
+                      backgroundImage: `url(${backgroundImage})`,
+                      opacity: backgroundVisibility,
+                    }"
+                  />
                   <div class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col gap-4">
                     <UAlert
                       v-if="systemLoaded && !dateTimezone"
@@ -182,46 +185,88 @@
                     <NuxtPage />
                   </div>
 
-                  <footer
-                    class="shell-footer mt-auto border-t border-default pt-6 text-sm text-toned"
-                  >
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <span class="inline-flex items-center gap-2 font-semibold text-highlighted">
-                        <UIcon name="i-lucide-clapperboard" class="size-4" />
-                        <span>Millwright</span>
-                      </span>
-
-                      <UTooltip
-                        v-if="system?.version"
-                        :text="`Branch ${system.branch} · Python ${system.python}`"
-                      >
-                        <span class="text-xs has-tooltip">
-                          {{ system.version }} ·
-                          {{
-                            system.build_date === 'unknown'
-                              ? 'unknown'
-                              : formatDate(system.build_date, 'date')
-                          }}
-                        </span>
-                      </UTooltip>
-
-                      <UTooltip
-                        v-if="system && system.commit_sha !== 'unknown'"
-                        :text="system.commit_sha"
-                      >
-                        <a
-                          :href="`https://github.com/arabcoders/millwright/commit/${system.commit_sha}`"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="text-xs has-tooltip underline"
+                  <footer class="mt-6 border-t border-default py-6 text-sm text-toned">
+                    <div class="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                      <div class="min-w-0 space-y-3">
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                          <NuxtLink
+                            href="https://github.com/arabcoders/millwright"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex items-center gap-2 font-semibold text-highlighted hover:text-primary hover:underline underline-offset-2"
+                          >
+                            <UIcon name="i-lucide-github" class="size-4" aria-hidden="true" />
+                            <span>Millwright</span>
+                          </NuxtLink>
+                          <span v-if="system?.version" class="text-xs">{{ system.version }}</span>
+                        </div>
+                        <div
+                          v-if="system"
+                          class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs"
                         >
-                          {{ system.commit_sha.slice(0, 7) }}
-                        </a>
-                      </UTooltip>
-
-                      <span v-if="system?.protocol_version" class="text-xs">
-                        protocol {{ system.protocol_version }}
-                      </span>
+                          <span class="inline-flex items-center gap-1.5">
+                            <UIcon name="i-lucide-calendar" class="size-4" aria-hidden="true" />
+                            <span>
+                              Build
+                              {{
+                                system.build_date === 'unknown'
+                                  ? 'Unknown'
+                                  : formatDate(system.build_date, 'date')
+                              }}
+                            </span>
+                          </span>
+                          <span class="inline-flex min-w-0 items-center gap-1.5">
+                            <UIcon
+                              name="i-lucide-git-branch"
+                              class="size-4 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <span class="sr-only">Branch:</span>
+                            <span class="wrap-anywhere font-mono">{{ system.branch }}</span>
+                          </span>
+                          <UTooltip
+                            v-if="system.commit_sha !== 'unknown'"
+                            :text="system.commit_sha"
+                          >
+                            <NuxtLink
+                              :href="`https://github.com/arabcoders/millwright/commit/${system.commit_sha}`"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="inline-flex items-center gap-1.5 font-mono hover:text-primary hover:underline underline-offset-2"
+                            >
+                              <UIcon
+                                name="i-lucide-git-commit-horizontal"
+                                class="size-4"
+                                aria-hidden="true"
+                              />
+                              <span class="sr-only">Commit:</span>
+                              {{ system.commit_sha.slice(0, 7) }}
+                            </NuxtLink>
+                          </UTooltip>
+                        </div>
+                      </div>
+                      <div
+                        v-if="system"
+                        class="min-w-0 space-y-3 border-t border-default pt-4 lg:border-t-0 lg:border-s lg:ps-6 lg:pt-0"
+                      >
+                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-toned">
+                          Runtime
+                        </p>
+                        <dl class="grid grid-cols-2 gap-4 text-xs">
+                          <div class="min-w-0 space-y-1.5">
+                            <dt class="text-muted">Python</dt>
+                            <dd class="wrap-anywhere font-mono text-default">
+                              {{ system.python }}
+                            </dd>
+                          </div>
+                          <div v-if="system.protocol_version" class="min-w-0 space-y-1.5">
+                            <dt class="text-muted">Protocol</dt>
+                            <dd class="wrap-anywhere font-mono text-default">
+                              {{ system.protocol_version }}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
                     </div>
                   </footer>
                 </div>
@@ -238,7 +283,6 @@
             :groups="searchGroups"
             shortcut="meta_k"
             placeholder="Search"
-            :ui="{ modal: 'sm:max-w-3xl h-full sm:h-[28rem]' }"
           >
             <template #footer>
               <UAlert
@@ -263,7 +307,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui';
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue';
-import { useMediaQuery, useMounted } from '@vueuse/core';
+import { useMediaQuery, useMounted, useStorage } from '@vueuse/core';
 import { useAuth } from '~/composables/useAuth';
 import { useBackground } from '~/composables/useBackground';
 import AppRoot from '~/components/AppRoot.vue';
@@ -288,12 +332,6 @@ import { dateTimezone, formatDate } from '~/utils/date';
 import { notifyRequeueOutcome } from '~/composables/useJobRequeue';
 import { notifyJobRequestResult } from '~/composables/useFiles';
 import type { SystemInfo } from '~/types/api';
-
-type SidebarSection = {
-  id: string;
-  label?: string;
-  items: Array<Array<NavigationMenuItem>>;
-};
 
 type SwipeMode = 'open' | 'close';
 
@@ -361,12 +399,17 @@ const toggleActivity = async (): Promise<void> => {
     activityConfirming.value = false;
   }
 };
-const toast = useToast();
 const { connected, on: onEvent } = useEvents();
 let stopEvents: (() => void) | null = null;
 const mounted = useMounted();
 const disconnected = computed(() => mounted.value && !connected.value);
-const reloadHint = 'Refresh all data';
+const connectionStatusLabel = computed(() => {
+  if (connected.value) return 'Live updates connected.';
+  return disconnected.value
+    ? 'Live updates disconnected. Reconnecting.'
+    : 'Live updates connecting.';
+});
+const connectionStatusDotClass = computed(() => (connected.value ? 'bg-success' : 'bg-warning'));
 const mobile = useMediaQuery('(max-width: 1023px)');
 const isMobile = computed(() => mounted.value && mobile.value);
 const sidebarMenu = computed(() => ({ side: 'left' as const }));
@@ -485,19 +528,17 @@ const handleSwipeCancel = (): void => {
   resetSwipe();
 };
 
-const dashboardSidebarUi = computed(() => {
-  return {
-    root: 'shell-surface border-e border-default bg-default/95 backdrop-blur-sm',
-    header: 'border-b border-default px-2.5 py-3',
-    body: 'gap-3 px-2.5 py-3',
-    footer: 'border-t border-default px-2.5 py-3',
-  };
-});
+const dashboardSidebarUi = {
+  root: 'shell-surface border-e border-default bg-transparent',
+  header: 'px-3 py-5',
+  body: 'gap-3 px-2.5 py-3',
+  footer: 'border-t border-default px-2.5 py-3',
+};
 
 const dashboardNavbarUi = {
-  root: 'border-b border-default bg-transparent px-4 py-3 sm:px-5 lg:px-6',
-  title: 'text-sm font-semibold text-highlighted',
-  right: 'flex items-center shrink-0 gap-1.5',
+  root: 'border-b border-default bg-transparent px-4 py-3 backdrop-blur-md sm:px-5 lg:px-6',
+  title: 'hidden text-sm font-medium text-muted md:flex',
+  right: 'flex min-w-0 shrink items-center gap-0.5 sm:gap-1.5',
 };
 
 const dashboardPanelUi = {
@@ -509,31 +550,39 @@ const navigationUi = (collapsed: boolean) => ({
   root: 'w-full',
   list: 'gap-1.5',
   link: collapsed
-    ? 'justify-center rounded-lg px-2 py-2'
-    : 'rounded-lg px-2.5 py-2 text-sm font-medium text-default transition-colors',
+    ? 'justify-center rounded-md px-2 py-2 text-default'
+    : 'rounded-md px-2.5 py-2 text-sm font-medium text-default transition-colors',
   linkLeadingIcon: collapsed ? 'size-5' : 'size-4',
   linkLabel: collapsed ? 'hidden' : 'truncate',
+  childList: collapsed ? '' : 'ms-4 border-s border-default ps-2',
+  childLink: 'py-2 text-default before:bg-transparent',
+  childLinkIcon: 'group-data-[active]:text-primary',
 });
 
 const makeNavigationItem = (item: NavItem, activeId?: string): NavigationMenuItem => ({
   label: item.label,
   icon: item.icon,
   to: item.to,
+  exact: item.matchPath === '/',
   value: item.id,
   active: item.id === activeId,
+  onSelect: (): void => {
+    showSidebar.value = false;
+  },
 });
 
-const sidebarSections = computed<Array<SidebarSection>>(() => {
+const sidebarItems = computed<NavigationMenuItem[]>(() => {
   const items = getNavItems().filter((entry) => entry.sidebarVisible);
   const activeId = getActiveNavItem(route, items)?.id;
   return getNavSections().map((section) => ({
-    id: section.id,
+    value: section.id,
     label: section.label,
-    items: [
-      items
-        .filter((entry) => entry.section === section.id)
-        .map((entry) => makeNavigationItem(entry, activeId)),
-    ],
+    'aria-label': section.label,
+    icon: section.icon,
+    active: activeNavItem.value?.section === section.id,
+    children: items
+      .filter((entry) => entry.section === section.id)
+      .map((entry) => makeNavigationItem(entry, activeId)),
   }));
 });
 
@@ -623,6 +672,22 @@ const searchGroups = computed(() => [
 ]);
 
 const activeNavItem = computed(() => getActiveNavItem(route));
+const openNavigationGroups = useStorage<string[]>(
+  'mw-sidebar-open-groups',
+  activeNavItem.value ? [activeNavItem.value.section] : [],
+);
+
+watch(
+  () => route.path,
+  () => {
+    const section = activeNavItem.value?.section;
+    if (section && !openNavigationGroups.value.includes(section)) {
+      openNavigationGroups.value = [...openNavigationGroups.value, section];
+    }
+    showSidebar.value = false;
+  },
+  { immediate: true },
+);
 
 const pageTitle = computed(() => activeNavItem.value?.label ?? 'Millwright');
 
@@ -630,15 +695,6 @@ const documentTitle = computed(() => activeNavItem.value?.label ?? 'Millwright')
 
 useHead(() => ({
   title: formatPageTitle(documentTitle.value),
-  htmlAttrs: {
-    class: backgroundImage.value ? 'bg-fanart' : undefined,
-    style: backgroundImage.value
-      ? {
-          'background-image': `url(${backgroundImage.value})`,
-          '--mw-shell-opacity': String(1 - backgroundVisibility.value),
-        }
-      : undefined,
-  },
 }));
 
 const logout = async (): Promise<void> => {
@@ -675,6 +731,13 @@ const accountMenu = computed<DropdownMenuItem[][]>(() => [
       onSelect: (): void => {
         const panel = overlay.create(WebUiSettingsPanel, { destroyOnClose: true });
         panel.open();
+      },
+    },
+    {
+      label: 'Refresh all data',
+      icon: 'i-lucide-refresh-cw',
+      onSelect: (): void => {
+        reloadNuxtApp({ force: true });
       },
     },
   ],
@@ -715,11 +778,7 @@ const handleEvent = (event: ServerEvent): void => {
   }
 
   const { library_name: library, media_path: media, operation, error } = event.payload;
-  toast.add({
-    title: `${operation} failed`,
-    description: `${library ?? 'Unknown library'}: ${media} / ${error}`,
-    color: 'error',
-  });
+  notify.error(`${operation} failed: ${library ?? 'Unknown library'}: ${media} / ${error}`);
 };
 
 onMounted(async () => {
@@ -775,25 +834,3 @@ watch(isMobile, (v) => {
   resetSwipe();
 });
 </script>
-
-<style>
-.shell-stage {
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-.shell-root {
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-.shell-dashboard {
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-.shell-footer {
-  padding-top: 1.5rem;
-  padding-bottom: 1.5rem;
-}
-</style>

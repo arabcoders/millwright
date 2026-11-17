@@ -1,4 +1,5 @@
 import type { LogEntry } from '../types/logs';
+import { formatDate } from './date';
 
 export const filterLogTextLines = (value: string, filter: string): string[] => {
   const query = filter.trim().toLowerCase();
@@ -22,6 +23,9 @@ export const appendLog = (entries: LogEntry[], ids: Set<number>, entry: LogEntry
 
 export const serializeLogs = (entries: LogEntry[]): string =>
   entries.map((entry) => JSON.stringify(entry)).join('\n') + (entries.length ? '\n' : '');
+
+export const formatLogText = (entry: LogEntry): string =>
+  `${formatDate(entry.timestamp, 'timestamp')} ${entry.level.toUpperCase()} [${entry.logger}] ${entry.message}${entry.exception ? `: ${entry.exception.type}: ${entry.exception.message ?? ''}` : ''}`;
 
 export const jobLogLines = (text: string, filter: string): { stage: string; line: string }[] => {
   const lines: { stage: string; line: string }[] = [];

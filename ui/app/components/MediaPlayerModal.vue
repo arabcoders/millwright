@@ -16,7 +16,7 @@
       >
         <UIcon name="i-lucide-loader-circle" class="size-10 animate-spin text-toned" />
       </div>
-      <div v-else-if="error" class="p-4">
+      <div v-else-if="error && !payload" class="p-4">
         <UAlert
           color="error"
           variant="soft"
@@ -131,7 +131,7 @@
           class="absolute inset-0 block h-full w-full bg-black object-contain"
           playsinline
           webkit-playsinline
-          preload="metadata"
+          :preload="active ? 'auto' : 'none'"
           :poster="posterUrl || undefined"
           @error="handleSourceError"
           @loadeddata="syncVideoState"
@@ -167,6 +167,27 @@
           />
           Your browser does not support video playback.
         </video>
+
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          icon="i-lucide-triangle-alert"
+          title="Playback unavailable"
+          :description="error"
+          class="absolute inset-x-3 top-3 z-40"
+        >
+          <template #actions>
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-lucide-copy"
+              @click="copyDiagnostics"
+              >Copy playback diagnostics</UButton
+            >
+          </template>
+        </UAlert>
 
         <button
           v-if="active && isTouchDevice && !controlsVisible"
@@ -343,7 +364,9 @@
         </div>
         <section
           v-if="helpOpen"
+          tabindex="-1"
           data-player-help
+          role="dialog"
           class="mw-card-padded absolute inset-3 z-50 overflow-auto text-default"
           aria-label="Keyboard shortcuts"
           @keydown.esc.stop="helpOpen = false"
@@ -385,7 +408,9 @@
         </section>
         <section
           v-if="diagnosticsOpen"
+          tabindex="-1"
           data-player-diagnostics
+          role="dialog"
           class="mw-card-padded absolute inset-3 z-50 flex min-h-0 flex-col overflow-hidden text-default"
           aria-label="Playback diagnostics"
           @keydown.esc.stop="diagnosticsOpen = false"
@@ -616,13 +641,13 @@ const resumeKey = computed(() =>
   payload.value ? playbackResume.key(props.fileId, payload.value.generation) : '',
 );
 const isAudio = computed(() => !hasVideo.value);
-const mediaActive = computed(() => !loading.value && !error.value && payload.value !== null);
+const mediaActive = computed(() => !loading.value && payload.value !== null);
 const playerPortal = computed(() => (isFullscreen.value ? playerContainer.value || false : true));
 const posterUrl = computed(() => {
   return posterFailed.value ? '' : posterImage.value;
 });
 const sources = computed(() => {
-  if (!payload.value) return [];
+  if (!payload.value || !active.value) return [];
   if (usingHls.value) {
     return nativeHlsActive.value
       ? [{ src: uri(payload.value.urls.master), type: 'application/x-mpegURL' }]
@@ -798,6 +823,17 @@ watch(
   { immediate: true },
 );
 watch(subtitleEnabled, () => void nextTick(restoreNativeTextTrack));
+watch([helpOpen, diagnosticsOpen], () => {
+  void nextTick(() => {
+    const selector = diagnosticsOpen.value
+      ? '[data-player-diagnostics]'
+      : helpOpen.value
+        ? '[data-player-help]'
+        : '';
+    if (selector) playerContainer.value?.querySelector<HTMLElement>(selector)?.focus();
+    else if (active.value) playerContainer.value?.focus();
+  });
+});
 
 function formatDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
@@ -964,6 +1000,7 @@ function activatePlayer(): void {
   void nextTick(async () => {
     if (destroyed.value) return;
     applyMediaState(videoElement.value);
+    videoElement.value?.load();
     await restoreResume();
   });
 }
@@ -1063,9 +1100,9 @@ function handleSourceError(event: Event): void {
   recordPlaybackEvent('source-error', {
     target: event.target instanceof HTMLSourceElement ? 'source' : 'video',
   });
-  if (hls || switchingToHls.value) return;
+  if (!active.value || hls || switchingToHls.value) return;
   void nextTick(async () => {
-    if (destroyed.value || switchingToHls.value) return;
+    if (destroyed.value || !active.value || switchingToHls.value) return;
     // A native-HLS source failure still has one escape: hand the playlist to hls.js.
     if (usingHls.value) {
       if (nativeHlsActive.value && !hlsJsTried) {

@@ -71,11 +71,14 @@ type PreviewProps = {
   running: boolean;
   result: DryRunResult | null;
   error: string;
+  flowError: string;
+  flowsLoading: boolean;
   argvPreview: string;
   'onUpdate:open': (open: boolean) => void;
   'onUpdate:selectedFlowId': (id: number | undefined) => void;
   onOpenFile: () => void;
   onRun: () => Promise<void>;
+  onRefresh?: () => Promise<void>;
 };
 
 const setup = () => {
@@ -410,6 +413,7 @@ test('missing flow preserved', async () => {
 
 test('reload failure blocks', async () => {
   const env = setup();
+  const loading = pending<undefined>();
   try {
     env.reload(async () => {
       env.flowError.value = { detail: 'Could not refresh flows.' };
@@ -417,6 +421,34 @@ test('reload failure blocks', async () => {
     await env.preview.open(file, 3);
     await Vue.nextTick();
     expect(env.props().error).toBe('Could not refresh flows.');
+    expect(env.props().flowError).toBe('Could not refresh flows.');
+    expect(env.calls).toHaveLength(0);
+    env.reload(async () => {
+      await loading.promise;
+      env.flowError.value = null;
+    });
+    const retry = env.props().onRefresh!();
+    await Vue.nextTick();
+    expect(env.props().flowsLoading).toBe(true);
+    expect(env.calls).toHaveLength(0);
+    loading.resolve(undefined);
+    await retry;
+    await Vue.nextTick();
+    expect(env.props().flowError).toBe('');
+    expect(env.props().flowsLoading).toBe(false);
+    expect(env.props().result).toEqual(result());
+    expect(env.reloadCount()).toBe(2);
+  } finally {
+    env.scope.stop();
+  }
+});
+
+test('empty flows wait', async () => {
+  const env = setup();
+  try {
+    env.flows.value = [];
+    await env.preview.open(file);
+    expect(env.props().error).toBe('');
     expect(env.calls).toHaveLength(0);
   } finally {
     env.scope.stop();

@@ -5,8 +5,8 @@
         <div class="flex flex-wrap items-center gap-2">
           <UButton
             size="sm"
-            color="neutral"
-            variant="outline"
+            color="primary"
+            variant="solid"
             icon="i-lucide-plus"
             @click="openEditor()"
             >New flow</UButton
@@ -55,85 +55,105 @@
       title="Could not load flows"
       :description="loadError"
     />
-    <div v-if="loading" class="space-y-2">
+    <div v-if="loading && !flows.length" class="space-y-2">
       <USkeleton v-for="index in 4" :key="index" class="h-20 rounded-xl" />
     </div>
-    <div v-else-if="flows.length" class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-      <article v-for="flow in flows" :key="flow.id" class="mw-card flex h-full flex-col gap-3 p-4">
-        <div class="min-w-0">
-          <h2 class="truncate font-semibold text-highlighted">
-            <button
-              type="button"
-              class="truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
-              @click="openDetails(flow)"
-            >
-              {{ flow.name }}
-            </button>
-          </h2>
-        </div>
-        <div class="grid grid-cols-4 gap-3 text-sm">
-          <p class="truncate"><span class="text-toned">Revision:</span> {{ flow.version }}</p>
-          <p class="truncate">
-            <span class="text-toned">Nodes:</span>
-            {{ flow.definition.nodes.length }}
-          </p>
-          <p class="truncate">
-            <span class="text-toned">Edges:</span>
-            {{ flow.definition.edges.length }}
-          </p>
-          <p class="truncate">
-            <span class="text-toned">Libraries:</span> {{ bindingCount(flow) }}
-          </p>
-        </div>
-        <div class="mt-auto flex items-center justify-between gap-2" @click.stop>
-          <p class="min-w-0 truncate text-xs text-toned">
-            Updated
-            <UTooltip :text="formatDate(flow.updated_at, 'detail')">
-              <time :datetime="toIsoString(flow.updated_at)">{{
-                formatRelativeTime(flow.updated_at, 'en')
-              }}</time>
-            </UTooltip>
-          </p>
-          <div class="flex shrink-0 items-center gap-2">
+    <div v-else-if="flows.length" class="mw-card divide-y divide-default">
+      <article v-for="flow in flows" :key="flow.id" class="w-full min-w-0 max-w-full">
+        <div
+          class="grid min-w-0 gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.5fr)_auto]"
+        >
+          <div class="min-w-0 space-y-2">
+            <h2 class="min-w-0 font-semibold text-highlighted">
+              <button
+                type="button"
+                class="wrap-anywhere text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                @click="openDetails(flow)"
+              >
+                {{ flow.name }}
+              </button>
+            </h2>
+            <p class="wrap-anywhere text-xs text-toned">
+              Updated
+              <UTooltip :text="formatDate(flow.updated_at, 'detail')">
+                <time :datetime="toIsoString(flow.updated_at)">{{
+                  formatRelativeTime(flow.updated_at, 'en')
+                }}</time>
+              </UTooltip>
+            </p>
+          </div>
+          <dl class="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon
+                  name="i-lucide-git-commit-horizontal"
+                  class="size-3.5 shrink-0"
+                  aria-hidden="true"
+                />
+                Revision
+              </dt>
+              <dd class="wrap-anywhere">{{ flow.version }}</dd>
+            </div>
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-workflow" class="size-3.5 shrink-0" aria-hidden="true" />
+                Nodes
+              </dt>
+              <dd class="wrap-anywhere">{{ flow.definition.nodes.length }}</dd>
+            </div>
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-git-branch" class="size-3.5 shrink-0" aria-hidden="true" />
+                Edges
+              </dt>
+              <dd class="wrap-anywhere">{{ flow.definition.edges.length }}</dd>
+            </div>
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-folder-tree" class="size-3.5 shrink-0" aria-hidden="true" />
+                Libraries
+              </dt>
+              <dd class="wrap-anywhere">{{ bindingCount(flow) }}</dd>
+            </div>
+          </dl>
+          <div class="flex items-start justify-end gap-1.5" @click.stop>
             <UButton
               size="sm"
               color="neutral"
               variant="outline"
               icon="i-lucide-pen-line"
+              :disabled="deletingId === flow.id"
               @click="openEditor(flow)"
               >Edit</UButton
             >
-            <UDropdownMenu :items="flowActions(flow)" :modal="false">
+            <UDropdownMenu :items="flowActions(flow)" :modal="false" :content="{ align: 'end' }">
               <UButton
                 color="neutral"
-                variant="outline"
-                size="xs"
-                icon="i-lucide-settings-2"
-                trailing-icon="i-lucide-chevron-down"
-              >
-                Actions
-              </UButton>
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-ellipsis"
+                square
+                :aria-label="`Actions for ${flow.name}`"
+                :loading="deletingId === flow.id"
+                :disabled="deletingId !== null"
+              />
             </UDropdownMenu>
           </div>
         </div>
       </article>
     </div>
-    <div
-      v-else-if="!lastError"
-      class="mw-card flex flex-col items-center justify-center gap-1 py-10 text-center"
-    >
-      <UIcon name="i-lucide-workflow" class="size-6 text-toned" />
-      <p class="text-sm text-toned">No flows saved yet.</p>
-      <UButton
-        class="mt-2"
-        size="sm"
-        color="neutral"
-        variant="outline"
-        icon="i-lucide-book-open"
-        @click="openPresets"
-        >Start with a preset</UButton
-      >
-    </div>
+    <UEmpty v-else-if="!lastError" icon="i-lucide-workflow" title="No flows saved yet.">
+      <template #actions>
+        <UButton
+          size="sm"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-book-open"
+          @click="openPresets"
+          >Start with a preset</UButton
+        >
+      </template>
+    </UEmpty>
 
     <FlowDetailsModal
       v-if="selectedFlow"
@@ -147,6 +167,7 @@
       @download="downloadFlow(selectedFlow)"
       :saving-positions="layoutSaving"
       :positions-dirty="layoutDirty"
+      :error="layoutError"
       @move="moveFlowNode"
       @arrange="arrangeFlow"
       @save-positions="saveLayout"
@@ -165,9 +186,13 @@
       :notification-target-error="notificationTargetError ?? ''"
       :editor-key="editorKey"
       :saving="saving"
+      :data-loading="editorLoading"
+      :data-error="editorDataError"
+      :save-error="saveError"
       @update:open="handleOpenChange"
       @presets="openPresets"
       @submit="saveFlow"
+      @retry="loadEditorData"
     />
 
     <FlowImportModal
@@ -181,7 +206,10 @@
       v-if="presetOpen"
       :open="presetOpen"
       :presets="presets"
+      :loading="presetsLoading"
+      :error="presetsError"
       @update:open="presetOpen = $event"
+      @retry="loadPresets"
       @select="usePreset"
     />
   </main>
@@ -293,6 +321,7 @@ const openDetails = (flow: FlowRow | undefined): void => {
   if (!flow) return;
   selectedFlow.value = clone(flow);
   layoutDirty.value = false;
+  layoutError.value = '';
   void ensurePlugins();
 };
 
@@ -302,6 +331,7 @@ const closeDetails = (open: boolean): void => {
 
 const layoutSaving = ref(false);
 const layoutDirty = ref(false);
+const layoutError = ref('');
 let layoutRevision = 0;
 const moveFlowNode = (nodeId: string, position: FlowUiNodePos): void => {
   if (!selectedFlow.value) return;
@@ -327,12 +357,13 @@ const arrangeFlow = (orientation: FlowOrientation): void => {
 const saveLayout = async (): Promise<void> => {
   if (!selectedFlow.value || !layoutDirty.value) return;
   layoutSaving.value = true;
+  layoutError.value = '';
   const flow = selectedFlow.value;
   const revision = layoutRevision;
   const definition = clone(flow.definition);
   const result = await saveLayoutRequest(flow, definition);
   if (!result.ok) {
-    notify.error(messageFor(result.error.detail));
+    layoutError.value = messageFor(result.error.detail);
     layoutSaving.value = false;
     return;
   }
@@ -418,20 +449,25 @@ const copyFlow = async (flow: FlowRow): Promise<void> => {
 };
 const importOpen = ref(false);
 const presetOpen = ref(false);
+const deletingId = ref<number | null>(null);
 
 const removeFlow = async (flow: FlowRow): Promise<void> => {
-  if (loading.value) return;
-  const { status } = await confirmDialog({
-    title: `Delete flow "${flow.name}"`,
-    message: 'Remove this flow from its libraries first if it is still in use.',
-    confirmColor: 'error',
-    confirmIcon: 'i-lucide-trash-2',
-  });
-  if (!status || loading.value) return;
-
-  const result = await removeSaved(flow);
-  if (result.ok) notify.success(`Flow "${flow.name}" deleted.`);
-  else notify.error(messageFor(result.error.detail));
+  if (loading.value || deletingId.value !== null) return;
+  deletingId.value = flow.id;
+  try {
+    const { status } = await confirmDialog({
+      title: `Delete flow "${flow.name}"`,
+      message: 'Remove this flow from its libraries first if it is still in use.',
+      confirmColor: 'error',
+      confirmIcon: 'i-lucide-trash-2',
+    });
+    if (!status || loading.value) return;
+    const result = await removeSaved(flow);
+    if (result.ok) notify.success(`Flow "${flow.name}" deleted.`);
+    else notify.error(messageFor(result.error.detail));
+  } finally {
+    deletingId.value = null;
+  }
 };
 
 const editorOpen = ref(false);
@@ -439,19 +475,48 @@ const editor = ref<InstanceType<typeof FlowEditorModal>>();
 const editingFlow = ref<FlowRow | null>(null);
 const editorKey = ref(0);
 const saving = ref(false);
+const saveError = ref('');
+const editorLoading = ref(false);
+const editorDataError = ref('');
+
+const loadEditorData = async (): Promise<void> => {
+  if (editorLoading.value) return;
+  editorLoading.value = true;
+  editorDataError.value = '';
+  try {
+    const results = await Promise.allSettled([
+      ensurePlugins(),
+      ensureFacts(),
+      ensureNotificationTargets(),
+      reloadCodecNodes(),
+    ]);
+    const errors: string[] = [];
+    if (pluginError.value) errors.push(pluginError.value.message);
+    const factsResult = results[1];
+    if (factsResult?.status === 'rejected') {
+      const cause: unknown = factsResult.reason;
+      const detail =
+        cause && typeof cause === 'object' && 'detail' in cause && typeof cause.detail === 'string'
+          ? cause.detail
+          : cause instanceof Error
+            ? cause.message
+            : undefined;
+      errors.push(messageFor(detail, 'Could not load condition facts.'));
+    }
+    editorDataError.value = errors.join('\n');
+  } finally {
+    editorLoading.value = false;
+  }
+};
 
 const openEditor = (flow?: FlowRow): void => {
   if (saving.value) return;
   selectedFlow.value = null;
   editingFlow.value = flow ?? null;
+  saveError.value = '';
   editorKey.value += 1;
   editorOpen.value = true;
-  void Promise.allSettled([
-    ensurePlugins(),
-    ensureFacts(),
-    ensureNotificationTargets(),
-    reloadCodecNodes(),
-  ]);
+  void loadEditorData();
 };
 
 const usePreset = async (preset: FlowPreset): Promise<void> => {
@@ -482,10 +547,32 @@ const usePreset = async (preset: FlowPreset): Promise<void> => {
   presetOpen.value = false;
 };
 
+const presetsLoading = ref(false);
+const presetsError = ref('');
+const loadPresets = async (): Promise<void> => {
+  if (presetsLoading.value) return;
+  presetsLoading.value = true;
+  presetsError.value = '';
+  try {
+    await ensurePresets();
+  } catch (cause) {
+    const detail =
+      cause && typeof cause === 'object' && 'detail' in cause && typeof cause.detail === 'string'
+        ? cause.detail
+        : undefined;
+    presetsError.value = messageFor(
+      detail,
+      cause instanceof Error ? cause.message : 'Could not load starter presets.',
+    );
+  } finally {
+    presetsLoading.value = false;
+  }
+};
+
 const openPresets = (): void => {
   if (saving.value) return;
   presetOpen.value = true;
-  void ensurePresets().catch(() => undefined);
+  void loadPresets();
 };
 
 const notificationTargetNames = computed(() =>
@@ -509,6 +596,7 @@ const handleOpenChange = (open: boolean): void => {
 const saveFlow = async (payload: { name: string; definition: FlowDefinition }): Promise<void> => {
   if (saving.value) return;
   saving.value = true;
+  saveError.value = '';
   try {
     let saved = await saveFlowRequest(
       payload,
@@ -539,7 +627,7 @@ const saveFlow = async (payload: { name: string; definition: FlowDefinition }): 
       const id = Number(route.query.flow);
       if (Number.isInteger(id)) openDetails(flows.value.find((flow) => flow.id === id));
     } else {
-      notify.error(messageFor(saved.error.detail));
+      saveError.value = messageFor(saved.error.detail);
     }
   } finally {
     saving.value = false;
@@ -563,7 +651,8 @@ const flowActions = (flow: FlowRow): DropdownMenuItem[][] => [
     {
       label: 'Delete',
       icon: 'i-lucide-trash-2',
-      disabled: loading.value,
+      color: 'error',
+      disabled: loading.value || deletingId.value !== null,
       onSelect: () => void removeFlow(flow),
     },
   ],

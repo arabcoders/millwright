@@ -17,13 +17,8 @@
       :placeholder="placeholder"
       :rows="rows"
       size="lg"
-      variant="outline"
-      color="neutral"
       class="h-full w-full"
-      :ui="{
-        root: 'w-full',
-        base: 'min-h-[10rem] w-full bg-elevated/60 font-mono text-sm ring-default focus-visible:ring-primary',
-      }"
+      :ui="{ base: 'min-h-[10rem] font-mono text-sm' }"
     />
 
     <div
@@ -175,50 +170,11 @@ const processFile = async (file: File): Promise<void> => {
       return;
     }
 
-    const isBinary = await checkIfBinary(file);
-    if (isBinary) {
-      emit('error', 'File appears to be binary. Choose a text file.');
-      return;
-    }
-
     model.value = await readFileAsText(file);
+    emit('error', '');
   } catch (error) {
     emit('error', error instanceof Error ? error.message : 'Failed to read file');
   }
-};
-
-const checkIfBinary = async (file: File): Promise<boolean> => {
-  const chunkSize = 8192;
-  const blob = file.slice(0, chunkSize);
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = (e: ProgressEvent<FileReader>) => {
-      if (!e.target?.result) {
-        resolve(false);
-        return;
-      }
-
-      const bytes = new Uint8Array(e.target.result as ArrayBuffer);
-      let nullBytes = 0;
-      let nonPrintable = 0;
-
-      for (const byte of bytes) {
-        if (0 === byte) {
-          nullBytes++;
-        }
-        if (9 !== byte && 10 !== byte && 13 !== byte && (byte < 32 || byte > 126)) {
-          nonPrintable++;
-        }
-      }
-
-      resolve(nullBytes > 0 || nonPrintable / bytes.length > 0.3);
-    };
-
-    reader.onerror = () => reject(new Error('Could not check whether the file is text.'));
-    reader.readAsArrayBuffer(blob);
-  });
 };
 
 const readFileAsText = (file: File): Promise<string> =>

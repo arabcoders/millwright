@@ -13,7 +13,7 @@
             <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
           </span>
           <UTooltip :text="filePath">
-            <p class="min-w-0 truncate text-lg font-semibold text-highlighted">
+            <p tabindex="0" class="min-w-0 truncate text-lg font-semibold text-highlighted">
               {{ filePath.split(/[\\/]/).at(-1) || filePath }}
             </p>
           </UTooltip>
@@ -48,7 +48,7 @@
       </div>
     </template>
     <template #footer>
-      <div class="flex w-full justify-end gap-2">
+      <div class="flex w-full flex-wrap justify-end gap-2">
         <UButton color="neutral" variant="outline" @click="$emit('update:open', false)">
           Cancel
         </UButton>

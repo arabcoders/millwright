@@ -181,4 +181,7 @@ test('Countdown boundaries', () => {
   expect(formatCountdown(3600)).toBe('01:00');
   expect(formatCountdown(7199)).toBe('01:59');
   expect(formatCountdown(36000)).toBe('10:00');
+  expect(formatCountdown(3601, 'full')).toBe('01:00:01');
+  expect(formatCountdown(3600, 'full')).toBe('01:00:00');
+  expect(formatCountdown(3599, 'full')).toBe('59:59');
 });

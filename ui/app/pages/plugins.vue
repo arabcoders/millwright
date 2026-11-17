@@ -5,8 +5,8 @@
         <div class="flex flex-wrap items-center gap-2">
           <UButton
             size="sm"
-            color="neutral"
-            variant="outline"
+            color="primary"
+            variant="solid"
             icon="i-lucide-upload"
             :loading="uploading"
             @click="uploadInput?.click()"
@@ -65,100 +65,107 @@
             {{ groupedPlugins[kind].length }}
           </UBadge>
         </div>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div class="mw-card divide-y divide-default">
           <article
             v-for="plugin in groupedPlugins[kind]"
             :key="plugin.manifest.id"
-            class="mw-card flex h-full flex-col gap-3 p-4"
+            class="w-full min-w-0 max-w-full"
           >
-            <div class="min-w-0">
-              <div class="flex min-w-0 items-center gap-2">
-                <h3 class="truncate font-semibold text-highlighted">
+            <div
+              class="grid min-w-0 gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.5fr)_auto]"
+            >
+              <div class="min-w-0 space-y-2">
+                <h3 class="min-w-0 font-semibold text-highlighted">
                   <button
                     type="button"
-                    class="truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                    class="wrap-anywhere text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
                     @click="selectPlugin(plugin)"
                   >
                     {{ plugin.manifest.name }}
                   </button>
                 </h3>
-                <StatusBadge class="ms-auto shrink-0" :status="plugin.state" group="plugin" />
+                <p class="wrap-anywhere text-xs text-toned">
+                  {{ plugin.manifest.id }}
+                </p>
+                <StatusBadge :status="plugin.state" group="plugin" />
               </div>
-              <p class="truncate text-xs text-toned">
-                {{ plugin.manifest.id }}
-              </p>
-              <p class="mt-2 text-sm text-toned">
-                {{ plugin.manifest.description }}
-              </p>
-            </div>
-            <div class="grid grid-cols-3 gap-3 text-sm">
-              <p class="truncate">
-                <span class="text-toned">Version:</span>
-                {{ plugin.manifest.version }}
-              </p>
-              <p class="truncate">
-                <span class="text-toned">Source:</span>
-                {{ plugin.source === 'bundled' ? 'Bundled' : 'Uploaded' }}
-              </p>
-              <p class="truncate">
-                <span class="text-toned">Inputs:</span>
-                {{ plugin.inputs.length }}
-              </p>
-            </div>
-            <div class="mt-auto flex items-center justify-end gap-2" @click.stop>
-              <UButton
-                size="sm"
-                color="neutral"
-                variant="outline"
-                :icon="plugin.state === 'disabled' ? 'i-lucide-power' : 'i-lucide-power-off'"
-                :loading="isBusy(plugin, 'enable') || isBusy(plugin, 'disable')"
-                :disabled="!!busy || loading"
-                @click="toggleEnabled(plugin)"
-              >
-                {{ plugin.state === 'disabled' ? 'Enable' : 'Disable' }}
-              </UButton>
-              <UButton
-                v-if="plugin.state !== 'disabled'"
-                size="sm"
-                color="neutral"
-                variant="outline"
-                icon="i-lucide-rotate-cw"
-                :loading="isBusy(plugin, 'restart')"
-                :disabled="!!busy || loading"
-                @click="restartPlugin(plugin)"
-              >
-                Restart
-              </UButton>
-              <UButton
-                v-if="plugin.state !== 'disabled'"
-                size="sm"
-                color="neutral"
-                variant="outline"
-                icon="i-lucide-square"
-                :loading="isBusy(plugin, 'stop')"
-                :disabled="!!busy || loading"
-                @click="stopPlugin(plugin)"
-              >
-                Stop
-              </UButton>
+              <div class="min-w-0 space-y-3">
+                <p class="wrap-anywhere text-sm text-toned">
+                  {{ plugin.manifest.description }}
+                </p>
+                <dl class="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+                  <div class="min-w-0 space-y-1">
+                    <dt class="flex items-center gap-1.5 text-xs text-muted">
+                      <UIcon name="i-lucide-tag" class="size-3.5 shrink-0" aria-hidden="true" />
+                      Version
+                    </dt>
+                    <dd class="wrap-anywhere">{{ plugin.manifest.version }}</dd>
+                  </div>
+                  <div class="min-w-0 space-y-1">
+                    <dt class="flex items-center gap-1.5 text-xs text-muted">
+                      <UIcon name="i-lucide-package" class="size-3.5 shrink-0" aria-hidden="true" />
+                      Source
+                    </dt>
+                    <dd class="wrap-anywhere">
+                      {{ plugin.source === 'bundled' ? 'Bundled' : 'Uploaded' }}
+                    </dd>
+                  </div>
+                  <div class="min-w-0 space-y-1">
+                    <dt class="flex items-center gap-1.5 text-xs text-muted">
+                      <UIcon
+                        name="i-lucide-sliders-horizontal"
+                        class="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                      Inputs
+                    </dt>
+                    <dd class="wrap-anywhere">{{ plugin.inputs.length }}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div class="flex items-center justify-end gap-1.5 self-start" @click.stop>
+                <UButton
+                  size="sm"
+                  color="neutral"
+                  variant="outline"
+                  :icon="plugin.state === 'disabled' ? 'i-lucide-power' : 'i-lucide-power-off'"
+                  :loading="isBusy(plugin, 'enable') || isBusy(plugin, 'disable')"
+                  :disabled="!!busy || loading"
+                  @click="toggleEnabled(plugin)"
+                >
+                  {{ plugin.state === 'disabled' ? 'Enable' : 'Disable' }}
+                </UButton>
+                <UDropdownMenu
+                  v-if="plugin.state !== 'disabled'"
+                  :items="pluginActions(plugin)"
+                  :modal="false"
+                  :content="{ align: 'end' }"
+                >
+                  <UButton
+                    size="sm"
+                    color="neutral"
+                    variant="ghost"
+                    icon="i-lucide-ellipsis"
+                    square
+                    :aria-label="`Actions for ${plugin.manifest.name}`"
+                    :loading="isBusy(plugin, 'restart') || isBusy(plugin, 'stop')"
+                    :disabled="!!busy || loading"
+                  />
+                </UDropdownMenu>
+              </div>
             </div>
           </article>
         </div>
       </section>
     </div>
-    <div
-      v-else-if="!lastError"
-      class="mw-card flex flex-col items-center justify-center gap-1 py-10 text-center"
-    >
-      <UIcon name="i-lucide-puzzle" class="size-6 text-toned" />
-      <p class="text-sm text-toned">No plugins loaded.</p>
-    </div>
+    <UEmpty v-else-if="!lastError" icon="i-lucide-puzzle" title="No plugins loaded." />
     <PluginDetailModal v-model:open="pluginModalOpen" :plugin="selectedPlugin" />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import StatusBadge from '~/components/StatusBadge.vue';
 import { useDialog } from '~/composables/useDialog';
 import { usePlugins } from '~/composables/usePlugins';
@@ -271,6 +278,21 @@ const stopPlugin = async (plugin: PluginRow): Promise<void> => {
   if (!status) return;
   await runRowAction(plugin, 'stop', () => stop(plugin));
 };
+
+const pluginActions = (plugin: PluginRow): DropdownMenuItem[] => [
+  {
+    label: 'Restart',
+    icon: 'i-lucide-rotate-cw',
+    disabled: !!busy.value || loading.value,
+    onSelect: () => restartPlugin(plugin),
+  },
+  {
+    label: 'Stop',
+    icon: 'i-lucide-square',
+    disabled: !!busy.value || loading.value,
+    onSelect: () => stopPlugin(plugin),
+  },
+];
 
 const kindColor = (kind: PluginKind): 'info' | 'neutral' | 'primary' | 'secondary' => {
   if (kind === 'filter') return 'info';

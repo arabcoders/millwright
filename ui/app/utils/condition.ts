@@ -37,6 +37,9 @@ export const isNumericOperand = (row: ConditionRow, type?: string): boolean =>
   ORDER_OPS.has(row.op) ||
   (MEMBERSHIP_OPS.has(row.op) && type === 'list[int]') ||
   ((row.op === 'eq' || row.op === 'ne') && (type === 'int' || type === 'float'));
+export const isListOperand = (row: ConditionRow, type?: string): boolean =>
+  (row.op === 'eq' || row.op === 'ne') &&
+  (type === 'list[str]' || type === 'list[int]' || Array.isArray(row.literal));
 const FILTER_OPS: ReadonlySet<string> = new Set([
   'ne',
   'gt',
@@ -182,6 +185,24 @@ export const addConditionRow = (condition: DraftCondition): void => {
   condition.rows.push({ uid: ++uidCounter, key: '', op: 'eq', value: '' });
 };
 
+const parseListOperand = (value: string | number, type?: string): string[] | number[] | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  if (type !== 'list[int]' && parsed.every((item): item is string => typeof item === 'string'))
+    return parsed;
+  if (
+    type !== 'list[str]' &&
+    parsed.every((item): item is number => typeof item === 'number' && Number.isInteger(item))
+  )
+    return parsed;
+  return null;
+};
+
 // A stored literal is re-emitted until the user edits the displayed value,
 // so untouched rows round-trip numbers, booleans, and lists exactly.
 const conditionOperand = (
@@ -192,6 +213,11 @@ const conditionOperand = (
     return row.literal;
   }
   const type = facetTypes.get(row.key);
+  if (isListOperand(row, type)) {
+    const value = parseListOperand(row.value, type);
+    if (value === null) throw new Error(`Condition on "${row.key}" needs a valid JSON list.`);
+    return value;
+  }
   if (isNumericOperand(row, type)) return Number(row.value);
   if ((row.op === 'eq' || row.op === 'ne') && type === 'str') return String(row.value);
   if ((row.op === 'eq' || row.op === 'ne') && type === 'bool') return row.value === 'true';
@@ -244,6 +270,13 @@ export const conditionProblem = (
     if (!row.key.trim()) return 'Every condition row needs a facet key.';
     if (row.value === '') return `Condition on "${row.key}" needs a value.`;
     const type = facetTypes.get(row.key);
+    if (
+      isListOperand(row, type) &&
+      !(row.literal !== undefined && displayLiteral(row.literal) === String(row.value)) &&
+      parseListOperand(row.value, type) === null
+    ) {
+      return `Condition on "${row.key}" needs a JSON list of ${type === 'list[int]' ? 'whole numbers' : 'strings'}.`;
+    }
     if (isNumericOperand(row, type)) {
       if (!Number.isFinite(Number(row.value))) {
         return `Condition on "${row.key}" needs a numeric value.`;

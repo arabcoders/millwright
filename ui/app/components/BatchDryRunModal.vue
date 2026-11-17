@@ -58,10 +58,10 @@
             </UTooltip>
           </UFieldGroup>
         </UFormField>
-        <UAlert
+        <UEmpty
           v-if="!flows.length && !flowsLoading && !flowError"
-          color="neutral"
-          variant="soft"
+          size="sm"
+          variant="naked"
           icon="i-lucide-workflow"
           title="No saved flows"
           description="Create a flow before starting a dry run."
@@ -74,7 +74,7 @@
           title="Dry run unavailable"
           :description="error || flowError?.detail || 'Could not load flows.'"
         >
-          <template v-if="error && report" #actions>
+          <template v-if="error" #actions>
             <UButton
               color="neutral"
               variant="outline"
@@ -82,7 +82,7 @@
               icon="i-lucide-refresh-cw"
               :loading="loading"
               :disabled="starting || cancelling || exporting"
-              @click="refresh"
+              @click="report ? refresh() : loadReport(scope)"
               >Reload</UButton
             >
           </template>
@@ -140,6 +140,8 @@
           >
             <UEmpty
               v-if="!rows.length"
+              size="sm"
+              icon="i-lucide-folder-search"
               :title="
                 statuses.length
                   ? active
@@ -151,18 +153,7 @@
                       ? 'No indexed files to preview.'
                       : 'No file results on this page.'
               "
-              variant="naked"
-              :ui="{
-                root: 'gap-1 p-0 sm:p-0 lg:p-0',
-                header: 'max-w-none gap-1',
-                title: 'text-sm font-normal text-toned',
-              }"
-              class="mw-card py-10 sm:py-10 lg:py-10"
-            >
-              <template #leading>
-                <UIcon name="i-lucide-folder-search" class="size-6 text-toned" />
-              </template>
-            </UEmpty>
+            />
             <article
               v-for="row in rows"
               :key="row.file_id"

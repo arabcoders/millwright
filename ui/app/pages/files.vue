@@ -26,65 +26,23 @@
         <UBadge v-if="selectedIds.size" color="primary" variant="subtle"
           >{{ selectedIds.size }} selected</UBadge
         >
-        <UTooltip
-          v-if="selectedCooldownFiles.length"
-          text="Only selected files with a skippable cooldown are included."
-          :disabled="selectedCooldownFiles.length === selectedFiles.length"
+        <UDropdownMenu
+          v-if="selectedIds.size"
+          :items="bulkActionItems"
+          :modal="false"
+          :ui="{ content: 'w-80', itemDescription: 'whitespace-normal' }"
         >
           <UButton
-            size="xs"
+            size="sm"
             color="neutral"
             variant="outline"
             :loading="actionBusy"
             :disabled="actionsBlocked"
-            icon="i-lucide-timer-off"
-            @click="runBulk('skip_cooldown')"
-            >Skip cooldown{{
-              selectedCooldownFiles.length < selectedFiles.length
-                ? ` (${selectedCooldownFiles.length})`
-                : ''
-            }}</UButton
+            icon="i-lucide-list"
+            trailing-icon="i-lucide-chevron-down"
+            >Actions</UButton
           >
-        </UTooltip>
-        <UButton
-          v-if="selectedIds.size"
-          size="xs"
-          color="neutral"
-          variant="outline"
-          :loading="actionBusy"
-          :disabled="actionsBlocked"
-          icon="i-lucide-heart-pulse"
-          @click="runBulk('healthcheck')"
-          >Health check</UButton
-        >
-        <UTooltip
-          v-if="selectedTranscodable.length"
-          :text="transcodeExclusions.join(' ')"
-          :disabled="!transcodeExclusions.length"
-        >
-          <UButton
-            size="xs"
-            color="neutral"
-            variant="outline"
-            :loading="actionBusy"
-            :disabled="actionsBlocked"
-            icon="i-lucide-film"
-            @click="runBulk('transcode')"
-            >Transcode{{
-              transcodeExclusions.length ? ` (${selectedTranscodable.length})` : ''
-            }}</UButton
-          >
-        </UTooltip>
-        <UButton
-          v-if="selectedIds.size"
-          size="xs"
-          color="neutral"
-          variant="outline"
-          :disabled="actionsBlocked"
-          icon="i-lucide-play"
-          @click="openSelectedDryRun"
-          >Dry run</UButton
-        >
+        </UDropdownMenu>
       </ListPagination>
     </DefinePagination>
     <PageHeader page="files">
@@ -127,7 +85,7 @@
           aria-label="Refresh files"
           :loading="loading"
           :disabled="actionBusy"
-          @click="loadFiles"
+          @click="refreshFiles"
         >
           Refresh
         </UButton>
@@ -142,6 +100,14 @@
       title="Could not load files"
       :description="lastError.message"
     />
+    <UAlert
+      v-if="libraryError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      title="Could not load libraries"
+      :description="libraryError.message"
+    />
 
     <ListFilters
       v-model:query="query"
@@ -154,19 +120,16 @@
       @update:sort-by="updateQuery({ sort_by: $event })"
       @update:sort-dir="updateQuery({ sort_dir: $event })"
     >
-      <UFormField label="" size="sm" class="w-full sm:w-auto">
-        <USelectMenu
-          value-key="value"
-          v-model="libraryId"
-          :disabled="actionBusy"
-          :items="libraryOptions"
-          size="sm"
-          class="w-full sm:min-w-40"
-          aria-label="Filter by library"
-          @update:model-value="updateQuery({ library_id: libraryId })"
-        />
-      </UFormField>
-
+      <USelectMenu
+        value-key="value"
+        v-model="libraryId"
+        :disabled="actionBusy"
+        :items="libraryOptions"
+        size="sm"
+        class="w-full sm:w-48"
+        aria-label="Filter by library"
+        @update:model-value="updateQuery({ library_id: libraryId })"
+      />
       <USelectMenu
         value-key="value"
         v-model="transcodeStates"
@@ -176,11 +139,10 @@
         placeholder="All transcode states"
         :clear="{ 'aria-label': 'Clear transcode status filter' }"
         size="sm"
-        class="w-full sm:w-64"
+        class="w-full sm:w-56"
         aria-label="Filter by transcode status"
         @update:model-value="updateQuery({ transcode_status: transcodeStates.join(',') })"
       />
-
       <USelectMenu
         value-key="value"
         v-model="healthStates"
@@ -190,26 +152,36 @@
         placeholder="All health states"
         :clear="{ 'aria-label': 'Clear health status filter' }"
         size="sm"
-        class="w-full sm:w-64"
+        class="w-full sm:w-48"
         aria-label="Filter by health status"
         @update:model-value="updateQuery({ health_status: healthStates.join(',') })"
       />
     </ListFilters>
 
-    <div class="space-y-3">
+    <div class="min-w-0 space-y-4">
       <PaginationControls position="top" />
       <div
         v-if="loading && !files.length"
-        class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+        class="mw-card divide-y divide-default"
         aria-label="Loading files"
       >
-        <USkeleton v-for="item in 6" :key="item" class="h-64 rounded-xl" />
+        <div v-for="item in 6" :key="item" class="space-y-3 p-4 sm:p-5">
+          <USkeleton class="h-5 w-2/3" />
+          <USkeleton class="h-4 w-1/3" />
+          <USkeleton class="h-20 w-full" />
+        </div>
       </div>
       <div
         v-else-if="files.length"
-        class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+        class="mw-card divide-y divide-default"
+        :aria-busy="loading || actionBusy"
       >
-        <DeferredContent v-for="file in files" :key="file.id" :min-height="384" class="min-w-0">
+        <DeferredContent
+          v-for="file in files"
+          :key="file.id"
+          :min-height="256"
+          class="w-full min-w-0 max-w-full"
+        >
           <FileCard
             :file="file"
             :libraries="libraries"
@@ -229,13 +201,11 @@
           />
         </DeferredContent>
       </div>
-      <div
+      <UEmpty
         v-else-if="!lastError"
-        class="mw-card flex flex-col items-center justify-center gap-1 py-10 text-center"
-      >
-        <UIcon name="i-lucide-folder-open" class="size-6 text-toned" />
-        <p class="text-sm text-toned">No files match the current filters.</p>
-      </div>
+        title="No files match the current filters."
+        icon="i-lucide-folder-open"
+      />
 
       <PaginationControls position="bottom" />
     </div>
@@ -245,6 +215,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { createReusableTemplate, useNow } from '@vueuse/core';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import FileCard from '~/components/FileCard.vue';
 import FileDetailModal from '~/components/FileDetailModal.vue';
 import MediaPlayerModal from '~/components/MediaPlayerModal.vue';
@@ -289,7 +260,13 @@ const {
   actionBusy,
   loadDetail: loadFileDetail,
 } = useFiles();
-const { items: libraries, ensure: ensureLibraries, scan } = useLibraries();
+const {
+  items: libraries,
+  ensure: ensureLibraries,
+  reload: reloadLibraries,
+  lastError: libraryError,
+  scan,
+} = useLibraries();
 const { scanner } = useLibraryProgress();
 const notify = useNotification();
 const [DefinePagination, PaginationControls] = createReusableTemplate<{
@@ -312,6 +289,42 @@ const selectedTranscodable = computed(() =>
   selectedFiles.value.filter((file) => !transcodePrerequisite(file, libraries.value)),
 );
 const transcodeExclusions = computed(() => transcodeWarnings(selectedFiles.value, libraries.value));
+const bulkActionItems = computed<DropdownMenuItem[]>(() => {
+  const items: DropdownMenuItem[] = [];
+  if (selectedCooldownFiles.value.length) {
+    const partial = selectedCooldownFiles.value.length < selectedFiles.value.length;
+    items.push({
+      label: `Skip cooldown${partial ? ` (${selectedCooldownFiles.value.length})` : ''}`,
+      icon: 'i-lucide-timer-off',
+      description: partial
+        ? 'Only selected files with a skippable cooldown are included.'
+        : undefined,
+      disabled: actionsBlocked.value,
+      onSelect: () => void runBulk('skip_cooldown'),
+    });
+  }
+  items.push({
+    label: 'Health check',
+    icon: 'i-lucide-heart-pulse',
+    disabled: actionsBlocked.value,
+    onSelect: () => void runBulk('healthcheck'),
+  });
+  if (selectedTranscodable.value.length)
+    items.push({
+      label: `Transcode${transcodeExclusions.value.length ? ` (${selectedTranscodable.value.length})` : ''}`,
+      icon: 'i-lucide-film',
+      description: transcodeExclusions.value.join(' ') || undefined,
+      disabled: actionsBlocked.value,
+      onSelect: () => void runBulk('transcode'),
+    });
+  items.push({
+    label: 'Dry run',
+    icon: 'i-lucide-play',
+    disabled: actionsBlocked.value,
+    onSelect: () => openSelectedDryRun(),
+  });
+  return items;
+});
 const clearSelection = (): void => {
   selectedIds.value = new Set();
 };
@@ -471,6 +484,9 @@ const loadFiles = async (): Promise<void> => {
     sort_dir: sortDir.value,
   }).catch(() => {});
 };
+const refreshFiles = async (): Promise<void> => {
+  await Promise.all([loadFiles(), reloadLibraries()]);
+};
 
 const rescanDisabled = computed(() => libraryId.value === FILTER_ALL);
 const scanning = ref(false);
@@ -491,6 +507,14 @@ const rescanLibrary = async (): Promise<void> => {
 
 const { on } = useEvents();
 let mounted = false;
+
+watch([total, offset, loading, actionBusy], async () => {
+  if (!mounted || loading.value || actionBusy.value || lastError.value) return;
+  if (offset.value > 0 && offset.value >= total.value) {
+    const lastOffset = Math.max(0, Math.ceil(total.value / limit.value) - 1) * limit.value;
+    await updateQuery({ offset: String(lastOffset) });
+  }
+});
 
 onMounted(() => {
   mounted = true;
@@ -694,9 +718,11 @@ const loadDetail = async (id: number): Promise<void> => {
       }
       detail.value = merged;
     }
-  } catch {
-    if (detailLoad === journal && detailOpen.value && detailFileId.value === id)
-      detailOpen.value = false;
+  } catch (error) {
+    if (detailLoad === journal && detailOpen.value && detailFileId.value === id) {
+      updateDetailOpen(false);
+      notify.error(error instanceof Error ? error.message : 'Could not load file.');
+    }
   } finally {
     if (detailLoad === journal) detailLoad = null;
   }

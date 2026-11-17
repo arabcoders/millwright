@@ -48,7 +48,7 @@
                     icon="i-lucide-list-ordered"
                     :trailing-icon="stepsOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                     :aria-expanded="stepsOpen"
-                    class="pointer-events-auto shrink-0 bg-elevated shadow-sm"
+                    class="pointer-events-auto shrink-0 bg-elevated/80 shadow-sm backdrop-blur-md dark:bg-elevated/30"
                     @click="stepsOpen = !stepsOpen"
                     >Toggle steps</UButton
                   >
@@ -60,7 +60,7 @@
                     size="xs"
                     icon="i-lucide-move"
                     :aria-pressed="nodesMovable"
-                    class="pointer-events-auto shrink-0 bg-elevated shadow-sm"
+                    class="pointer-events-auto shrink-0 bg-elevated/80 shadow-sm backdrop-blur-md dark:bg-elevated/30"
                     @click="nodesMovable = !nodesMovable"
                     >Move nodes</UButton
                   >
@@ -69,7 +69,7 @@
                   v-if="trace.length && stepsOpen"
                   aria-label="Steps"
                   tabindex="0"
-                  class="pointer-events-auto w-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-lg border border-default bg-elevated p-3 shadow-lg"
+                  class="mw-floating-surface pointer-events-auto w-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-lg bg-elevated/80 p-3 dark:bg-elevated/30"
                 >
                   <li
                     v-for="(step, index) in trace"
@@ -83,7 +83,9 @@
                         >{{ step.title }}</span
                       >
                       <ReasonDisplay :reason="step.detail" class="mt-1" />
-                      <p v-if="step.error" class="text-error">{{ step.error }}</p>
+                      <p v-if="step.error" class="whitespace-pre-wrap wrap-anywhere text-error">
+                        {{ step.error }}
+                      </p>
                       <p v-if="step.destination" class="text-xs text-toned">
                         {{ step.outcome === 'deferred' ? 'Continues after verification' : 'Next' }}:
                         {{ step.destination }}
@@ -126,7 +128,9 @@
                 <h3 class="font-semibold text-highlighted">Decision</h3>
                 <StatusBadge :status="selectedStep.outcome" group="outcome" />
                 <ReasonDisplay v-if="selectedStep.reason" :reason="selectedStep.reason" />
-                <p v-if="selectedStep.error" class="text-error">{{ selectedStep.error }}</p>
+                <p v-if="selectedStep.error" class="whitespace-pre-wrap wrap-anywhere text-error">
+                  {{ selectedStep.error }}
+                </p>
                 <p v-if="selectedStep.outcome === 'deferred'" class="text-toned">
                   Waits until the output is verified.
                 </p>

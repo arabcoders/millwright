@@ -11,7 +11,9 @@
       <fieldset :disabled="reviewing" :inert="reviewing" class="space-y-4">
         <div>
           <div class="mb-1 flex items-center justify-between gap-2">
-            <p class="text-xs font-semibold text-toned">Share code or export</p>
+            <label for="flow-import" class="text-xs font-semibold text-toned"
+              >Share code or export</label
+            >
             <UButton
               color="neutral"
               variant="ghost"
@@ -23,6 +25,7 @@
           </div>
           <TextDropzone
             ref="dropzone"
+            id="flow-import"
             v-model="code"
             placeholder="Paste a flow share code or JSON export"
             accept="application/json,.json"
@@ -30,7 +33,15 @@
             @error="error = $event"
           />
         </div>
-        <p v-if="error" class="text-sm text-error">{{ error }}</p>
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          icon="i-lucide-circle-alert"
+          title="Could not import flow"
+          :description="error"
+          :ui="{ description: 'whitespace-pre-wrap wrap-anywhere' }"
+        />
       </fieldset>
     </template>
     <template #footer>

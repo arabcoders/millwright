@@ -129,9 +129,8 @@
 </template>
 
 <script setup lang="ts">
+import { useId } from 'vue';
 import { formatDate, type DateInput } from '~/utils/date';
-
-let _uid = 0;
 
 const props = withDefaults(
   defineProps<{
@@ -156,7 +155,7 @@ const props = withDefaults(
   },
 );
 
-const uid = computed(() => `chart-${++_uid}`);
+const uid = useId();
 
 const marginLeft = 28;
 const marginRight = 4;

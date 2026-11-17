@@ -2,12 +2,16 @@
   <UModal
     v-model:open="open"
     :title="detail ? `File ${jobNumber(detail.id)}` : 'File details'"
-    :ui="{ content: 'w-[calc(100vw-1rem)] max-w-4xl', body: 'max-h-[80vh] overflow-y-auto' }"
+    :ui="{
+      content: 'w-[calc(100vw-1rem)] max-w-6xl',
+      title: 'wrap-anywhere',
+      body: 'max-h-[80vh] overflow-y-auto',
+    }"
     @after:leave="emit('after:leave')"
   >
     <template #body>
-      <div v-if="detail" class="space-y-4">
-        <section class="space-y-3">
+      <div v-if="detail" class="min-w-0 space-y-5 wrap-anywhere">
+        <section class="min-w-0 space-y-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 items-start gap-3">
               <StatusIndicator v-if="indicator" :info="indicator">
@@ -19,12 +23,12 @@
               </StatusIndicator>
               <div class="min-w-0">
                 <UTooltip :text="fileName(detail.path)">
-                  <h2 class="cursor-help truncate text-lg font-semibold text-highlighted">
+                  <h2 class="wrap-anywhere text-lg font-semibold text-highlighted">
                     {{ fileName(detail.path) }}
                   </h2>
                 </UTooltip>
                 <UTooltip :text="detail.path"
-                  ><p class="cursor-help truncate text-sm text-toned">
+                  ><p class="wrap-anywhere text-sm text-toned">
                     {{ parentPath(detail.path) }}
                   </p></UTooltip
                 >
@@ -95,36 +99,36 @@
             icon="i-lucide-layers"
             aria-label="File data version"
             class="w-full"
+            :ui="{
+              value: 'wrap-anywhere whitespace-normal text-start',
+              itemLabel: 'wrap-anywhere whitespace-normal',
+            }"
           />
           <p v-if="selectedSnapshot" class="text-sm text-toned">
             Showing the selected version. Actions and status apply to the current file.
           </p>
-          <dl
-            class="grid grid-cols-1 overflow-hidden rounded-md border border-default text-sm [&>div]:border-t [&>div]:border-default [&>div:first-child]:border-t-0 sm:grid-cols-2 sm:[&>div]:border-l sm:[&>div:nth-child(-n+2)]:border-t-0 sm:[&>div:nth-child(2n+1)]:border-l-0 lg:grid-cols-4 lg:[&>div:nth-child(-n+4)]:border-t-0 lg:[&>div:nth-child(2n+1)]:border-l lg:[&>div:nth-child(4n+1)]:border-l-0"
-          >
-            <div
-              v-for="row in metadata"
-              :key="row.key"
-              class="flex min-w-0 flex-col gap-1 border-default p-3"
-            >
-              <dt class="flex items-center gap-1 text-xs text-toned">
-                <UIcon :name="row.icon" class="size-3.5" />{{ row.label }}
+          <dl class="grid min-w-0 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div v-for="row in metadata" :key="row.key" class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon :name="row.icon" class="size-3.5 shrink-0" aria-hidden="true" />{{
+                  row.label
+                }}
               </dt>
               <dd class="flex flex-wrap items-center gap-1.5" :class="row.color">
-                <span class="break-all">{{ row.value }}</span>
+                <span class="wrap-anywhere">{{ row.value }}</span>
               </dd>
             </div>
-            <div class="flex min-w-0 flex-col gap-1 border-default p-3">
-              <dt class="flex items-center gap-1 text-xs text-toned">
-                <UIcon name="i-lucide-tag" class="size-3.5" />Medium
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-tag" class="size-3.5 shrink-0" aria-hidden="true" />Medium
               </dt>
-              <dd class="truncate">
+              <dd class="wrap-anywhere">
                 {{ selectedSnapshot ? 'Unknown' : (detail.medium ?? 'Unknown') }}
               </dd>
             </div>
-            <div class="flex min-w-0 flex-col gap-1 border-default p-3">
-              <dt class="flex items-center gap-1 text-xs text-toned">
-                <UIcon name="i-lucide-clock" class="size-3.5" />Modified
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-clock" class="size-3.5 shrink-0" aria-hidden="true" />Modified
               </dt>
               <dd>
                 <span v-if="selectedSnapshot">Not recorded</span>
@@ -144,10 +148,10 @@
           title="Health findings"
           :description="`${healthFindings.length} finding${healthFindings.length === 1 ? '' : 's'}: ${healthFindings.slice(0, 3).join('; ')}`"
         />
-        <section class="space-y-3">
+        <section class="space-y-3 border-t border-default pt-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-              <UIcon name="i-lucide-list-video" class="size-5" />
+              <UIcon name="i-lucide-list-video" class="size-5 text-toned" aria-hidden="true" />
               Streams
             </h3>
             <div class="flex items-center gap-2">
@@ -170,16 +174,25 @@
               <UTable
                 :data="activeProbe.streams"
                 :columns="streamColumns"
-                :ui="{ tbody: '[&>tr]:transition-colors [&>tr:hover]:bg-elevated/60' }"
+                :ui="{
+                  th: 'whitespace-nowrap wrap-normal',
+                  td: 'whitespace-nowrap wrap-normal',
+                }"
               />
             </div>
-            <p v-else class="text-sm text-toned">No stream info available.</p>
+            <UEmpty
+              v-else
+              variant="naked"
+              size="sm"
+              icon="i-lucide-list-video"
+              title="No stream info available."
+            />
           </div>
         </section>
-        <section class="space-y-3">
+        <section class="space-y-3 border-t border-default pt-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-              <UIcon name="i-lucide-list-checks" class="size-5" />
+              <UIcon name="i-lucide-list-checks" class="size-5 text-toned" aria-hidden="true" />
               Jobs
             </h3>
             <div class="flex items-center gap-2">
@@ -198,7 +211,7 @@
             </div>
           </div>
           <div v-if="jobsVisible">
-            <ul v-if="detail.jobs.length" class="mw-frame divide-y divide-default">
+            <ul v-if="detail.jobs.length" class="divide-y divide-default">
               <li v-for="job in detail.jobs" :key="job.id" class="p-1">
                 <button
                   type="button"
@@ -209,7 +222,7 @@
                   <StatusBadge :status="job.status" />
                   <UBadge color="neutral" variant="subtle" size="sm">{{ job.kind }}</UBadge>
                   <UTooltip v-if="job.error" :text="job.error"
-                    ><span class="min-w-0 flex-1 truncate text-xs text-error">{{
+                    ><span class="min-w-0 flex-1 wrap-anywhere text-xs text-error">{{
                       job.error
                     }}</span></UTooltip
                   >
@@ -224,13 +237,19 @@
                 </button>
               </li>
             </ul>
-            <p v-else class="text-sm text-toned">No jobs for this file.</p>
+            <UEmpty
+              v-else
+              variant="naked"
+              size="sm"
+              icon="i-lucide-list-checks"
+              title="No jobs for this file."
+            />
           </div>
         </section>
-        <section v-if="activeProbe?.raw" class="space-y-3">
+        <section v-if="activeProbe?.raw" class="space-y-3 border-t border-default pt-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-              <UIcon name="i-lucide-braces" class="size-5" />
+              <UIcon name="i-lucide-braces" class="size-5 text-toned" aria-hidden="true" />
               Raw ffprobe
             </h3>
             <UButton
@@ -245,9 +264,14 @@
           </div>
           <pre
             v-if="rawOpen"
-            class="mw-frame max-h-72 overflow-auto p-3 font-mono text-xs text-toned"
+            class="mw-terminal max-h-72 overflow-y-auto font-mono text-xs wrap-anywhere whitespace-pre-wrap"
             >{{ JSON.stringify(activeProbe.raw, null, 2) }}</pre>
         </section>
+      </div>
+      <div v-else class="space-y-3" role="status" aria-label="Loading file details">
+        <USkeleton class="h-14" />
+        <USkeleton class="h-32" />
+        <span class="sr-only">Loading file details.</span>
       </div>
     </template>
   </UModal>
@@ -320,9 +344,24 @@ const streamColumns: TableColumn<ProbeStream>[] = [
   },
   { accessorKey: 'pix_fmt', header: 'Pix fmt', cell: ({ row }) => row.original.pix_fmt ?? '' },
   { accessorKey: 'channels', header: 'Channels', cell: ({ row }) => row.original.channels ?? '' },
-  { accessorKey: 'title', header: 'Title', cell: ({ row }) => row.original.title ?? '' },
-  { accessorKey: 'filename', header: 'Filename', cell: ({ row }) => row.original.filename ?? '' },
-  { accessorKey: 'mimetype', header: 'MIME type', cell: ({ row }) => row.original.mimetype ?? '' },
+  {
+    accessorKey: 'title',
+    header: 'Title',
+    cell: ({ row }) => row.original.title ?? '',
+    meta: { class: { td: 'max-w-sm whitespace-normal wrap-anywhere' } },
+  },
+  {
+    accessorKey: 'filename',
+    header: 'Filename',
+    cell: ({ row }) => row.original.filename ?? '',
+    meta: { class: { td: 'max-w-sm whitespace-normal wrap-anywhere' } },
+  },
+  {
+    accessorKey: 'mimetype',
+    header: 'MIME type',
+    cell: ({ row }) => row.original.mimetype ?? '',
+    meta: { class: { td: 'max-w-sm whitespace-normal wrap-anywhere' } },
+  },
 ];
 
 const actionsBusy = computed(

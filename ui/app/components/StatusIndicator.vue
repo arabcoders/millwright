@@ -16,16 +16,16 @@ const colors: Record<StatusColor, string> = {
   <UTooltip :text="info.label">
     <div
       tabindex="0"
-      class="shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-primary"
+      class="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-primary"
     >
       <slot>
         <span
           role="img"
           :aria-label="info.label"
-          class="flex size-12 items-center justify-center rounded-lg"
+          class="flex size-8 items-center justify-center rounded-md"
           :class="colors[info.color]"
         >
-          <UIcon :name="info.icon" class="size-5" aria-hidden="true" />
+          <UIcon :name="info.icon" class="size-4" aria-hidden="true" />
         </span>
       </slot>
     </div>

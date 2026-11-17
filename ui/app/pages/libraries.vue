@@ -5,8 +5,8 @@
         <div class="flex flex-wrap items-center gap-2">
           <UButton
             size="sm"
-            color="neutral"
-            variant="outline"
+            color="primary"
+            variant="solid"
             icon="i-lucide-plus"
             @click="openEditor()"
             >New library</UButton
@@ -50,169 +50,172 @@
       title="Could not load library activity"
       :description="progressError.message"
     />
-    <div v-if="isLoading && !libraries.length" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <USkeleton v-for="index in 2" :key="index" class="h-56 rounded-lg" />
+    <div v-if="isLoading && !libraries.length" class="space-y-2">
+      <USkeleton v-for="index in 2" :key="index" class="h-40 rounded-xl" />
     </div>
-    <div v-else-if="libraries.length" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div v-else-if="libraries.length" class="mw-card divide-y divide-default">
       <article
         v-for="library in libraries"
         :key="library.id"
-        class="mw-card flex h-full flex-col gap-3 p-4"
+        class="w-full min-w-0 max-w-full space-y-4 p-4 sm:p-5"
       >
-        <div class="flex min-w-0 items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate font-semibold text-highlighted">
+        <div class="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.5fr)_auto]">
+          <div class="min-w-0 space-y-3">
+            <h2 class="min-w-0 font-semibold text-highlighted">
               <NuxtLink
                 :to="{ path: '/files', query: { library_id: library.id } }"
                 :aria-label="`View files in ${library.name}`"
-                class="hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                class="wrap-anywhere hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
                 >{{ library.name }}</NuxtLink
               >
             </h2>
-            <p class="mt-1 truncate text-xs text-toned">Flow: {{ flowName(library) }}</p>
-          </div>
-          <UDropdownMenu
-            class="shrink-0"
-            :modal="false"
-            :items="
-              library.roots.map((root) => ({
-                type: 'label' as const,
-                label: root,
-                icon: 'i-lucide-folder',
-              }))
-            "
-            :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
-            :ui="{
-              content: 'w-96 max-w-[calc(100vw-1rem)]',
-              viewport: 'max-h-64',
-              label: 'items-start font-normal text-default',
-              itemLabel: 'overflow-visible whitespace-pre-wrap break-all text-clip',
-            }"
-          >
-            <template #default="{ open }">
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                icon="i-lucide-folder-tree"
-                :trailing-icon="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-                :aria-label="`Root folders for ${library.name}`"
-              >
-                Root folders
-                <UBadge color="neutral" variant="subtle" size="sm">
-                  {{ library.roots.length }}
-                </UBadge>
-              </UButton>
-            </template>
-          </UDropdownMenu>
-        </div>
-        <div class="grid gap-3 text-sm sm:grid-cols-3">
-          <div>
-            <p class="text-xs text-toned">Watch</p>
-            <p>{{ library.watch ? 'On' : 'Off' }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-toned">Job timing</p>
-            <p>{{ scheduleLabel(library) }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-toned">Cooldown</p>
-            <p>{{ library.cooldown_s }}s</p>
-          </div>
-          <div>
-            <p class="text-xs text-toned">Scan on start</p>
-            <p>{{ library.scan_on_start ? 'On' : 'Off' }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-toned">Recurring scans</p>
-            <p>
-              {{
-                library.scan_interval_s === null
-                  ? 'Off'
-                  : `Every ${library.scan_interval_s / (library.scan_interval_s % 86400 === 0 ? 86400 : 3600)} ${library.scan_interval_s % 86400 === 0 ? 'days' : 'hours'}`
-              }}
+            <p class="wrap-anywhere text-xs text-toned">
+              <UIcon
+                name="i-lucide-workflow"
+                class="me-1 inline-block size-3.5 align-text-bottom"
+                aria-hidden="true"
+              />
+              Flow: {{ flowName(library) }}
             </p>
-          </div>
-          <div>
-            <p class="text-xs text-toned">Health check</p>
-            <p>{{ library.healthcheck_enabled ? 'On' : 'Off' }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-toned">Trash</p>
-            <p>
-              {{ trashSummary(library) }}
-            </p>
-          </div>
-          <LibraryActivity
-            v-if="libraryProgress[library.id]"
-            :progress="libraryProgress[library.id]"
-          />
-          <USkeleton v-else-if="progressLoading" class="h-10 rounded-lg" />
-        </div>
-        <div class="mt-auto flex flex-wrap items-center justify-end gap-2">
-          <UTooltip
-            v-if="!library.suspended && libraryProgress[library.id]"
-            :text="
-              scanner?.paused
-                ? 'Resume activity from the header to scan now.'
-                : scannerDisabledReason
-            "
-            :disabled="!scanner?.paused && !scannerDisabledReason"
-          >
-            <span class="inline-flex">
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                icon="i-lucide-radar"
-                :disabled="library.deleted || !!scanner?.paused || !!scannerDisabledReason"
-                :loading="scanningId === library.id"
-                @click="scanLibrary(library)"
-                >Scan now</UButton
-              >
-            </span>
-          </UTooltip>
-          <UTooltip
-            :disabled="!library.deleted && pausingId === null"
-            :text="
-              library.deleted
-                ? 'Library deletion is in progress.'
-                : 'Wait for the current library pause or resume to finish.'
-            "
-          >
-            <span class="inline-flex">
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                :icon="library.suspended ? 'i-lucide-play' : 'i-lucide-pause'"
-                :loading="pausingId === library.id"
-                :disabled="library.deleted || pausingId !== null"
-                @click="togglePause(library)"
-              >
-                {{ library.suspended ? 'Resume library' : 'Pause library' }}
-              </UButton>
-            </span>
-          </UTooltip>
-          <UTooltip
-            text="Wait for the current library action to finish."
-            :disabled="!saving && cancellingId === null && deletingId === null"
-          >
-            <span class="inline-flex">
-              <UDropdownMenu :items="libraryActions(library)" :modal="false">
+            <UDropdownMenu
+              :modal="false"
+              :items="
+                library.roots.map((root) => ({
+                  type: 'label' as const,
+                  label: root,
+                  icon: 'i-lucide-folder',
+                }))
+              "
+              :content="{ align: 'end', side: 'bottom', sideOffset: 8 }"
+              :ui="{
+                content: 'w-96 max-w-[calc(100vw-1rem)]',
+                viewport: 'max-h-64',
+                label: 'items-start font-normal text-default',
+                itemLabel: 'overflow-visible whitespace-pre-wrap break-all text-clip',
+              }"
+            >
+              <template #default="{ open }">
                 <UButton
                   color="neutral"
                   variant="outline"
-                  size="xs"
-                  icon="i-lucide-settings-2"
-                  trailing-icon="i-lucide-chevron-down"
-                  :loading="cancellingId === library.id || deletingId === library.id"
-                  :disabled="saving || cancellingId !== null || deletingId !== null"
-                  >Actions</UButton
+                  size="sm"
+                  icon="i-lucide-folder-tree"
+                  :trailing-icon="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                  :aria-label="`Root folders for ${library.name}`"
                 >
-              </UDropdownMenu>
-            </span>
-          </UTooltip>
+                  Root folders
+                  <UBadge color="neutral" variant="subtle" size="sm">
+                    {{ library.roots.length }}
+                  </UBadge>
+                </UButton>
+              </template>
+            </UDropdownMenu>
+          </div>
+          <div class="min-w-0 space-y-3">
+            <dl class="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-eye" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Watch
+                </dt>
+                <dd>{{ library.watch ? 'On' : 'Off' }}</dd>
+              </div>
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-clock-3" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Job timing
+                </dt>
+                <dd class="wrap-anywhere">{{ scheduleLabel(library) }}</dd>
+              </div>
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-timer" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Cooldown
+                </dt>
+                <dd class="wrap-anywhere">{{ library.cooldown_s }}s</dd>
+              </div>
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-radar" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Scan on start
+                </dt>
+                <dd>{{ library.scan_on_start ? 'On' : 'Off' }}</dd>
+              </div>
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-repeat-2" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Recurring scans
+                </dt>
+                <dd class="wrap-anywhere">
+                  {{
+                    library.scan_interval_s === null
+                      ? 'Off'
+                      : `Every ${library.scan_interval_s / (library.scan_interval_s % 86400 === 0 ? 86400 : 3600)} ${library.scan_interval_s % 86400 === 0 ? 'days' : 'hours'}`
+                  }}
+                </dd>
+              </div>
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-heart-pulse" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Health check
+                </dt>
+                <dd>{{ library.healthcheck_enabled ? 'On' : 'Off' }}</dd>
+              </div>
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-trash-2" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Trash
+                </dt>
+                <dd class="wrap-anywhere">{{ trashSummary(library) }}</dd>
+              </div>
+            </dl>
+            <div class="grid min-w-0 gap-3 text-sm sm:grid-cols-3">
+              <LibraryActivity
+                v-if="libraryProgress[library.id]"
+                :progress="libraryProgress[library.id]"
+              />
+              <USkeleton v-else-if="progressLoading" class="h-10 rounded-lg" />
+            </div>
+          </div>
+          <div class="flex items-center justify-end gap-1.5 self-start">
+            <UTooltip text="Wait for the current library action to finish." :disabled="!actionBusy">
+              <span class="inline-flex items-center gap-1.5">
+                <UButton
+                  v-if="!library.deleted"
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  icon="i-lucide-pen-line"
+                  :aria-label="`Edit ${library.name}`"
+                  :disabled="actionBusy"
+                  @click="openEditor(library)"
+                  >Edit</UButton
+                >
+                <UDropdownMenu
+                  :items="libraryActions(library)"
+                  :modal="false"
+                  :content="{ align: 'end' }"
+                  :ui="{ content: 'w-72', itemDescription: 'whitespace-normal' }"
+                >
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="sm"
+                    icon="i-lucide-ellipsis"
+                    square
+                    :aria-label="`Actions for ${library.name}`"
+                    :loading="
+                      scanningId === library.id ||
+                      pausingId === library.id ||
+                      cancellingId === library.id ||
+                      deletingId === library.id
+                    "
+                    :disabled="actionBusy"
+                  />
+                </UDropdownMenu>
+              </span>
+            </UTooltip>
+          </div>
         </div>
         <UAlert
           v-if="library.deleted"
@@ -232,13 +235,11 @@
         />
       </article>
     </div>
-    <div
+    <UEmpty
       v-else-if="!lastError"
-      class="mw-card flex flex-col items-center justify-center gap-1 py-10 text-center"
-    >
-      <UIcon name="i-lucide-folder-tree" class="size-6 text-toned" />
-      <p class="text-sm text-toned">No libraries configured yet.</p>
-    </div>
+      icon="i-lucide-folder-tree"
+      title="No libraries configured yet."
+    />
 
     <LibraryEditorModal
       v-if="editorOpen"
@@ -367,6 +368,14 @@ const scanningId = ref<number | null>(null);
 const pausingId = ref<number | null>(null);
 const cancellingId = ref<number | null>(null);
 const deletingId = ref<number | null>(null);
+const actionBusy = computed(
+  () =>
+    saving.value ||
+    scanningId.value !== null ||
+    pausingId.value !== null ||
+    cancellingId.value !== null ||
+    deletingId.value !== null,
+);
 const scannerDisabledReason = computed(() => {
   if (scannerBusy.value) return 'Wait for the activity control to finish.';
   if (progressLoading.value) return 'Loading activity state.';
@@ -416,6 +425,7 @@ const togglePause = async (library: LibraryRow): Promise<void> => {
 };
 
 const scanLibrary = async (lib: LibraryRow): Promise<void> => {
+  if (scanningId.value !== null) return;
   scanningId.value = lib.id;
   try {
     await scanLibraryRequest(lib);
@@ -425,28 +435,45 @@ const scanLibrary = async (lib: LibraryRow): Promise<void> => {
 };
 
 const libraryActions = (library: LibraryRow): DropdownMenuItem[][] => {
-  const settings: DropdownMenuItem[] = [];
-  if (!library.deleted)
-    settings.push({
-      label: 'Edit',
-      icon: 'i-lucide-pen-line',
-      onSelect: () => openEditor(library),
+  const controls: DropdownMenuItem[] = [];
+  if (!library.suspended && libraryProgress.value[library.id]) {
+    const reason = library.deleted
+      ? 'Library deletion is in progress.'
+      : scanner.value?.paused
+        ? 'Resume activity from the header to scan now.'
+        : scannerDisabledReason.value;
+    controls.push({
+      label: 'Scan now',
+      icon: 'i-lucide-radar',
+      description: reason || undefined,
+      disabled: !!reason,
+      onSelect: () => scanLibrary(library),
     });
+  }
+  controls.push({
+    label: library.suspended ? 'Resume library' : 'Pause library',
+    icon: library.suspended ? 'i-lucide-play' : 'i-lucide-pause',
+    description: library.deleted ? 'Library deletion is in progress.' : undefined,
+    disabled: library.deleted || pausingId.value !== null,
+    onSelect: () => togglePause(library),
+  });
   if (flows.value.length && !flowError.value)
-    settings.push({
+    controls.push({
       label: 'Dry run',
       icon: 'i-lucide-play',
       onSelect: () => openDryRun(library),
     });
-  settings.push({
-    label: library.delete_error ? 'Retry deletion' : 'Delete library',
-    icon: 'i-lucide-trash-2',
-    color: 'error',
-    disabled: library.deleted && !library.delete_error,
-    onSelect: () => void requestDelete(library),
-  });
+  const deletion: DropdownMenuItem[] = [
+    {
+      label: library.delete_error ? 'Retry deletion' : 'Delete library',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      disabled: library.deleted && !library.delete_error,
+      onSelect: () => void requestDelete(library),
+    },
+  ];
   const progress = libraryProgress.value[library.id];
-  if (!progress) return [settings];
+  if (!progress) return [controls, deletion];
   const scanActions: DropdownMenuItem[] = [];
   if (progress.scanner.discovery_pending)
     scanActions.push({
@@ -458,7 +485,7 @@ const libraryActions = (library: LibraryRow): DropdownMenuItem[][] => {
       disabled: progress.discovery.status === 'cancelling',
       onSelect: () => void cancelScan(library),
     });
-  return scanActions.length ? [settings, scanActions] : [settings];
+  return scanActions.length ? [controls, scanActions, deletion] : [controls, deletion];
 };
 
 const requestDelete = async (library: LibraryRow): Promise<void> => {

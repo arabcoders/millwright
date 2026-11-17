@@ -50,6 +50,26 @@
           </p>
         </div>
 
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          icon="i-lucide-circle-alert"
+          title="Could not load folders"
+          :description="error"
+        >
+          <template #actions>
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-lucide-refresh-cw"
+              :loading="loading"
+              @click="load(currentPath)"
+              >Retry</UButton
+            >
+          </template>
+        </UAlert>
         <div class="max-h-64 overflow-y-auto rounded-lg border border-default">
           <button
             v-for="item in filteredItems"
@@ -62,28 +82,35 @@
             <span class="truncate" dir="ltr">{{ item.name }}</span>
           </button>
           <UEmpty
-            v-if="!loading && !items.length"
+            v-if="resolved && !items.length"
+            size="sm"
+            variant="naked"
             icon="i-lucide-folder-open"
             title="No subdirectories"
-            description="This folder has no subdirectories."
-            class="p-4"
           />
           <UEmpty
-            v-else-if="!loading && !filteredItems.length"
+            v-else-if="resolved && !filteredItems.length"
+            size="sm"
+            variant="naked"
             icon="i-lucide-search-x"
             title="No matching subdirectories"
-            :description="`No folders match “${query}”.`"
-            class="p-4"
           />
           <div v-if="loading" class="flex justify-center px-3 py-2">
             <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin text-toned" />
+            <span class="sr-only">Loading folders.</span>
           </div>
         </div>
       </div>
     </template>
     <template #footer>
       <div class="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-        <UButton color="primary" icon="i-lucide-check" @click="select">
+        <UButton
+          color="primary"
+          icon="i-lucide-check"
+          :loading="loading"
+          :disabled="!resolved"
+          @click="select"
+        >
           Select this folder
         </UButton>
       </div>
@@ -93,7 +120,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useApiErrorMessage } from '~/composables/useApiErrorMessage';
 import type { DirectoryEntry } from '~/types/api';
 import { useDirectories } from '~/composables/useDirectories';
 
@@ -104,8 +130,6 @@ const emit = defineEmits<{
   'update:open': [value: boolean];
   select: [path: string];
 }>();
-const notify = useNotification();
-const { messageFor } = useApiErrorMessage();
 const { load: loadDirectory } = useDirectories();
 
 const open = computed({
@@ -116,6 +140,8 @@ const open = computed({
 const currentPath = ref('/');
 const items = ref<DirectoryEntry[]>([]);
 const loading = ref(false);
+const resolved = ref(false);
+const error = ref('');
 const query = ref('');
 let loadGeneration = 0;
 
@@ -139,21 +165,23 @@ const segments = computed<Array<{ label: string; path: string }>>(() => {
 
 const load = async (path: string): Promise<void> => {
   const generation = ++loadGeneration;
+  currentPath.value = path;
+  items.value = [];
+  query.value = '';
+  resolved.value = false;
+  error.value = '';
   loading.value = true;
   try {
     const result = await loadDirectory(path);
     if (generation !== loadGeneration) return;
     if (!result.ok) {
-      notify.error(messageFor(undefined, 'Could not load folders.'));
+      error.value = result.error;
       return;
     }
     const data = result.data;
     currentPath.value = data.path;
     items.value = data.items;
-    query.value = '';
-  } catch {
-    if (generation !== loadGeneration) return;
-    notify.error(messageFor(undefined, 'Could not load folders.'));
+    resolved.value = true;
   } finally {
     if (generation === loadGeneration) {
       loading.value = false;
@@ -162,6 +190,7 @@ const load = async (path: string): Promise<void> => {
 };
 
 const select = (): void => {
+  if (!resolved.value) return;
   emit('select', currentPath.value);
   open.value = false;
 };
@@ -170,8 +199,6 @@ watch(
   () => props.open,
   (value) => {
     if (value) {
-      query.value = '';
-      currentPath.value = props.initialPath;
       void load(props.initialPath);
     }
   },

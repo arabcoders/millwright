@@ -6,17 +6,19 @@
     :ui="{ trailing: 'pe-1' }"
   >
     <template #trailing>
-      <UButton
-        type="button"
-        color="neutral"
-        variant="ghost"
-        size="xs"
-        :icon="visible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-        :aria-label="visible ? 'Hide password' : 'Show password'"
-        :aria-pressed="visible"
-        :disabled="disabled"
-        @click="visible = !visible"
-      />
+      <UTooltip :text="visible ? 'Hide password' : 'Show password'">
+        <UButton
+          type="button"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :icon="visible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+          :aria-label="visible ? 'Hide password' : 'Show password'"
+          :aria-pressed="visible"
+          :disabled="disabled"
+          @click="visible = !visible"
+        />
+      </UTooltip>
     </template>
   </UInput>
 </template>

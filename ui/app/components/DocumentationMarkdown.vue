@@ -128,26 +128,24 @@ onBeforeUnmount(() => controller?.abort());
   margin-bottom: 0;
 }
 .docs-markdown :where(h1, h2, h3, h4, h5, h6) {
-  margin-top: 1.75em;
+  margin: 1.5rem 0 0.75rem;
   color: var(--ui-text-highlighted);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
   overflow-wrap: anywhere;
-  scroll-margin-top: 1rem;
+  scroll-margin-top: calc(var(--ui-header-height, 4rem) + 1.5rem);
 }
 .docs-markdown h1 {
-  font-size: clamp(1.8rem, 1.5rem + 1vw, 2.4rem);
+  font-size: 1.875rem;
 }
 .docs-markdown h2 {
   font-size: 1.5rem;
-  border-top: 1px solid var(--ui-border);
-  padding-top: 0.5rem;
 }
 .docs-markdown h3 {
   font-size: 1.25rem;
 }
-.docs-markdown h4 {
-  font-size: 1.1rem;
+.docs-markdown :where(h4, h5, h6) {
+  font-size: 1.125rem;
 }
 .docs-markdown :where(p, ul, ol, pre, blockquote, .markdown-alert, .docs-table, details, hr) {
   margin-top: 1rem;
@@ -171,37 +169,44 @@ onBeforeUnmount(() => controller?.abort());
 .docs-markdown li + li {
   margin-top: 0.35rem;
 }
+.docs-markdown li > :where(ul, ol) {
+  margin-top: 0.5rem;
+}
 .docs-markdown a {
   color: var(--ui-primary);
   text-decoration: underline;
+  text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
 .docs-markdown a:hover {
   color: var(--ui-text-highlighted);
 }
 .docs-markdown :not(pre) > code {
-  border: 1px solid var(--ui-border);
-  border-radius: 0.35rem;
-  background: var(--ui-bg-muted);
-  padding: 0.1rem 0.3rem;
+  border: 1px solid color-mix(in oklab, var(--ui-border) 80%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--ui-bg-elevated) 40%, transparent);
+  padding: 0.125rem 0.375rem;
   font-size: 0.875em;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 .docs-markdown pre {
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--ui-border);
-  border-radius: 0.5rem;
-  background: var(--ui-bg-muted);
-  padding: 1rem;
+  border: 1px solid color-mix(in oklab, var(--ui-border) 80%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--ui-bg-elevated) 40%, transparent);
+  padding: 0.9rem 1rem;
 }
 .docs-markdown pre code {
-  white-space: pre;
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: 0.875em;
 }
 .docs-markdown blockquote {
-  border-left: 0.25rem solid var(--ui-border-accented);
-  padding: 0.5rem 1rem;
+  border-left: 0.25rem solid color-mix(in oklab, var(--ui-border) 70%, transparent);
+  padding-left: 1rem;
   color: var(--ui-text-toned);
 }
 .docs-markdown hr {
@@ -217,18 +222,29 @@ onBeforeUnmount(() => controller?.abort());
 .docs-markdown table {
   width: max-content;
   min-width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 .docs-markdown :where(th, td) {
-  padding: 0.6rem 0.8rem;
+  padding: 0.75rem 0.9rem;
+  border-right: 1px solid var(--ui-border);
   border-bottom: 1px solid var(--ui-border);
   text-align: left;
   vertical-align: top;
 }
 .docs-markdown th {
-  background: var(--ui-bg-muted);
-  font-weight: 700;
-  color: var(--ui-text-highlighted);
+  background: color-mix(in oklab, var(--ui-bg-elevated) 20%, transparent);
+  font-weight: 600;
+  color: var(--ui-text-toned);
+}
+.docs-markdown :where(th:last-child, td:last-child) {
+  border-right: 0;
+}
+.docs-markdown tbody tr:nth-child(odd) {
+  background: color-mix(in oklab, var(--ui-bg-elevated) 10%, transparent);
+}
+.docs-markdown tbody tr:hover {
+  background: color-mix(in oklab, var(--ui-bg-elevated) 30%, transparent);
 }
 .docs-markdown tbody tr:last-child td {
   border-bottom: 0;
@@ -240,25 +256,36 @@ onBeforeUnmount(() => controller?.abort());
 }
 .docs-markdown details summary {
   cursor: pointer;
+  user-select: none;
   color: var(--ui-text-highlighted);
 }
 .docs-markdown .markdown-alert {
   --alert-color: var(--ui-info);
-  border-left: 0.25rem solid var(--alert-color);
+  border: 1px solid color-mix(in oklab, var(--alert-color) 35%, var(--ui-border) 65%);
+  border-left: 0.35rem solid var(--alert-color);
   border-radius: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: color-mix(in oklab, var(--alert-color) 8%, var(--ui-bg));
+  padding: 0.9rem 1rem;
+  background: color-mix(in oklab, var(--alert-color) 8%, transparent);
 }
 .docs-markdown .markdown-alert > :first-child,
-.docs-markdown blockquote > :first-child {
+.docs-markdown blockquote > :first-child,
+.docs-markdown blockquote > :first-child > :first-child {
   margin-top: 0;
+}
+.docs-markdown .markdown-alert > :last-child,
+.docs-markdown blockquote > :last-child {
+  margin-bottom: 0;
 }
 .docs-markdown .markdown-alert-title {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-bottom: 0.45rem;
   color: var(--alert-color);
+  font-size: 0.75rem;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .docs-markdown .markdown-alert-title svg {
   fill: currentColor;

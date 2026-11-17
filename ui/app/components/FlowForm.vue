@@ -4,6 +4,15 @@
     :class="fullscreen ? 'flex h-full min-h-0 flex-col gap-5' : 'space-y-5'"
     @submit.prevent="submit"
   >
+    <UAlert
+      v-if="error"
+      color="error"
+      variant="soft"
+      icon="i-lucide-circle-alert"
+      title="Could not save flow"
+      :description="error"
+      :ui="{ description: 'whitespace-pre-wrap wrap-anywhere' }"
+    />
     <UFormField label="Flow name">
       <UFieldGroup class="w-full">
         <UInput v-model="name" class="min-w-0 flex-1" :ui="{ root: 'w-full' }" />
@@ -47,6 +56,7 @@
             @remove="removeNode"
             @move="move"
             @connect="connect"
+            @update-edge="(id, connection) => connect(connection, id)"
             @remove-edge="removeEdge"
           />
         </template>
@@ -62,7 +72,47 @@
               :facts="props.facts"
               :notification-targets="props.notificationTargets"
               :notification-target-error="props.notificationTargetError"
+              :readonly="disabled"
             />
+            <section
+              v-if="selected && !disabled"
+              class="mt-4 space-y-3 border-t border-default pt-4"
+            >
+              <h3 class="text-sm font-semibold text-highlighted">Connections</h3>
+              <UFormField
+                v-for="port in connectionPorts"
+                :key="port"
+                :label="port === 'plan' ? 'Convert' : port"
+              >
+                <UFieldGroup class="w-full">
+                  <USelectMenu
+                    :model-value="connectionTarget(port)"
+                    :items="connectionOptions"
+                    value-key="value"
+                    placeholder="Not connected"
+                    class="min-w-0 flex-1"
+                    :aria-label="`${port} destination`"
+                    @update:model-value="
+                      connect({ source: selected.id, sourceHandle: port, target: $event ?? null })
+                    "
+                  />
+                  <UButton
+                    v-if="connectionTarget(port)"
+                    color="neutral"
+                    variant="outline"
+                    icon="i-lucide-unplug"
+                    :aria-label="`Disconnect ${port}`"
+                    @click="
+                      removeEdge(
+                        selected.id === 'start'
+                          ? `start->${entry}`
+                          : `${selected.id}:${port}->${connectionTarget(port)}`,
+                      )
+                    "
+                  />
+                </UFieldGroup>
+              </UFormField>
+            </section>
             <p v-if="!selected" class="rounded-lg border border-default p-4 text-sm text-toned">
               Select Start or a step to edit its settings.
             </p>
@@ -84,6 +134,7 @@ import {
   newConditionNode,
   newPluginNode,
   newTerminalNode,
+  nodePorts,
   type CanvasSelection,
   type DraftNode,
 } from '~/utils/stepDraft';
@@ -125,7 +176,7 @@ const emit = defineEmits<{
     },
   ];
 }>();
-const notify = useNotification();
+const error = ref('');
 const root = props.flow
   ? (JSON.parse(JSON.stringify(props.flow.definition)) as FlowRow['definition'])
   : undefined;
@@ -169,6 +220,28 @@ const selectedNode = computed({
     selected.value ? (nodes.value.find((n) => n.uid === selected.value?.id) ?? null) : null,
   set: () => undefined,
 });
+const connectionPorts = computed(() =>
+  selected.value?.id === 'start'
+    ? ['next']
+    : selectedNode.value
+      ? nodePorts(
+          selectedNode.value,
+          selectedNode.value.kind === 'plugin' ? plugin(selectedNode.value.plugin) : undefined,
+        )
+      : [],
+);
+const connectionOptions = computed(() =>
+  nodes.value
+    .filter((node) => node.uid !== selected.value?.id)
+    .map((node) => ({
+      label: `${node.kind === 'plugin' ? (plugin(node.plugin)?.manifest.name ?? node.plugin) : node.kind === 'condition' ? 'Condition' : 'Result'} (${node.uid})`,
+      value: node.uid,
+    })),
+);
+const connectionTarget = (port: string): string | undefined =>
+  selected.value?.id === 'start'
+    ? entry.value || undefined
+    : edges.value.find((edge) => edge.src === selected.value?.id && edge.port === port)?.dst;
 watch(
   () => props.plugins,
   () => {
@@ -271,7 +344,16 @@ const dirty = useDirtyState(
     name: name.value,
     entry: entry.value,
     when: when.value,
-    nodes: nodes.value,
+    nodes: nodes.value.map((node) =>
+      node.kind === 'plugin'
+        ? {
+            uid: node.uid,
+            plugin: node.plugin,
+            configVersion: node.configVersion,
+            inputs: buildInputs(node, fields(node.plugin)),
+          }
+        : node,
+    ),
     edges: edges.value,
     positions: positions.value,
   })),
@@ -346,17 +428,19 @@ const downstream = (id: string): string[] => {
   }
   return [...seen];
 };
-const connect = (c: {
-  source: string | null;
-  sourceHandle?: string | null;
-  target: string | null;
-}) => {
+const connect = (
+  c: {
+    source: string | null;
+    sourceHandle?: string | null;
+    target: string | null;
+  },
+  replacedId?: string,
+) => {
   if (props.disabled) return;
   if (!c.source || !c.target || !c.sourceHandle) return;
   const source = c.source;
   const target = c.target;
-  if (source === 'start') entry.value = target;
-  else {
+  if (source !== 'start') {
     const terminalStage =
       nodeById(source)?.kind === 'terminal' ||
       nodes.value.some(
@@ -364,8 +448,14 @@ const connect = (c: {
           node.uid !== source && downstream(node.uid).includes(source) && node.kind === 'terminal',
       );
     if (terminalStage && (!isAction(target) || downstream(target).some((id) => !isAction(id)))) {
-      return notify.warning('Result actions can connect only to action plugins.');
+      error.value = 'Result actions can connect only to action plugins.';
+      return;
     }
+  }
+  error.value = '';
+  if (replacedId) removeEdge(replacedId);
+  if (source === 'start') entry.value = target;
+  else {
     edges.value = [
       ...edges.value.filter((e) => !(e.src === source && e.port === c.sourceHandle)),
       { src: source, port: c.sourceHandle, dst: target },
@@ -374,27 +464,35 @@ const connect = (c: {
 };
 const submit = () => {
   if (props.disabled) return;
-  if (!name.value.trim() || !entry.value || !nodes.value.length)
-    return notify.warning('Give the flow a name, choose an entry node, and add at least one node.');
+  error.value = '';
+  if (!name.value.trim() || !entry.value || !nodes.value.length) {
+    error.value = 'Give the flow a name, choose an entry node, and add at least one node.';
+    return;
+  }
   let flowWhen = root?.when;
   if (JSON.stringify(when.value) !== initialWhen) {
     const problem = conditionProblem('Start', when.value, facetTypes.value);
     if (problem) {
       selected.value = { kind: 'node', id: 'start' };
-      return notify.warning(problem);
+      error.value = problem;
+      return;
     }
     flowWhen = conditionToWhen(when.value, facetTypes.value);
   }
   const out: FlowNode[] = [];
   for (const n of nodes.value) {
     if (n.kind === 'plugin') {
-      if (!n.plugin) return notify.warning('Every plugin node needs a plugin.');
+      if (!n.plugin) {
+        error.value = 'Every plugin node needs a plugin.';
+        return;
+      }
       const schema = fields(n.plugin);
       const inputs = buildInputs(n, schema);
       for (const field of schema)
         if (field.required && !(field.name in inputs)) {
           selected.value = { kind: 'node', id: n.uid };
-          return notify.warning(`Input "${field.name}" is required.`);
+          error.value = `Input "${field.name}" is required.`;
+          return;
         }
       out.push({
         type: 'plugin',
@@ -407,12 +505,14 @@ const submit = () => {
       const problem = conditionProblem(`node "${n.uid}"`, n.condition, facetTypes.value);
       if (problem) {
         selected.value = { kind: 'node', id: n.uid };
-        return notify.warning(problem);
+        error.value = problem;
+        return;
       }
       const when = conditionToWhen(n.condition, facetTypes.value);
       if (!when) {
         selected.value = { kind: 'node', id: n.uid };
-        return notify.warning('Add at least one rule to this condition node.');
+        error.value = 'Add at least one rule to this condition node.';
+        return;
       }
       out.push({ type: 'condition', id: n.uid, when });
     } else out.push({ type: 'terminal', id: n.uid, outcome: n.outcome });

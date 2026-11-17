@@ -5,8 +5,8 @@
         <div class="flex flex-wrap items-center gap-2">
           <UButton
             size="sm"
-            color="neutral"
-            variant="outline"
+            color="primary"
+            variant="solid"
             icon="i-lucide-plus"
             :disabled="!!busyReason"
             :title="busyReason || undefined"
@@ -35,64 +35,78 @@
       title="Could not load webhooks"
       :description="error"
     />
-    <div v-if="loading && !items.length" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <USkeleton v-for="index in 3" :key="index" class="h-52 rounded-lg" />
+    <div v-if="loading && !items.length" class="space-y-3">
+      <USkeleton v-for="index in 3" :key="index" class="h-40 rounded-lg" />
     </div>
-    <div v-else-if="items.length" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div v-else-if="items.length" class="mw-card divide-y divide-default" :aria-busy="loading">
       <article
         v-for="item in items"
         :key="item.name"
-        class="mw-card flex h-full min-w-0 flex-col gap-3 p-4"
+        class="grid min-w-0 gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.5fr)_auto]"
       >
         <div class="min-w-0">
-          <h2 class="truncate font-semibold text-highlighted">{{ item.name }}</h2>
-          <p class="text-xs text-toned">{{ item.type }}</p>
+          <h2 class="wrap-anywhere text-base font-semibold text-highlighted">{{ item.name }}</h2>
+          <p class="mt-2 flex items-center gap-1.5 text-xs text-toned">
+            <UIcon name="i-lucide-webhook" class="size-3.5 shrink-0" aria-hidden="true" />
+            {{ item.type }}
+          </p>
         </div>
-        <UFormField label="API key" size="sm">
-          <div class="flex items-center gap-2">
-            <UInput :model-value="item.api_key" readonly size="sm" class="min-w-0 flex-1" />
-            <UButton
-              size="sm"
-              color="neutral"
-              variant="outline"
-              class="shrink-0"
-              icon="i-lucide-copy"
-              aria-label="Copy API key"
-              @click="copyText(item.api_key)"
-            />
+        <dl class="min-w-0 space-y-4 text-sm">
+          <div class="min-w-0 space-y-1">
+            <dt class="flex items-center gap-1.5 text-xs text-muted">
+              <UIcon name="i-lucide-key-round" class="size-3.5 shrink-0" aria-hidden="true" />
+              API key
+            </dt>
+            <dd class="flex min-w-0 items-start gap-2">
+              <code class="min-w-0 flex-1 wrap-anywhere py-1 text-xs">{{ item.api_key }}</code>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="shrink-0"
+                icon="i-lucide-copy"
+                aria-label="Copy API key"
+                @click="copyText(item.api_key)"
+              />
+            </dd>
           </div>
-        </UFormField>
-        <UFormField label="Receiver URL" size="sm">
-          <div class="flex items-center gap-2">
-            <UInput :model-value="receiverUrl(item)" readonly size="sm" class="min-w-0 flex-1" />
-            <UButton
-              size="sm"
-              color="neutral"
-              variant="outline"
-              class="shrink-0"
-              icon="i-lucide-copy"
-              aria-label="Copy receiver URL"
-              @click="copyText(receiverUrl(item))"
-            />
+          <div class="min-w-0 space-y-1">
+            <dt class="flex items-center gap-1.5 text-xs text-muted">
+              <UIcon name="i-lucide-link" class="size-3.5 shrink-0" aria-hidden="true" />
+              Receiver URL
+            </dt>
+            <dd class="flex min-w-0 items-start gap-2">
+              <code class="min-w-0 flex-1 wrap-anywhere py-1 text-xs">{{ receiverUrl(item) }}</code>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="shrink-0"
+                icon="i-lucide-copy"
+                aria-label="Copy receiver URL"
+                @click="copyText(receiverUrl(item))"
+              />
+            </dd>
           </div>
-        </UFormField>
-        <dl v-if="item.path_replacements.length" class="text-xs">
-          <div class="min-w-0">
-            <dt class="text-dimmed">Path replacements</dt>
-            <dd class="mt-0.5 text-toned">
+          <div v-if="item.path_replacements.length" class="min-w-0 space-y-1">
+            <dt class="flex items-center gap-1.5 text-xs text-muted">
+              <UIcon name="i-lucide-folder-sync" class="size-3.5 shrink-0" aria-hidden="true" />
+              Path replacements
+            </dt>
+            <dd class="text-xs">
               <ul class="space-y-1">
-                <li v-for="replacement in item.path_replacements" :key="replacement.source">
-                  <UTooltip :text="`${replacement.source} → ${replacement.destination}`">
-                    <span class="block truncate"
-                      >{{ replacement.source }} → {{ replacement.destination }}</span
-                    >
-                  </UTooltip>
+                <li
+                  v-for="replacement in item.path_replacements"
+                  :key="replacement.source"
+                  class="wrap-anywhere font-mono"
+                >
+                  {{ replacement.source }} → {{ replacement.destination }}
                 </li>
               </ul>
             </dd>
           </div>
         </dl>
-        <div class="mt-auto flex flex-wrap items-center justify-end gap-2">
+        <div class="flex flex-wrap items-start justify-end gap-1.5">
           <UButton
             size="sm"
             color="neutral"
@@ -103,32 +117,33 @@
             @click="openEditor(item)"
             >Edit</UButton
           >
-          <UButton
-            size="sm"
-            color="neutral"
-            variant="outline"
-            icon="i-lucide-trash-2"
-            :loading="deleting === item.name"
-            :disabled="!!busyReason"
-            :title="busyReason || undefined"
-            @click="remove(item)"
-            >Delete</UButton
-          >
+          <UDropdownMenu :items="webhookActions(item)" :modal="false" :content="{ align: 'end' }">
+            <UButton
+              size="sm"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-ellipsis"
+              square
+              :aria-label="`Actions for ${item.name}`"
+              :loading="deleting === item.name"
+              :disabled="!!busyReason"
+              :title="busyReason || undefined"
+            />
+          </UDropdownMenu>
         </div>
       </article>
     </div>
-    <div
+    <UEmpty
       v-else-if="!error"
-      class="mw-card flex flex-col items-center justify-center gap-2 py-10 text-center"
-    >
-      <UIcon name="i-lucide-webhook" class="size-7 text-toned" />
-      <p class="text-sm text-toned">No incoming webhooks configured yet.</p>
-    </div>
+      icon="i-lucide-webhook"
+      title="No incoming webhooks configured yet."
+    />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import WebhookEditorModal from '~/components/WebhookEditorModal.vue';
 import { useDialog } from '~/composables/useDialog';
 import type { WebhookRegistration } from '~/types/api';
@@ -211,6 +226,16 @@ const remove = async (registration: WebhookRegistration): Promise<void> => {
     deleting.value = null;
   }
 };
+
+const webhookActions = (registration: WebhookRegistration): DropdownMenuItem[] => [
+  {
+    label: 'Delete',
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    disabled: !!busyReason.value,
+    onSelect: () => remove(registration),
+  },
+];
 
 onMounted(() => void load());
 </script>

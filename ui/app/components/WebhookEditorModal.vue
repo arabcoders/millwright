@@ -4,18 +4,26 @@
     :title="registration ? 'Edit webhook' : 'New webhook'"
     :dismissible="!saving"
     :close="{ disabled: saving }"
-    :ui="{ content: 'w-full sm:max-w-2xl' }"
+    :ui="{ content: 'w-full sm:max-w-2xl', body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5' }"
     @update:open="handleOpenChange"
     @after:leave="emit('after:leave')"
   >
     <template #body>
-      <form id="webhookForm" class="space-y-4" @submit.prevent="save">
-        <UFormField label="Name" required>
-          <UInput v-model="name" class="w-full" :disabled="!!registration || saving" required />
-        </UFormField>
-        <UFormField label="Type" required>
-          <USelect v-model="type" :items="types" :disabled="saving" class="w-full" />
-        </UFormField>
+      <form id="webhookForm" class="space-y-5" @submit.prevent="save">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <UFormField label="Name" required>
+            <UInput
+              v-model="name"
+              icon="i-lucide-webhook"
+              class="w-full"
+              :disabled="!!registration || saving"
+              required
+            />
+          </UFormField>
+          <UFormField label="Type" required>
+            <USelect v-model="type" :items="types" :disabled="saving" class="w-full" />
+          </UFormField>
+        </div>
         <UAlert color="info" variant="soft" icon="i-lucide-info">
           <template #description>
             <div v-if="type === 'generic'" class="space-y-3">
@@ -44,9 +52,12 @@
             </div>
           </template>
         </UAlert>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="text-sm font-medium">Path replacements</h3>
+        <section class="space-y-4 border-t border-default pt-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="flex items-center gap-2 font-semibold text-highlighted">
+              <UIcon name="i-lucide-folder-symlink" class="size-5 text-toned" aria-hidden="true" />
+              Path replacements
+            </h3>
             <UButton
               size="sm"
               color="neutral"
@@ -63,7 +74,7 @@
           <div
             v-for="(replacement, index) in pathReplacements"
             :key="index"
-            class="mw-frame flex items-end gap-2 p-3"
+            class="grid items-end gap-3 border-t border-default pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
           >
             <UFormField
               label="Source prefix"
@@ -89,21 +100,38 @@
             <UButton
               color="neutral"
               variant="outline"
+              size="sm"
+              class="justify-self-end"
               icon="i-lucide-trash-2"
               :aria-label="`Remove replacement ${index + 1}`"
               :disabled="saving"
               @click="pathReplacements.splice(index, 1)"
             />
           </div>
-        </div>
+        </section>
         <UAlert v-if="error" color="error" icon="i-lucide-triangle-alert" :description="error" />
       </form>
     </template>
     <template #footer>
-      <div class="flex w-full justify-end gap-2">
-        <UButton type="submit" form="webhookForm" icon="i-lucide-save" :loading="saving">{{
-          registration ? 'Save changes' : 'Add webhook'
-        }}</UButton>
+      <div class="flex w-full flex-wrap items-center justify-end gap-2">
+        <UButton
+          type="button"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          icon="i-lucide-x"
+          :disabled="saving"
+          @click="handleOpenChange(false)"
+          >Cancel</UButton
+        >
+        <UButton
+          type="submit"
+          form="webhookForm"
+          size="sm"
+          icon="i-lucide-save"
+          :loading="saving"
+          >{{ registration ? 'Save changes' : 'Add webhook' }}</UButton
+        >
       </div>
     </template>
   </UModal>

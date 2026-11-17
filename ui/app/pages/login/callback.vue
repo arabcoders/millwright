@@ -1,31 +1,40 @@
 <template>
-  <div class="space-y-4 text-center">
-    <template v-if="error">
-      <UAlert
-        color="error"
-        variant="soft"
-        icon="i-lucide-triangle-alert"
-        :title="retryable ? 'Sign-in unavailable' : 'Couldn’t sign in'"
-        :description="error"
-      />
-
-      <UButton
-        v-if="retryable"
-        color="neutral"
-        variant="outline"
-        icon="i-lucide-refresh-cw"
-        block
-        @click="checkSession"
-        >Retry</UButton
-      >
-      <UButton color="neutral" variant="outline" block to="/login">Back to sign-in</UButton>
+  <UCard>
+    <template #header>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-base font-semibold text-highlighted">Sign in</h1>
+        <ThemeButton square :show-label="false" />
+      </div>
     </template>
+    <div class="space-y-5 text-center">
+      <template v-if="error">
+        <UAlert
+          color="error"
+          variant="soft"
+          icon="i-lucide-triangle-alert"
+          :title="retryable ? 'Sign-in unavailable' : 'Couldn’t sign in'"
+          :description="error"
+        />
 
-    <template v-else>
-      <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-primary mx-auto" />
-      <p class="text-sm text-toned">Signing you in...</p>
-    </template>
-  </div>
+        <UButton
+          v-if="retryable"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-refresh-cw"
+          block
+          @click="checkSession"
+          >Retry</UButton
+        >
+        <UButton color="neutral" variant="outline" icon="i-lucide-arrow-left" block to="/login"
+          >Back to sign-in</UButton
+        >
+      </template>
+      <template v-else>
+        <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-primary mx-auto" />
+        <p class="text-sm text-toned">Signing you in...</p>
+      </template>
+    </div>
+  </UCard>
 </template>
 
 <script setup lang="ts">

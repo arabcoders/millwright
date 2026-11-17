@@ -2,49 +2,66 @@
   <main class="w-full min-w-0 max-w-full space-y-6">
     <PageHeader page="system-operations" />
     <template v-if="status">
-      <div class="grid gap-6 md:grid-cols-2">
-        <section class="flex flex-col gap-4 py-4 md:pr-6" aria-labelledby="export-heading">
-          <div>
-            <h2 id="export-heading" class="font-semibold text-highlighted">
+      <div class="mw-card divide-y divide-default">
+        <section
+          class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          aria-labelledby="export-heading"
+        >
+          <div class="min-w-0">
+            <h2 id="export-heading" class="text-sm font-semibold text-highlighted">
               Export configuration backup
             </h2>
             <p class="mt-1 text-sm text-toned">
               Download an encrypted backup of server configuration and settings.
             </p>
           </div>
-          <UButton class="self-start" icon="i-lucide-download" @click="exportOpen = true"
+          <UButton
+            class="shrink-0 self-start"
+            color="primary"
+            variant="solid"
+            size="sm"
+            icon="i-lucide-download"
+            @click="exportOpen = true"
             >Export configuration backup</UButton
           >
         </section>
         <section
-          class="flex flex-col gap-4 border-t border-default py-4 md:border-t-0 md:border-l md:pl-6"
+          class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           aria-labelledby="restore-heading"
         >
-          <div>
-            <h2 id="restore-heading" class="font-semibold text-highlighted">
+          <div class="min-w-0">
+            <h2 id="restore-heading" class="text-sm font-semibold text-highlighted">
               Import configuration backup
             </h2>
             <p class="mt-1 text-sm text-toned">
               Preview a configuration backup and choose which settings to restore.
             </p>
           </div>
-          <UButton class="self-start" icon="i-lucide-rotate-ccw" @click="restoreOpen = true"
+          <UButton
+            class="shrink-0 self-start"
+            color="primary"
+            variant="solid"
+            size="sm"
+            icon="i-lucide-rotate-ccw"
+            @click="restoreOpen = true"
             >Import configuration backup</UButton
           >
         </section>
         <section
-          class="flex flex-col gap-4 border-t border-default py-4 md:border-l md:pl-6"
+          class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           aria-labelledby="reset-heading"
         >
-          <div>
-            <h2 id="reset-heading" class="font-semibold text-highlighted">Reset data</h2>
+          <div class="min-w-0">
+            <h2 id="reset-heading" class="text-sm font-semibold text-highlighted">Reset data</h2>
             <p class="mt-1 text-sm text-toned">
               Clear job history, the file index, processing decisions, and selected settings.
             </p>
           </div>
           <UButton
-            class="self-start"
+            class="shrink-0 self-start"
             color="error"
+            variant="solid"
+            size="sm"
             icon="i-lucide-trash-2"
             @click="resetOpen = true"
             >Reset data</UButton
@@ -59,7 +76,7 @@
         @update:open="setResetOpen"
       >
         <template #body>
-          <div class="space-y-4">
+          <fieldset :disabled="busy !== null" class="min-w-0 space-y-4">
             <UAlert color="warning" icon="i-lucide-triangle-alert"
               ><template #description
                 ><ul class="list-disc space-y-1 pl-5">
@@ -107,12 +124,13 @@
             </div>
             <UCheckboxGroup v-model="resetKeep" :items="resetItems" class="mw-frame p-3" />
             <p v-if="resetError" class="text-sm text-error">{{ resetError }}</p>
-          </div>
+          </fieldset>
         </template>
         <template #footer
           ><div class="flex w-full justify-end gap-2">
             <UButton
               color="error"
+              variant="solid"
               icon="i-lucide-trash-2"
               :loading="busy === 'reset'"
               :disabled="busy !== null"
@@ -133,31 +151,27 @@
       >
         <template #body>
           <form id="backupExportForm" class="space-y-4" @submit.prevent="exportBackup">
-            <UAlert
-              color="warning"
-              icon="i-lucide-triangle-alert"
-              title="Not backed up"
-              description="jobs, trash, media files."
-            />
-            <UFormField label="Backup password" required>
-              <PasswordInput
-                v-model="exportPassword"
-                class="w-full"
-                autocomplete="new-password"
-                required
-                :minlength="8"
-              />
-            </UFormField>
-            <UFormField label="Confirm backup password" required>
-              <PasswordInput
-                v-model="confirmExportPassword"
-                class="w-full"
-                autocomplete="new-password"
-                required
-                :minlength="8"
-              />
-            </UFormField>
-            <p v-if="error" class="text-sm text-error">{{ error }}</p>
+            <fieldset :disabled="busy !== null" class="min-w-0 space-y-4">
+              <UFormField label="Backup password" required>
+                <PasswordInput
+                  v-model="exportPassword"
+                  class="w-full"
+                  autocomplete="new-password"
+                  required
+                  :minlength="8"
+                />
+              </UFormField>
+              <UFormField label="Confirm backup password" required>
+                <PasswordInput
+                  v-model="confirmExportPassword"
+                  class="w-full"
+                  autocomplete="new-password"
+                  required
+                  :minlength="8"
+                />
+              </UFormField>
+              <p v-if="error" class="text-sm text-error">{{ error }}</p>
+            </fieldset>
           </form>
         </template>
         <template #footer>
@@ -165,6 +179,8 @@
             <UButton
               type="submit"
               form="backupExportForm"
+              color="primary"
+              variant="solid"
               icon="i-lucide-download"
               :loading="busy === 'export'"
             >
@@ -213,7 +229,11 @@
             </UFormField>
           </form>
 
-          <div v-if="stage === 'select' && preview" class="space-y-5">
+          <fieldset
+            v-if="stage === 'select' && preview"
+            :disabled="busy !== null"
+            class="min-w-0 space-y-5"
+          >
             <UFormField
               label="Backup password"
               required
@@ -228,7 +248,7 @@
                 :disabled="busy !== null"
               />
             </UFormField>
-            <p
+            <UEmpty
               v-if="
                 !preview.flows.length &&
                 !preview.libraries.length &&
@@ -239,10 +259,11 @@
                 !preview.config &&
                 !preview.settings
               "
-              class="text-sm text-toned"
-            >
-              This configuration backup has no restorable items.
-            </p>
+              size="sm"
+              variant="naked"
+              icon="i-lucide-archive"
+              title="This configuration backup has no restorable items."
+            />
             <UAlert
               color="warning"
               icon="i-lucide-triangle-alert"
@@ -479,7 +500,7 @@
                 <UCheckbox v-model="replace" label="Replace existing configuration" />
               </div>
             </section>
-          </div>
+          </fieldset>
           <p v-if="error" class="mt-4 text-sm text-error">{{ error }}</p>
         </template>
         <template #footer>
@@ -489,8 +510,8 @@
               type="submit"
               form="backupPreviewForm"
               icon="i-lucide-eye"
-              color="neutral"
-              variant="outline"
+              color="primary"
+              variant="solid"
               :loading="busy === 'preview'"
               :disabled="busy !== null"
             >
@@ -498,6 +519,8 @@
             </UButton>
             <UButton
               v-else
+              color="primary"
+              variant="solid"
               icon="i-lucide-rotate-ccw"
               :loading="busy === 'restore'"
               :disabled="!hasSelection || !importPassword || busy !== null"
@@ -617,7 +640,7 @@ const resetData = async (): Promise<void> => {
   try {
     const result = await reset(resetKeep.value);
     if (!result.ok) {
-      resetError.value =
+      const guidance =
         result.status === 409
           ? 'Reset could not start because the server is busy or another reset is in progress. Wait and try again.'
           : result.status === 500
@@ -625,6 +648,7 @@ const resetData = async (): Promise<void> => {
             : result.status === null
               ? 'Reset outcome is unknown. Review the current settings before retrying.'
               : 'Data reset failed.';
+      resetError.value = result.detail ? `${result.detail} ${guidance}` : guidance;
       return;
     }
     toast.add({

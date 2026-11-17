@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
 import * as Vue from 'vue';
+import {
+  createMemoryHistory,
+  createRouter,
+  isNavigationFailure,
+  NavigationFailureType,
+} from 'vue-router';
 import ts from 'typescript';
 import type { useAuth } from '../app/composables/useAuth';
 import type { useDialog } from '../app/composables/useDialog';
@@ -13,6 +19,8 @@ import type { usePlugins } from '../app/composables/usePlugins';
 import type { useStats } from '../app/composables/useStats';
 import type { useSystem } from '../app/composables/useSystem';
 import type { useSettings } from '../app/composables/useSettings';
+import type { useDirectories } from '../app/composables/useDirectories';
+import type { useDirtyCloseGuard } from '../app/composables/useDirtyCloseGuard';
 import { configureDates, formatDate } from '../app/utils/date';
 import type {
   DryRunResult,
@@ -23,6 +31,7 @@ import type {
   PluginRow,
   OperationalSettings,
   StatsOverview,
+  StatsResponse,
 } from '../app/types/api';
 import type { formatBytes, ensure_api_success } from '../app/utils';
 
@@ -47,7 +56,7 @@ const load = async (
   }).outputText;
   const exports: Record<string, any> = {};
   new Function('require', 'exports', ...Object.keys(globals), compiled)(
-    (name: string) => (name === 'vue' ? Vue : (modules[name] ?? {})),
+    (name: string) => modules[name] ?? (name === 'vue' ? Vue : {}),
     exports,
     ...Object.values(globals),
   );
@@ -97,6 +106,52 @@ test('system configures dates', async () => {
   } finally {
     configureDates(null);
   }
+});
+
+test('summary retains updates', async () => {
+  const first = deferred<Response>();
+  let response: Promise<Response> | Error = first.promise;
+  const utilities = await load('utils/index.ts', {});
+  const errors = await load('composables/useApiErrorMessage.ts', {});
+  const exported = await load('composables/useStats.ts', {
+    '~/utils': {
+      ...utilities,
+      request: async () => {
+        if (response instanceof Error) throw response;
+        return response;
+      },
+    },
+    '~/composables/useApiErrorMessage': errors,
+  });
+  const stats = (exported.useStats as typeof useStats)();
+  const pending = stats.loadSummary();
+  expect(stats.isLoadingSummary.value).toBe(true);
+  first.resolve(Response.json({ detail: 'Statistics unavailable.' }, { status: 503 }));
+  await pending;
+  expect(stats.isLoadingSummary.value).toBe(false);
+  expect(stats.summary.value).toBeNull();
+  expect(stats.summaryError.value).toBe('Statistics unavailable.');
+
+  const payload: StatsResponse = {
+    queue_depth: { by_status: {}, by_library: {} },
+    backlog: { remaining_files: 2, remaining_s: null, estimated_finish_at: null, reason: null },
+    jobs: { count: 3, avg_duration_s: 10 },
+    space_saved_by_library: { '1': 1024 },
+    codec_distribution: {},
+  };
+  response = Promise.resolve(Response.json(payload));
+  await stats.loadSummary();
+  expect(stats.summary.value?.jobs.count).toBe(3);
+  expect(stats.summaryError.value).toBeNull();
+  response = new Error('Connection lost.');
+  await stats.loadSummary();
+  expect(stats.summary.value?.backlog.remaining_files).toBe(2);
+  expect(stats.summaryError.value).toBe('Connection lost.');
+  expect(stats.isLoadingSummary.value).toBe(false);
+
+  stats.setSummary({ ...payload, jobs: { count: 4, avg_duration_s: 12 } });
+  expect(stats.summary.value?.jobs.count).toBe(4);
+  expect(stats.summaryError.value).toBeNull();
 });
 
 test('library totals aggregate', async () => {
@@ -239,6 +294,35 @@ test('non-json errors retain status', async () => {
     name: 'ApiError',
     status: 502,
     payload: null,
+  });
+});
+
+test('folders preserve errors', async () => {
+  const utilities = await load('utils/index.ts', {});
+  let response: Response | Error = Response.json(
+    { detail: 'Cannot read /media/films: Permission denied.' },
+    { status: 403 },
+  );
+  const exported = await load('composables/useDirectories.ts', {
+    '~/utils': {
+      ...utilities,
+      request: async () => {
+        if (response instanceof Error) throw response;
+        return response;
+      },
+    },
+  });
+  const directories = (exported.useDirectories as typeof useDirectories)();
+  expect(await directories.load('/media/films')).toEqual({
+    ok: false,
+    status: 403,
+    error: 'Cannot read /media/films: Permission denied.',
+  });
+  response = new Error('Connection lost.');
+  expect(await directories.load('/media/films')).toEqual({
+    ok: false,
+    status: 0,
+    error: 'Connection lost.',
   });
 });
 
@@ -444,6 +528,65 @@ test('node lanes update independently', async () => {
   expect(requests).toBe(2);
   await nodes.reload();
   expect(requests).toBe(4);
+});
+
+test('dirty navigation closes', async () => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: {} },
+      { path: '/next', component: {} },
+    ],
+  });
+  await router.push('/');
+  const unmount: Array<() => void> = [];
+  const open = Vue.ref(true);
+  const draft = Vue.ref('Unsaved changes');
+  let accepted = false;
+  let prompts = 0;
+  const exported = await load(
+    'composables/useDirtyCloseGuard.ts',
+    {
+      '#app': { useRouter: () => router },
+      vue: { ...Vue, onBeforeUnmount: (cleanup: () => void) => unmount.push(cleanup) },
+    },
+    {
+      useDialog: () => ({
+        confirmDialog: async () => {
+          prompts++;
+          return { status: accepted };
+        },
+      }),
+    },
+  );
+  (exported.useDirtyCloseGuard as typeof useDirtyCloseGuard)(
+    open,
+    () => draft.value !== '',
+    () => (open.value = false),
+  );
+  try {
+    const rejected = await router.push('/next');
+    expect(isNavigationFailure(rejected, NavigationFailureType.aborted)).toBe(true);
+    expect(router.currentRoute.value.path).toBe('/');
+    expect(open.value).toBe(true);
+    expect(draft.value).toBe('Unsaved changes');
+
+    accepted = true;
+    await router.push('/next');
+    expect(router.currentRoute.value.path).toBe('/next');
+    expect(open.value).toBe(false);
+    expect(prompts).toBe(2);
+
+    for (const cleanup of unmount.splice(0)) cleanup();
+    open.value = true;
+    await router.push('/');
+    expect(router.currentRoute.value.path).toBe('/');
+    expect(open.value).toBe(true);
+    expect(prompts).toBe(2);
+  } finally {
+    for (const cleanup of unmount) cleanup();
+    router.options.history.destroy();
+  }
 });
 
 test('settings preserve rejected drafts', async () => {
