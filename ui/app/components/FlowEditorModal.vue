@@ -132,16 +132,6 @@
         </div>
         <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
           <UButton
-            type="button"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            icon="i-lucide-x"
-            :disabled="saving"
-            @click="handleOpenChange(false)"
-            >Cancel</UButton
-          >
-          <UButton
             type="submit"
             form="flowForm"
             color="primary"

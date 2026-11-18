@@ -11,8 +11,8 @@
     @after:leave="$emit('after:leave')"
   >
     <template #body>
-      <div class="w-full divide-y divide-default">
-        <section class="space-y-4 pb-6">
+      <div class="w-full space-y-4">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-palette" class="size-5 text-toned" aria-hidden="true" />
             Appearance
@@ -28,7 +28,7 @@
           />
         </section>
 
-        <section class="space-y-4 pt-6">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-image" class="size-5 text-toned" aria-hidden="true" />
             Background

@@ -48,7 +48,7 @@
                     icon="i-lucide-list-ordered"
                     :trailing-icon="stepsOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
                     :aria-expanded="stepsOpen"
-                    class="pointer-events-auto shrink-0 bg-elevated/80 shadow-sm backdrop-blur-md dark:bg-elevated/30"
+                    class="pointer-events-auto shrink-0 bg-(--mw-floating-bg) shadow-sm backdrop-blur-md"
                     @click="stepsOpen = !stepsOpen"
                     >Toggle steps</UButton
                   >
@@ -60,7 +60,7 @@
                     size="xs"
                     icon="i-lucide-move"
                     :aria-pressed="nodesMovable"
-                    class="pointer-events-auto shrink-0 bg-elevated/80 shadow-sm backdrop-blur-md dark:bg-elevated/30"
+                    class="pointer-events-auto shrink-0 bg-(--mw-floating-bg) shadow-sm backdrop-blur-md"
                     @click="nodesMovable = !nodesMovable"
                     >Move nodes</UButton
                   >
@@ -69,7 +69,7 @@
                   v-if="trace.length && stepsOpen"
                   aria-label="Steps"
                   tabindex="0"
-                  class="mw-floating-surface pointer-events-auto w-full min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-lg bg-elevated/80 p-3 dark:bg-elevated/30"
+                  class="mw-floating-surface pointer-events-auto w-full min-h-0 space-y-3 overflow-y-auto overscroll-contain p-3"
                 >
                   <li
                     v-for="(step, index) in trace"
@@ -99,7 +99,7 @@
           </FlowCanvas>
         </template>
         <template #settings>
-          <div class="h-full w-full min-h-0 min-w-0 overflow-y-auto pl-3">
+          <div class="h-full w-full min-h-0 min-w-0 overflow-y-auto px-3">
             <div class="flex min-h-full w-full min-w-0 flex-col gap-4">
               <StepInspector
                 class="flex-1"
@@ -121,10 +121,7 @@
                 "
                 readonly
               />
-              <section
-                v-if="selectedStep"
-                class="space-y-2 rounded-lg border border-default p-4 text-sm"
-              >
+              <section v-if="selectedStep" class="mw-frame space-y-2 p-4 text-sm">
                 <h3 class="font-semibold text-highlighted">Decision</h3>
                 <StatusBadge :status="selectedStep.outcome" group="outcome" />
                 <ReasonDisplay v-if="selectedStep.reason" :reason="selectedStep.reason" />
@@ -147,17 +144,14 @@
                       >
                     </template>
                     <template #content>
-                      <pre class="mt-2 text-xs whitespace-pre-wrap wrap-break-word">{{
-                        JSON.stringify(selectedStep.facets, null, 2)
-                      }}</pre>
+                      <pre
+                        class="mw-terminal mt-2 p-2 text-xs whitespace-pre-wrap wrap-break-word"
+                        >{{ JSON.stringify(selectedStep.facets, null, 2) }}</pre>
                     </template>
                   </UCollapsible>
                 </template>
               </section>
-              <p
-                v-if="!selectedId"
-                class="flex-1 rounded-lg border border-default p-4 text-sm text-toned"
-              >
+              <p v-if="!selectedId" class="mw-frame flex-1 p-4 text-sm text-toned">
                 Select Start or a step to see its settings.
               </p>
             </div>
@@ -165,10 +159,7 @@
         </template>
       </USplitter>
     </div>
-    <div
-      v-if="definition.actions?.length"
-      class="space-y-2 rounded-lg border border-default p-3 text-sm"
-    >
+    <div v-if="definition.actions?.length" class="mw-frame space-y-2 p-3 text-sm">
       <div>
         <UCollapsible>
           <template #default="{ open }">
@@ -182,7 +173,7 @@
             >
           </template>
           <template #content>
-            <pre class="mt-2 text-xs whitespace-pre-wrap wrap-break-word">{{
+            <pre class="mw-terminal mt-2 p-2 text-xs whitespace-pre-wrap wrap-break-word">{{
               JSON.stringify(definition.actions, null, 2)
             }}</pre>
           </template>

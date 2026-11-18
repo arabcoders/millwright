@@ -52,17 +52,7 @@
           icon="i-lucide-triangle-alert"
           :title="error"
         />
-        <div class="flex w-full flex-wrap items-center justify-end gap-2">
-          <UButton
-            type="button"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            icon="i-lucide-x"
-            :disabled="saving"
-            @click="handleOpenChange(false)"
-            >Cancel</UButton
-          >
+        <div class="flex justify-end">
           <UButton
             type="submit"
             form="libraryForm"

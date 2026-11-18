@@ -43,8 +43,8 @@
       class="mx-auto w-full max-w-4xl"
       @submit.prevent="saveSettings"
     >
-      <fieldset :disabled="loading || saving" class="min-w-0 divide-y divide-default">
-        <section class="space-y-4 pb-6">
+      <fieldset :disabled="loading || saving" class="min-w-0 space-y-4">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-workflow" class="size-5 text-toned" aria-hidden="true" />
             Processing
@@ -69,7 +69,7 @@
             label="Use Hardware acceleration when available"
           />
         </section>
-        <section class="space-y-4 py-6">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-gauge" class="size-5 text-toned" aria-hidden="true" />
             Server limits
@@ -92,7 +92,7 @@
             </UFormField>
           </div>
         </section>
-        <section class="space-y-4 py-6">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-monitor-play" class="size-5 text-toned" aria-hidden="true" />
             Playback
@@ -115,7 +115,7 @@
             </UFormField>
           </div>
         </section>
-        <section class="space-y-4 py-6">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-list-filter" class="size-5 text-toned" aria-hidden="true" />
             Scanner filters
@@ -129,7 +129,7 @@
             /></UFormField>
           </div>
         </section>
-        <section class="space-y-4 pt-6">
+        <section class="mw-card-padded-lg space-y-4">
           <h2 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-history" class="size-5 text-toned" aria-hidden="true" />
             Retention and login sessions

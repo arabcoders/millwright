@@ -10,42 +10,51 @@
         fullscreen ? '' : 'max-w-7xl',
         'data-[state=open]:animate-[fade-in_200ms_var(--ease-out)]',
       ],
+      wrapper: 'min-w-0 flex-1',
       title: 'wrap-anywhere',
+      close: 'static',
       body: fullscreen
         ? 'min-h-0 overflow-y-auto p-4 sm:p-6'
         : 'max-h-[75vh] overflow-y-auto p-4 sm:p-6',
     }"
     @update:open="handleOpenChange"
   >
+    <template #actions>
+      <UTooltip :text="fullscreen ? 'Exit fullscreen' : 'Fullscreen'">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :icon="fullscreen ? 'i-lucide-minimize' : 'i-lucide-maximize'"
+          :aria-label="fullscreen ? 'Exit fullscreen' : 'Fullscreen'"
+          :aria-pressed="fullscreen"
+          @click="fullscreen = !fullscreen"
+          >{{ fullscreen ? 'Exit fullscreen' : 'Fullscreen' }}</UButton
+        >
+      </UTooltip>
+    </template>
     <template #body>
       <div :class="fullscreen ? 'flex h-full min-h-0 flex-col gap-5' : 'space-y-5'">
-        <UAlert
-          v-if="error"
-          color="error"
-          variant="soft"
-          icon="i-lucide-circle-alert"
-          title="Could not save positions"
-          :description="error"
-          :ui="{ description: 'whitespace-pre-wrap wrap-anywhere' }"
-        />
-        <dl class="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-4">
+        <dl
+          class="mw-card grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 text-sm sm:grid-cols-4"
+        >
           <div class="min-w-0 space-y-1">
             <dt class="flex items-center gap-1.5 text-xs text-muted">
               <UIcon name="i-lucide-history" class="size-3.5 shrink-0" aria-hidden="true" />Revision
             </dt>
-            <dd>{{ flow.version }}</dd>
+            <dd class="tabular-nums">{{ flow.version }}</dd>
           </div>
           <div class="min-w-0 space-y-1">
             <dt class="flex items-center gap-1.5 text-xs text-muted">
               <UIcon name="i-lucide-workflow" class="size-3.5 shrink-0" aria-hidden="true" />Nodes
             </dt>
-            <dd>{{ flow.definition.nodes.length }}</dd>
+            <dd class="tabular-nums">{{ flow.definition.nodes.length }}</dd>
           </div>
           <div class="min-w-0 space-y-1">
             <dt class="flex items-center gap-1.5 text-xs text-muted">
               <UIcon name="i-lucide-git-branch" class="size-3.5 shrink-0" aria-hidden="true" />Edges
             </dt>
-            <dd>{{ flow.definition.edges.length }}</dd>
+            <dd class="tabular-nums">{{ flow.definition.edges.length }}</dd>
           </div>
           <div class="min-w-0 space-y-1">
             <dt class="flex items-center gap-1.5 text-xs text-muted">
@@ -55,7 +64,7 @@
                 aria-hidden="true"
               />Libraries
             </dt>
-            <dd>{{ bindingCount }}</dd>
+            <dd class="tabular-nums">{{ bindingCount }}</dd>
           </div>
         </dl>
         <DecisionTraceFlow
@@ -70,6 +79,16 @@
     </template>
     <template #footer>
       <div class="flex w-full flex-wrap items-center justify-between gap-3">
+        <UAlert
+          v-if="error"
+          class="w-full"
+          color="error"
+          variant="soft"
+          icon="i-lucide-circle-alert"
+          title="Could not save positions"
+          :description="error"
+          :ui="{ description: 'whitespace-pre-wrap wrap-anywhere' }"
+        />
         <div class="flex flex-wrap items-center gap-2">
           <UDropdownMenu :items="arrangeItems">
             <UButton
@@ -110,17 +129,6 @@
               >Share</UButton
             >
           </UDropdownMenu>
-          <UButton
-            type="button"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            :icon="fullscreen ? 'i-lucide-minimize' : 'i-lucide-maximize'"
-            class="justify-center"
-            @click="fullscreen = !fullscreen"
-          >
-            {{ fullscreen ? 'Exit fullscreen' : 'Fullscreen' }}
-          </UButton>
         </div>
         <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
           <UButton

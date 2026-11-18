@@ -1,3 +1,6 @@
+const floatingSurface =
+  'mw-floating-surface rounded-lg bg-(--mw-floating-bg) shadow-(--mw-floating-shadow) ring-0';
+
 export default defineAppConfig({
   ui: {
     primary: 'indigo',
@@ -9,7 +12,12 @@ export default defineAppConfig({
     },
     formField: {
       slots: {
-        label: 'block font-medium text-default',
+        label: 'block font-semibold text-default',
+        container: 'space-y-2',
+        description: 'text-sm text-toned',
+        hint: 'text-sm text-toned',
+        help: 'text-sm text-toned',
+        error: 'text-sm text-error',
       },
     },
     empty: {
@@ -85,17 +93,17 @@ export default defineAppConfig({
     },
     dropdownMenu: {
       slots: {
-        content: 'mw-floating-surface rounded-lg bg-elevated/80 ring-0 dark:bg-elevated/30',
+        content: floatingSurface,
       },
     },
     popover: {
       slots: {
-        content: 'mw-floating-surface rounded-lg bg-elevated/80 ring-0 dark:bg-elevated/30',
+        content: floatingSurface,
       },
     },
     inputMenu: {
       slots: {
-        content: 'mw-floating-surface rounded-lg bg-elevated/80 ring-0 dark:bg-elevated/30',
+        content: floatingSurface,
       },
       variants: {
         variant: {
@@ -105,7 +113,7 @@ export default defineAppConfig({
     },
     select: {
       slots: {
-        content: 'mw-floating-surface rounded-lg bg-elevated/80 ring-0 dark:bg-elevated/30',
+        content: floatingSurface,
       },
       variants: {
         variant: {
@@ -115,8 +123,7 @@ export default defineAppConfig({
     },
     selectMenu: {
       slots: {
-        content:
-          'mw-floating-surface min-w-40 rounded-lg bg-elevated/80 ring-0 dark:bg-elevated/30',
+        content: `${floatingSurface} min-w-40`,
       },
       variants: {
         variant: {

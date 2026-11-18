@@ -391,7 +391,7 @@
             >
           </div>
           <pre
-            class="rounded-md bg-elevated/30 p-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-toned"
+            class="mw-terminal p-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-toned"
             >{{ argvText }}</pre>
         </section>
         <section

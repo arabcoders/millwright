@@ -367,7 +367,7 @@
           tabindex="-1"
           data-player-help
           role="dialog"
-          class="mw-card-padded absolute inset-3 z-50 overflow-auto text-default"
+          class="player-panel mw-card-padded absolute inset-3 z-50 overflow-auto text-default"
           aria-label="Keyboard shortcuts"
           @keydown.esc.stop="helpOpen = false"
         >
@@ -411,7 +411,7 @@
           tabindex="-1"
           data-player-diagnostics
           role="dialog"
-          class="mw-card-padded absolute inset-3 z-50 flex min-h-0 flex-col overflow-hidden text-default"
+          class="player-panel mw-card-padded absolute inset-3 z-50 flex min-h-0 flex-col overflow-hidden text-default"
           aria-label="Playback diagnostics"
           @keydown.esc.stop="diagnosticsOpen = false"
         >
@@ -1630,6 +1630,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.player-panel {
+  background-color: color-mix(in oklab, var(--ui-bg) 90%, transparent);
+  backdrop-filter: blur(12px);
+}
+
 .seek-bar {
   touch-action: none;
 }

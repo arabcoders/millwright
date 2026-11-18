@@ -9,11 +9,8 @@
   >
     <template #body>
       <fieldset :disabled="reviewing" :inert="reviewing" class="space-y-4">
-        <div>
-          <div class="mb-1 flex items-center justify-between gap-2">
-            <label for="flow-import" class="text-xs font-semibold text-toned"
-              >Share code or export</label
-            >
+        <UFormField label="Share code or export">
+          <template #hint>
             <UButton
               color="neutral"
               variant="ghost"
@@ -22,7 +19,7 @@
               @click="dropzone?.triggerFileSelect()"
               >Choose JSON file</UButton
             >
-          </div>
+          </template>
           <TextDropzone
             ref="dropzone"
             id="flow-import"
@@ -32,7 +29,7 @@
             :max-size="MAX"
             @error="error = $event"
           />
-        </div>
+        </UFormField>
         <UAlert
           v-if="error"
           color="error"

@@ -106,6 +106,20 @@
     border-color: var(--mw-surface-border-soft);
   }
 
+  .mw-form-group {
+    @apply rounded-lg border bg-muted/20;
+    border-color: var(--mw-surface-border-soft);
+  }
+
+  .mw-form-alert {
+    @apply sticky top-0 z-10 shadow-sm;
+  }
+
+  .mw-inset {
+    @apply rounded-sm border bg-elevated/40;
+    border-color: var(--mw-surface-border-solid);
+  }
+
   .mw-panel {
     @apply min-w-0 max-w-full rounded-lg border;
     border-color: var(--mw-surface-border-soft);
@@ -132,29 +146,8 @@
   }
 
   .mw-floating-surface {
-    @apply border shadow-xl backdrop-blur-md;
+    @apply rounded-lg border bg-(--mw-floating-bg) shadow-(--mw-floating-shadow) backdrop-blur-md;
     border-color: var(--mw-surface-border-solid);
-    box-shadow: 0 1rem 2rem rgb(15 23 42 / 0.1);
-  }
-
-  .mw-floating-surface [data-slot='item'][data-highlighted]::before,
-  .mw-floating-surface [data-slot='item'][data-state='open']::before,
-  .mw-floating-surface [data-slot='item']:hover::before {
-    background-color: color-mix(in oklab, var(--ui-primary) 11%, transparent) !important;
-  }
-
-  .mw-floating-surface [data-slot='item'][data-disabled]::before {
-    background-color: transparent !important;
-  }
-
-  .dark .mw-floating-surface {
-    box-shadow: 0 1rem 2rem rgb(0 0 0 / 0.3);
-  }
-
-  .dark .mw-floating-surface [data-slot='item'][data-highlighted]::before,
-  .dark .mw-floating-surface [data-slot='item'][data-state='open']::before,
-  .dark .mw-floating-surface [data-slot='item']:hover::before {
-    background-color: color-mix(in oklab, var(--ui-primary) 16%, transparent) !important;
   }
 
   .mw-border-top-soft {
@@ -315,12 +308,16 @@
   --mw-border-strong: var(--ui-border-accented);
   --mw-surface-border-soft: var(--ui-border-accented);
   --mw-surface-border-solid: var(--ui-border-accented);
+  --mw-floating-bg: color-mix(in oklab, var(--ui-bg-elevated) 80%, transparent);
+  --mw-floating-shadow: 0 1rem 2rem rgb(15 23 42 / 0.1);
 }
 
 .dark {
   --mw-border-strong: var(--ui-border);
   --mw-surface-border-soft: color-mix(in oklab, var(--ui-border) 70%, transparent);
   --mw-surface-border-solid: var(--ui-border);
+  --mw-floating-bg: color-mix(in oklab, var(--ui-bg-elevated) 30%, transparent);
+  --mw-floating-shadow: 0 1rem 2rem rgb(0 0 0 / 0.3);
 }
 
 html:not(.no-page-anim) .page-enter-active {

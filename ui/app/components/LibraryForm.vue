@@ -1,11 +1,6 @@
 <template>
-  <form
-    id="libraryForm"
-    autocomplete="off"
-    class="divide-y divide-default"
-    @submit.prevent="submitForm"
-  >
-    <section class="space-y-4 pb-6" aria-labelledby="library-details-heading">
+  <form id="libraryForm" autocomplete="off" class="space-y-4" @submit.prevent="submitForm">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-details-heading">
       <h3
         id="library-details-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
@@ -44,22 +39,23 @@
       >
         <div class="space-y-2">
           <div v-for="(_, index) in roots" :key="index" class="flex min-w-0 items-center gap-2">
-            <UInput
-              v-model="roots[index]"
-              placeholder="/media/movies"
-              class="min-w-0 flex-1"
-              :aria-label="`Folder ${index + 1}`"
-            />
+            <UFieldGroup size="md" class="min-w-0 flex-1">
+              <UInput
+                v-model="roots[index]"
+                placeholder="/media/movies"
+                class="w-full min-w-0 flex-1"
+                :aria-label="`Folder ${index + 1}`"
+              />
 
-            <UButton
-              type="button"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              icon="i-lucide-folder-open"
-              aria-label="Browse folders"
-              @click="openPicker(index)"
-            />
+              <UButton
+                type="button"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-folder-open"
+                aria-label="Browse folders"
+                @click="openPicker(index)"
+              />
+            </UFieldGroup>
 
             <UButton
               type="button"
@@ -88,7 +84,7 @@
       </UFormField>
     </section>
 
-    <section class="space-y-4 py-6" aria-labelledby="library-scanning-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-scanning-heading">
       <h3
         id="library-scanning-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
@@ -183,7 +179,7 @@
       </div>
     </section>
 
-    <section class="space-y-4 py-6" aria-labelledby="library-cutoff-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-cutoff-heading">
       <h3
         id="library-cutoff-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
@@ -225,7 +221,7 @@
       </p>
     </section>
 
-    <section class="space-y-4 py-6" aria-labelledby="library-timing-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-timing-heading">
       <h3
         id="library-timing-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
@@ -253,7 +249,7 @@
       </UFormField>
     </section>
 
-    <section class="space-y-4 pt-6" aria-labelledby="library-retention-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-retention-heading">
       <h3
         id="library-retention-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"

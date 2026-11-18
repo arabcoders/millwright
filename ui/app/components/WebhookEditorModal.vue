@@ -4,13 +4,26 @@
     :title="registration ? 'Edit webhook' : 'New webhook'"
     :dismissible="!saving"
     :close="{ disabled: saving }"
-    :ui="{ content: 'w-full sm:max-w-2xl', body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5' }"
+    :ui="{
+      content: 'w-full sm:max-w-2xl',
+      body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5',
+      footer: 'justify-end',
+    }"
     @update:open="handleOpenChange"
     @after:leave="emit('after:leave')"
   >
     <template #body>
       <form id="webhookForm" class="space-y-5" @submit.prevent="save">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          icon="i-lucide-triangle-alert"
+          :description="error"
+          :ui="{ description: 'wrap-anywhere' }"
+          class="mw-form-alert"
+        />
+        <div class="mw-card-padded-lg grid gap-4 sm:grid-cols-2">
           <UFormField label="Name" required>
             <UInput
               v-model="name"
@@ -52,7 +65,7 @@
             </div>
           </template>
         </UAlert>
-        <section class="space-y-4 border-t border-default pt-5">
+        <section class="mw-card-padded-lg space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="flex items-center gap-2 font-semibold text-highlighted">
               <UIcon name="i-lucide-folder-symlink" class="size-5 text-toned" aria-hidden="true" />
@@ -74,7 +87,7 @@
           <div
             v-for="(replacement, index) in pathReplacements"
             :key="index"
-            class="grid items-end gap-3 border-t border-default pt-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            class="mw-form-group grid items-end gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
           >
             <UFormField
               label="Source prefix"
@@ -109,30 +122,12 @@
             />
           </div>
         </section>
-        <UAlert v-if="error" color="error" icon="i-lucide-triangle-alert" :description="error" />
       </form>
     </template>
     <template #footer>
-      <div class="flex w-full flex-wrap items-center justify-end gap-2">
-        <UButton
-          type="button"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          icon="i-lucide-x"
-          :disabled="saving"
-          @click="handleOpenChange(false)"
-          >Cancel</UButton
-        >
-        <UButton
-          type="submit"
-          form="webhookForm"
-          size="sm"
-          icon="i-lucide-save"
-          :loading="saving"
-          >{{ registration ? 'Save changes' : 'Add webhook' }}</UButton
-        >
-      </div>
+      <UButton type="submit" form="webhookForm" size="sm" icon="i-lucide-save" :loading="saving">{{
+        registration ? 'Save changes' : 'Add webhook'
+      }}</UButton>
     </template>
   </UModal>
 </template>

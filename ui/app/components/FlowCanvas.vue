@@ -36,7 +36,7 @@
                 ? 'bg-success/10'
                 : data.selected
                   ? 'bg-primary/10'
-                  : 'bg-elevated/80 dark:bg-elevated/30',
+                  : 'bg-(--mw-floating-bg)',
               data.selected ? 'ring-2 ring-primary' : data.added ? 'ring-2 ring-success' : '',
             ]"
           >

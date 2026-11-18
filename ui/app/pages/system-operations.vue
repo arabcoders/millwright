@@ -99,30 +99,32 @@
                 </ul></template
               ></UAlert
             >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h3 class="font-semibold text-highlighted">Categories to keep</h3>
-              <UButton
-                size="sm"
-                color="neutral"
-                variant="outline"
-                :icon="
-                  resetKeep.length === resetItems.length
-                    ? 'i-lucide-square'
-                    : 'i-lucide-square-check-big'
-                "
-                :disabled="busy !== null || !resetItems.length"
-                :aria-label="`${resetKeep.length === resetItems.length ? 'Unselect' : 'Select'} all reset categories`"
-                @click="
-                  toggleAll(
-                    resetKeep,
-                    resetItems.map((item) => item.value),
-                  )
-                "
-              >
-                Select
-              </UButton>
-            </div>
-            <UCheckboxGroup v-model="resetKeep" :items="resetItems" class="mw-frame p-3" />
+            <section class="mw-card-padded-lg space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="font-semibold text-highlighted">Categories to keep</h3>
+                <UButton
+                  size="sm"
+                  color="neutral"
+                  variant="outline"
+                  :icon="
+                    resetKeep.length === resetItems.length
+                      ? 'i-lucide-square'
+                      : 'i-lucide-square-check-big'
+                  "
+                  :disabled="busy !== null || !resetItems.length"
+                  :aria-label="`${resetKeep.length === resetItems.length ? 'Unselect' : 'Select'} all reset categories`"
+                  @click="
+                    toggleAll(
+                      resetKeep,
+                      resetItems.map((item) => item.value),
+                    )
+                  "
+                >
+                  Select
+                </UButton>
+              </div>
+              <UCheckboxGroup v-model="resetKeep" :items="resetItems" />
+            </section>
             <p v-if="resetError" class="text-sm text-error">{{ resetError }}</p>
           </fieldset>
         </template>
@@ -170,7 +172,13 @@
                   :minlength="8"
                 />
               </UFormField>
-              <p v-if="error" class="text-sm text-error">{{ error }}</p>
+              <UAlert
+                v-if="error"
+                color="error"
+                variant="soft"
+                icon="i-lucide-triangle-alert"
+                :description="error"
+              />
             </fieldset>
           </form>
         </template>
@@ -204,7 +212,7 @@
           <form
             v-show="stage === 'file'"
             id="backupPreviewForm"
-            class="space-y-4"
+            class="mw-card-padded-lg space-y-4"
             @submit.prevent="previewBackup"
           >
             <UFormField label="Configuration backup file" required>
@@ -270,7 +278,7 @@
               title="Not backed up"
               description="jobs, trash, media files."
             />
-            <section v-if="preview.flows.length" class="space-y-3">
+            <section v-if="preview.flows.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -304,10 +312,9 @@
                       : undefined,
                   }))
                 "
-                class="mw-frame p-3"
               />
             </section>
-            <section v-if="preview.libraries.length" class="space-y-3">
+            <section v-if="preview.libraries.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -335,36 +342,34 @@
                   Select
                 </UButton>
               </div>
-              <div class="mw-frame space-y-3 p-3">
-                <UCheckboxGroup
-                  v-model="selectedLibraries"
-                  :items="
-                    preview.libraries.map((item) => ({
-                      label: item.name,
-                      value: item.name,
-                      disabled: Boolean(item.flow_name && !flowNames.includes(item.flow_name)),
-                      description: item.flow_name
-                        ? flowNames.includes(item.flow_name)
-                          ? `Flow: ${item.flow_name}`
-                          : `Flow missing from backup: ${item.flow_name}`
-                        : undefined,
-                    }))
-                  "
-                  @update:model-value="setLibraries"
-                />
-                <UFormField
-                  v-for="item in preview.libraries.filter((item) =>
-                    selectedLibraries.includes(item.name),
-                  )"
-                  :key="item.name"
-                  :label="`Roots for ${item.name}`"
-                  description="One path per line"
-                >
-                  <UTextarea v-model="roots[item.name]" class="w-full" :rows="2" />
-                </UFormField>
-              </div>
+              <UCheckboxGroup
+                v-model="selectedLibraries"
+                :items="
+                  preview.libraries.map((item) => ({
+                    label: item.name,
+                    value: item.name,
+                    disabled: Boolean(item.flow_name && !flowNames.includes(item.flow_name)),
+                    description: item.flow_name
+                      ? flowNames.includes(item.flow_name)
+                        ? `Flow: ${item.flow_name}`
+                        : `Flow missing from backup: ${item.flow_name}`
+                      : undefined,
+                  }))
+                "
+                @update:model-value="setLibraries"
+              />
+              <UFormField
+                v-for="item in preview.libraries.filter((item) =>
+                  selectedLibraries.includes(item.name),
+                )"
+                :key="item.name"
+                :label="`Roots for ${item.name}`"
+                description="One path per line"
+              >
+                <UTextarea v-model="roots[item.name]" class="w-full" :rows="2" />
+              </UFormField>
             </section>
-            <section v-if="preview.notifications.length" class="space-y-3">
+            <section v-if="preview.notifications.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"><UIcon name="i-lucide-bell" class="size-4" /></span>
@@ -386,28 +391,20 @@
                   Select
                 </UButton>
               </div>
-              <UCheckboxGroup
-                v-model="selectedNotifications"
-                :items="preview.notifications"
-                class="mw-frame p-3"
-              />
+              <UCheckboxGroup v-model="selectedNotifications" :items="preview.notifications" />
             </section>
-            <section v-if="preview.webhooks.length" class="space-y-3">
+            <section v-if="preview.webhooks.length" class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"><UIcon name="i-lucide-webhook" class="size-4" /></span>
                 Incoming webhooks
               </h3>
-              <UCheckboxGroup
-                v-model="selectedWebhooks"
-                :items="preview.webhooks"
-                class="mw-frame p-3"
-              />
+              <UCheckboxGroup v-model="selectedWebhooks" :items="preview.webhooks" />
               <p class="text-xs text-toned">
                 Includes receiver API keys and path replacements. Review destinations for this
                 server.
               </p>
             </section>
-            <section v-if="preview.plugins.length" class="space-y-3">
+            <section v-if="preview.plugins.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -431,13 +428,9 @@
                   Select
                 </UButton>
               </div>
-              <UCheckboxGroup
-                v-model="selectedPlugins"
-                :items="preview.plugins"
-                class="mw-frame p-3"
-              />
+              <UCheckboxGroup v-model="selectedPlugins" :items="preview.plugins" />
             </section>
-            <section v-if="preview.nodes.length" class="space-y-3">
+            <section v-if="preview.nodes.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -466,68 +459,70 @@
                   Select
                 </UButton>
               </div>
-              <UCheckboxGroup v-model="selectedNodes" :items="preview.nodes" class="mw-frame p-3" />
+              <UCheckboxGroup v-model="selectedNodes" :items="preview.nodes" />
             </section>
-            <section v-if="preview.settings" class="space-y-3">
+            <section v-if="preview.settings" class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"
                   ><UIcon name="i-lucide-sliders-horizontal" class="size-4" /></span
                 >Settings
               </h3>
-              <div class="mw-frame p-3">
-                <UCheckbox v-model="selectedSettings" label="Server settings" />
-              </div>
+              <UCheckbox v-model="selectedSettings" label="Server settings" />
             </section>
-            <section v-if="preview.config" class="space-y-3">
+            <section v-if="preview.config" class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"
                   ><UIcon name="i-lucide-settings" class="size-4"
                 /></span>
                 Configuration
               </h3>
-              <div class="mw-frame p-3">
-                <UCheckbox v-model="selectedConfig" label="config.toml (includes secrets)" />
-              </div>
+              <UCheckbox v-model="selectedConfig" label="config.toml (includes secrets)" />
             </section>
-            <section class="space-y-3">
+            <section class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"
                   ><UIcon name="i-lucide-list-checks" class="size-4"
                 /></span>
                 Restore options
               </h3>
-              <div class="mw-frame p-3">
-                <UCheckbox v-model="replace" label="Replace existing configuration" />
-              </div>
+              <UCheckbox v-model="replace" label="Replace existing configuration" />
             </section>
           </fieldset>
-          <p v-if="error" class="mt-4 text-sm text-error">{{ error }}</p>
         </template>
         <template #footer>
-          <div class="flex w-full justify-end gap-2">
-            <UButton
-              v-if="stage === 'file'"
-              type="submit"
-              form="backupPreviewForm"
-              icon="i-lucide-eye"
-              color="primary"
-              variant="solid"
-              :loading="busy === 'preview'"
-              :disabled="busy !== null"
-            >
-              Preview configuration backup
-            </UButton>
-            <UButton
-              v-else
-              color="primary"
-              variant="solid"
-              icon="i-lucide-rotate-ccw"
-              :loading="busy === 'restore'"
-              :disabled="!hasSelection || !importPassword || busy !== null"
-              @click="restoreBackup"
-            >
-              Restore selected configuration
-            </UButton>
+          <div class="w-full space-y-3">
+            <UAlert
+              v-if="error"
+              color="error"
+              variant="soft"
+              icon="i-lucide-triangle-alert"
+              :description="error"
+            />
+            <div class="flex w-full justify-end gap-2">
+              <UButton
+                v-if="stage === 'file'"
+                type="submit"
+                form="backupPreviewForm"
+                icon="i-lucide-eye"
+                color="primary"
+                variant="solid"
+                :loading="busy === 'preview'"
+                :disabled="busy !== null"
+              >
+                Preview configuration backup
+              </UButton>
+              <UButton
+                v-else
+                color="primary"
+                variant="solid"
+                icon="i-lucide-rotate-ccw"
+                :loading="busy === 'restore'"
+                :disabled="!hasSelection || !importPassword || busy !== null"
+                @click="restoreBackup"
+              >
+                Restore selected configuration
+              </UButton>
+            </div>
           </div>
         </template>
       </UModal>

@@ -9,8 +9,8 @@
     @after:leave="clearForm"
   >
     <template #body>
-      <div class="divide-y divide-default">
-        <section class="space-y-4 pb-6">
+      <div class="space-y-4">
+        <section class="mw-card-padded-lg space-y-4">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-user-round" class="size-5 text-toned" aria-hidden="true" />
             <p class="text-base font-semibold text-highlighted">Account details</p>
@@ -28,7 +28,7 @@
         <form
           v-if="!apiKey"
           id="changePasswordForm"
-          class="space-y-4 pt-6"
+          class="mw-card-padded-lg space-y-4"
           @submit.prevent="changePassword"
         >
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
@@ -65,7 +65,14 @@
               class="w-full"
             />
           </UFormField>
-          <p v-if="saveError" class="wrap-anywhere text-sm text-error">{{ saveError }}</p>
+          <UAlert
+            v-if="saveError"
+            color="error"
+            variant="soft"
+            icon="i-lucide-circle-alert"
+            :description="saveError"
+            :ui="{ description: 'wrap-anywhere' }"
+          />
         </form>
       </div>
     </template>

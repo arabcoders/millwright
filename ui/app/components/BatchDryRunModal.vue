@@ -28,7 +28,7 @@
     </template>
     <template #body>
       <div class="min-w-0 space-y-4">
-        <UFormField label="Flow">
+        <UFormField label="Flow" class="mw-card-padded-lg">
           <UFieldGroup size="sm" class="w-full min-w-0">
             <USelectMenu
               v-model="selectedFlowId"

@@ -156,11 +156,7 @@
             class="grid gap-2 sm:grid-cols-2"
             dir="ltr"
           >
-            <div
-              v-for="row in detailRows"
-              :key="row.label"
-              class="rounded-sm border border-default bg-elevated/40 p-3"
-            >
+            <div v-for="row in detailRows" :key="row.label" class="mw-inset p-3">
               <dt
                 class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-toned"
               >
@@ -240,11 +236,7 @@
               :title="'No matching fields'"
             />
 
-            <div
-              v-for="field in visibleFieldRows"
-              :key="field.key"
-              class="rounded-sm border border-default bg-elevated/40"
-            >
+            <div v-for="field in visibleFieldRows" :key="field.key" class="mw-inset">
               <button
                 type="button"
                 class="grid w-full grid-cols-[minmax(7rem,0.45fr)_minmax(0,1fr)] items-center gap-3 px-3 py-2 text-start sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]"

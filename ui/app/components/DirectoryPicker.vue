@@ -7,7 +7,7 @@
     <template #body>
       <div class="space-y-3">
         <nav
-          class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-default bg-muted/30 p-1.5"
+          class="mw-inset flex min-w-0 items-center gap-1 overflow-x-auto p-1.5"
           aria-label="Path"
         >
           <UButton
@@ -33,22 +33,18 @@
           </template>
         </nav>
 
-        <div class="space-y-1.5">
-          <label for="directory-search" class="text-sm font-medium text-highlighted"
-            >Search subdirectories</label
-          >
+        <UFormField
+          label="Search subdirectories"
+          help="Filters subdirectories in the current folder."
+        >
           <UInput
             id="directory-search"
             v-model="query"
             icon="i-lucide-search"
             placeholder="Search subdirectories"
-            aria-describedby="directory-search-help"
             class="w-full"
           />
-          <p id="directory-search-help" class="text-xs text-toned">
-            Filters subdirectories in the current folder.
-          </p>
-        </div>
+        </UFormField>
 
         <UAlert
           v-if="error"
@@ -70,7 +66,7 @@
             >
           </template>
         </UAlert>
-        <div class="max-h-64 overflow-y-auto rounded-lg border border-default">
+        <div class="mw-frame max-h-64 overflow-y-auto">
           <button
             v-for="item in filteredItems"
             :key="item.path"

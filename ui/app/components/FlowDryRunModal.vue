@@ -17,53 +17,55 @@
   >
     <template #body>
       <div :class="fullscreen ? 'flex h-full min-h-0 flex-col gap-5' : 'space-y-5'">
-        <div class="flex min-w-0 items-start gap-3">
-          <span class="mw-detail-icon size-10 shrink-0">
-            <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
-          </span>
-          <div class="min-w-0">
-            <UTooltip :text="fileName(filePath)">
-              <h2 class="truncate text-lg font-semibold text-highlighted">
-                <button
-                  v-if="onOpenFile"
-                  type="button"
-                  class="max-w-full truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
-                  :aria-label="`Open details for ${fileName(filePath)}`"
-                  @click="$emit('open-file')"
-                >
-                  {{ fileName(filePath) }}
-                </button>
-                <span v-else>{{ fileName(filePath) }}</span>
-              </h2>
-            </UTooltip>
-            <UTooltip :text="filePath">
-              <p class="truncate text-sm text-toned">{{ location }}</p>
-            </UTooltip>
-            <p v-if="facts" class="truncate text-xs text-dimmed">{{ facts }}</p>
+        <div class="mw-card-padded-lg space-y-5">
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="mw-detail-icon size-10 shrink-0">
+              <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
+            </span>
+            <div class="min-w-0">
+              <UTooltip :text="fileName(filePath)">
+                <h2 class="truncate text-lg font-semibold text-highlighted">
+                  <button
+                    v-if="onOpenFile"
+                    type="button"
+                    class="max-w-full truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                    :aria-label="`Open details for ${fileName(filePath)}`"
+                    @click="$emit('open-file')"
+                  >
+                    {{ fileName(filePath) }}
+                  </button>
+                  <span v-else>{{ fileName(filePath) }}</span>
+                </h2>
+              </UTooltip>
+              <UTooltip :text="filePath">
+                <p class="truncate text-sm text-toned">{{ location }}</p>
+              </UTooltip>
+              <p v-if="facts" class="truncate text-xs text-dimmed">{{ facts }}</p>
+            </div>
           </div>
+          <UFormField label="Flow" help="Select a flow to evaluate.">
+            <UFieldGroup class="w-full">
+              <USelectMenu
+                v-model="selectedFlowId"
+                :items="flowItems"
+                value-key="value"
+                placeholder="Pick a flow"
+                :disabled="flowsLoading"
+                class="min-w-0 flex-1"
+              />
+              <UButton
+                v-if="onRefresh"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-refresh-cw"
+                :loading="flowsLoading"
+                :disabled="flowsLoading"
+                @click="$emit('refresh')"
+                >Refresh</UButton
+              >
+            </UFieldGroup>
+          </UFormField>
         </div>
-        <UFormField label="Flow" help="Select a flow to evaluate.">
-          <UFieldGroup class="w-full">
-            <USelectMenu
-              v-model="selectedFlowId"
-              :items="flowItems"
-              value-key="value"
-              placeholder="Pick a flow"
-              :disabled="flowsLoading"
-              class="min-w-0 flex-1"
-            />
-            <UButton
-              v-if="onRefresh"
-              color="neutral"
-              variant="outline"
-              icon="i-lucide-refresh-cw"
-              :loading="flowsLoading"
-              :disabled="flowsLoading"
-              @click="$emit('refresh')"
-              >Refresh</UButton
-            >
-          </UFieldGroup>
-        </UFormField>
         <p v-if="flowsLoading" role="status" class="text-sm text-toned">Loading saved flows.</p>
         <UEmpty
           v-else-if="!flows.length && !flowError"
@@ -106,7 +108,7 @@
             <template #overlay>
               <div
                 v-if="result"
-                class="pointer-events-none absolute right-3 bottom-3 z-10 max-w-[calc(100%-1.5rem)] rounded-md bg-elevated/80 shadow-sm backdrop-blur-md dark:bg-elevated/30"
+                class="pointer-events-none absolute right-3 bottom-3 z-10 max-w-[calc(100%-1.5rem)] rounded-md bg-(--mw-floating-bg) shadow-sm backdrop-blur-md"
               >
                 <UTooltip
                   :text="result.reason ? formatReason(result.reason) : undefined"

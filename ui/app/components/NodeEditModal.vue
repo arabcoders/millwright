@@ -8,6 +8,7 @@
       content: 'w-full sm:max-w-md',
       title: 'wrap-anywhere',
       body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5',
+      footer: 'justify-end',
     }"
     @update:open="handleOpenChange"
   >
@@ -34,7 +35,7 @@
             class="w-full"
           />
         </UFormField>
-        <section class="space-y-4 border-t border-default pt-5">
+        <section class="mw-card-padded-lg space-y-4">
           <h3 class="flex items-center gap-2 font-semibold text-highlighted">
             <UIcon name="i-lucide-gauge" class="size-5 text-toned" aria-hidden="true" />
             Job limits
@@ -63,27 +64,15 @@
       </form>
     </template>
     <template #footer>
-      <div class="flex w-full flex-wrap items-center justify-end gap-2">
-        <UButton
-          type="button"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          icon="i-lucide-x"
-          :disabled="saving"
-          @click="handleOpenChange(false)"
-          >Cancel</UButton
-        >
-        <UButton
-          type="submit"
-          form="nodeLimitForm"
-          size="sm"
-          icon="i-lucide-save"
-          :loading="saving"
-          :disabled="!valid || saving"
-          >Save changes</UButton
-        >
-      </div>
+      <UButton
+        type="submit"
+        form="nodeLimitForm"
+        size="sm"
+        icon="i-lucide-save"
+        :loading="saving"
+        :disabled="!valid || saving"
+        >Save changes</UButton
+      >
     </template>
   </UModal>
 </template>

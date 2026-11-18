@@ -13,9 +13,9 @@
       :description="error"
       :ui="{ description: 'whitespace-pre-wrap wrap-anywhere' }"
     />
-    <UFormField label="Flow name">
+    <UFormField label="Flow name" class="mw-card-padded-lg">
       <UFieldGroup class="w-full">
-        <UInput v-model="name" class="min-w-0 flex-1" :ui="{ root: 'w-full' }" />
+        <UInput v-model="name" class="w-full min-w-0 flex-1" />
         <UDropdownMenu :items="addItems" aria-label="Add node">
           <UButton
             color="neutral"
@@ -61,7 +61,7 @@
           />
         </template>
         <template #settings>
-          <div class="h-full min-w-0 flex-1 overflow-y-auto pl-3">
+          <div class="h-full min-w-0 flex-1 space-y-4 overflow-y-auto px-3">
             <StepInspector
               v-model:node="selectedNode"
               v-model:entry-condition="when"
@@ -74,11 +74,8 @@
               :notification-target-error="props.notificationTargetError"
               :readonly="disabled"
             />
-            <section
-              v-if="selected && !disabled"
-              class="mt-4 space-y-3 border-t border-default pt-4"
-            >
-              <h3 class="text-sm font-semibold text-highlighted">Connections</h3>
+            <section v-if="selected && !disabled" class="mw-card-padded space-y-4">
+              <h3 class="text-base font-semibold text-highlighted">Connections</h3>
               <UFormField
                 v-for="port in connectionPorts"
                 :key="port"
@@ -113,7 +110,7 @@
                 </UFieldGroup>
               </UFormField>
             </section>
-            <p v-if="!selected" class="rounded-lg border border-default p-4 text-sm text-toned">
+            <p v-if="!selected" class="mw-frame p-4 text-sm text-toned">
               Select Start or a step to edit its settings.
             </p>
           </div>
