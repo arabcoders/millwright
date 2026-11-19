@@ -16,7 +16,7 @@ apply rules to a library to change codecs, containers, audio tracks, and subtitl
 
 Dashboard:
 
-![Dashboard](ui/public/images/screenshots/dashbaord.jpg)
+![Dashboard](ui/public/images/screenshots/dashboard.jpg)
 
 Statistics:
 
