@@ -47,7 +47,7 @@
               <USlider
                 v-model="backgroundVisibility"
                 :min="0"
-                :max="0.4"
+                :max="1"
                 :step="0.01"
                 aria-label="Background visibility"
               />

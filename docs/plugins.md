@@ -60,8 +60,6 @@ ones. Reinstalling an uploaded ID replaces that uploaded plugin.
 
 ## Choose a plugin kind
 
-The kind determines which outputs appear in the flow editor:
-
 | Kind        | Use it for                                                 | Decisions and ports                    |
 | ----------- | ---------------------------------------------------------- | -------------------------------------- |
 | `filter`    | Allow or reject input                                      | `match`, `veto`                        |
@@ -69,9 +67,7 @@ The kind determines which outputs appear in the flow editor:
 | `transcode` | Request a processing stage                                 | `plan`, `skip`                         |
 | `action`    | Request an action without selecting the flow branch itself | `actions`, followed by the `next` port |
 
-For example, a duration inspector returns `match` when the next step should run. A transcode returns
-`skip` if the file already meets its requirements. Include a readable `reason` with `skip` and `veto`
-so someone opening the job can understand the decision.
+Include a `reason` with `skip` and `veto` so the job log explains the decision.
 
 Return an error when the plugin can't make a valid decision:
 
@@ -119,22 +115,9 @@ settings or records need a migration. Each saved plugin node records its own `co
 nodes without that field are version `1`. New steps use the installed plugin's current configuration
 version. Actions emitted by plugins also carry `plugin_id` and `config_version` metadata.
 
-Declare migrations in `plugin.toml`, alongside the other manifest fields. For example, the external
-notification plugin's configuration version `2` renames its step, action, event, progress field, and
-delivery prefix:
-
-```toml
-id = "action.notify_external"
-version = "1.1.0"
-config_version = 2
-migrations = [{ from_version = 1, to_version = 2, changes = [
-  { type = "rename_plugin", from = "action.notify_media_manager", to = "action.notify_external" },
-  { type = "rename_action", from = "notify_media_manager", to = "notify_external" },
-  { type = "rename_event", from = "media_manager_notification", to = "external_notification" },
-  { type = "rename_field", scope = "event", from = "refresh", to = "progress" },
-  { type = "rename_target_prefix", from = "media-manager:", to = "external:" },
-] }]
-```
+Declare `migrations` in `plugin.toml`. The
+[external notification manifest](../plugins/action.notify_external/plugin.toml) shows a version
+transition using each supported rename.
 
 The supported changes are:
 
@@ -167,8 +150,7 @@ configuration versions rather than applying migrations itself.
 
 If you retry a finished job, its saved execution configuration is migrated when the retry is requested.
 
-Unrelated configurations stay unchanged. After a successful commit, logs identify the plugin, record,
-version transition, and changes applied.
+Logs identify which records were migrated and what changed.
 
 ## Read media information
 

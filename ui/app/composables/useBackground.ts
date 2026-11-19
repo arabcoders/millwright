@@ -3,7 +3,7 @@ import { useStorage } from '@vueuse/core';
 import { ensure_api_success, request, to_api_error } from '~/utils';
 
 const enabled = useStorage('background_enabled', true);
-const visibility = useStorage('background_visibility', 0.02);
+const visibility = useStorage('background_visibility_v2', 0.4);
 const image = ref('');
 const loading = ref(false);
 const empty = ref(false);
