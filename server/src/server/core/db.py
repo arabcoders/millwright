@@ -9,8 +9,9 @@ from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from psycopg import AsyncConnection
+from psycopg import OperationalError as PsycopgOperationalError
 from sqlalchemy import create_engine, event, make_url, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 LOG = logging.getLogger("server.db")
@@ -33,6 +34,22 @@ def normalize_database_url(database_url: str | URL) -> URL:
     if url.drivername != "postgresql+psycopg":
         raise ValueError("Database URL must use postgresql or postgresql+psycopg.")
     return url
+
+
+def postgres_disconnect_reason(exc: Exception) -> str | None:
+    if not isinstance(exc, OperationalError) or not isinstance(exc.orig, PsycopgOperationalError):
+        return None
+
+    original = exc.orig
+    reason = original.diag.message_primary or str(original).partition("\n")[0]
+    if exc.connection_invalidated:
+        return reason
+    # libpq reports these connection setup failures as text without a SQLSTATE.
+    if original.sqlstate is None and reason.casefold().endswith(
+        ("connection refused", "server closed the connection unexpectedly", "the database system is shutting down")
+    ):
+        return reason
+    return None
 
 
 async def _complete[T](operation: Coroutine[Any, Any, T]) -> T:
