@@ -36,12 +36,18 @@ const page = (ids: number[], next: number | null = null): LogsResponse => ({
 const mount = async (pages: (LogsResponse | Promise<LogsResponse>)[], visible = false) => {
   const urls: string[] = [];
   let stream: ReadableStreamDefaultController<Uint8Array> | null = null;
-  const connected = Promise.withResolvers<undefined>();
-  const disconnected = Promise.withResolvers<undefined>();
+  let connected = Promise.withResolvers<undefined>();
+  let disconnected = Promise.withResolvers<undefined>();
   let consumed: ReturnType<typeof Promise.withResolvers<undefined>> | null = null;
   const request = async (url: string, options: { signal?: AbortSignal }) => {
     urls.push(url);
     if (url.startsWith('/api/logs/stream')) {
+      if (stream) {
+        connected = Promise.withResolvers<undefined>();
+        disconnected = Promise.withResolvers<undefined>();
+      }
+      const opened = connected;
+      const closed = disconnected;
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           stream = controller;
@@ -55,7 +61,7 @@ const mount = async (pages: (LogsResponse | Promise<LogsResponse>)[], visible = 
             const reader = body.getReader();
             return {
               read: () => {
-                connected.resolve(undefined);
+                opened.resolve(undefined);
                 // The next read starts after the previous chunk was processed.
                 consumed?.resolve(undefined);
                 consumed = null;
@@ -64,7 +70,7 @@ const mount = async (pages: (LogsResponse | Promise<LogsResponse>)[], visible = 
               cancel: () => reader.cancel(),
               releaseLock: () => {
                 reader.releaseLock();
-                disconnected.resolve(undefined);
+                closed.resolve(undefined);
               },
             };
           },
@@ -106,7 +112,9 @@ const mount = async (pages: (LogsResponse | Promise<LogsResponse>)[], visible = 
   return {
     state,
     urls,
-    ready: connected.promise,
+    get ready() {
+      return connected.promise;
+    },
     async emit(entries: LogEntry[]) {
       await connected.promise;
       const processed = Promise.withResolvers<undefined>();
@@ -142,7 +150,8 @@ test('applies initial persisted levels and pages empty results', async () => {
   }
 });
 
-test('keeps older history accessible after live eviction', async () => {
+test('refresh after eviction', async () => {
+  const failedHistory = Promise.withResolvers<LogsResponse>();
   const view = await mount(
     [
       { ...page([100]), entries: [{ ...record(100), logger: 'server.initial' }] },
@@ -152,6 +161,13 @@ test('keeps older history accessible after live eviction', async () => {
           { ...record(400), logger: 'server.older' },
           { ...record(401), logger: 'server.older' },
         ],
+      },
+      page([]),
+      failedHistory.promise,
+      {
+        ...page([900], 900),
+        latest_id: 900,
+        entries: [{ ...record(900), message: 'Failure' }],
       },
     ],
     true,
@@ -168,32 +184,47 @@ test('keeps older history accessible after live eviction', async () => {
     expect(view.state.entries.value[0]?.id).toBe(400);
     expect(view.state.entries.value.length).toBe(logs.LOG_WINDOW);
     expect(view.state.loggerNames.value).toEqual(['server.initial', 'server.older', 'test']);
+    expect(view.state.live.value).toBe(false);
+    await view.state.searchHistory(' failure ', ['warning'], ' test ');
+    expect(view.urls.filter((url) => url.startsWith('/api/logs/stream'))).toHaveLength(1);
+    const retained = [...view.state.entries.value];
+    const failedRefresh = view.state.refreshHistory();
+    failedHistory.reject(new Error('History reload timed out.'));
+    await failedRefresh;
+    expect(view.state.error.value).toBe('History reload timed out.');
+    expect(view.state.entries.value).toEqual(retained);
+    expect(view.urls.filter((url) => url.startsWith('/api/logs/stream'))).toHaveLength(1);
+    await view.state.refreshHistory();
+    await view.ready;
+    expect(view.state.error.value).toBeNull();
+    expect(view.state.live.value).toBe(true);
+    const params = new URL(view.urls.at(-2)!, 'http://localhost').searchParams;
+    expect(params.get('search')).toBe('failure');
+    expect(params.get('logger')).toBe('test');
+    expect(params.get('levels')).toBe('warning');
+    expect(params.has('before')).toBe(false);
+    expect(view.urls.filter((url) => url.startsWith('/api/logs/stream'))).toEqual([
+      '/api/logs/stream?after=100',
+      '/api/logs/stream?after=900',
+    ]);
+    expect(view.state.entries.value.map((entry) => entry.id)).toEqual([900]);
+    await view.emit([
+      { ...record(901), message: 'Failure' },
+      { ...record(902), message: 'Failure', logger: 'test.child' },
+    ]);
+    expect(view.state.entries.value.map((entry) => entry.id)).toEqual([900, 901]);
   } finally {
     await view.close();
   }
 });
 
-test('pages exact logger history', async () => {
-  const view = await mount([page([100]), page([], 50), page([]), page([]), page([]), page([])]);
+test('pages logger history', async () => {
+  const view = await mount([page([100]), page([], 50), page([]), page([]), page([])]);
   try {
     await view.state.start(['warning']);
     await view.state.searchHistory(' failure ', ['warning'], ' server.worker ');
     await view.state.loadOlder();
     await view.state.refreshHistory();
-    const refreshed = Promise.withResolvers<undefined>();
-    const stop = Vue.watch(
-      view.state.loading,
-      (loading) => {
-        if (!loading) refreshed.resolve(undefined);
-      },
-      { flush: 'sync' },
-    );
-    try {
-      view.state.setLive(true);
-      await refreshed.promise;
-    } finally {
-      stop();
-    }
     for (const url of view.urls.slice(1)) {
       const params = new URL(url, 'http://localhost').searchParams;
       expect(params.get('logger')).toBe('server.worker');

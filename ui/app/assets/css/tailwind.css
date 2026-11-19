@@ -3,6 +3,10 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
 
+.mask-it {
+  --mask-it: 0;
+}
+
 @layer base {
   html,
   body,
@@ -13,22 +17,6 @@
   body {
     min-height: 100vh;
     min-height: 100dvh;
-  }
-
-  html.bg-fanart {
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-    background-attachment: fixed;
-  }
-
-  html.bg-fanart body {
-    opacity: var(--mw-shell-opacity);
-  }
-
-  /* Keep dialog portals opaque through their closing transition. */
-  html.bg-fanart body:has([data-slot='overlay']) {
-    opacity: 1;
   }
 }
 
@@ -62,7 +50,12 @@
       radial-gradient(circle at top left, rgb(99 102 241 / 0.12), transparent 26%),
       radial-gradient(circle at top right, rgb(245 158 11 / 0.07), transparent 20%),
       linear-gradient(180deg, rgb(9 12 18 / 0.84), rgb(17 24 39 / 0.9));
-    backdrop-filter: blur(16px);
+  }
+
+  .shell-header-artwork {
+    background-position: center 35%;
+    background-size: cover;
+    mask-image: linear-gradient(to bottom, black, transparent);
   }
 
   .mw-page-header {
@@ -70,7 +63,7 @@
   }
 
   .mw-page-heading {
-    @apply flex min-w-0 items-center gap-3;
+    @apply flex min-w-0 items-start gap-4;
   }
 
   .mw-page-kicker {
@@ -103,18 +96,32 @@
   }
 
   .mw-card {
-    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20 backdrop-blur-xl;
+    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20;
     border-color: var(--mw-surface-border-soft);
   }
 
   .mw-card-padded {
-    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20 p-4 backdrop-blur-xl;
+    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20 p-4;
     border-color: var(--mw-surface-border-soft);
   }
 
   .mw-card-padded-lg {
-    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20 p-4 backdrop-blur-xl sm:p-5;
+    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20 p-4 sm:p-5;
     border-color: var(--mw-surface-border-soft);
+  }
+
+  .mw-form-group {
+    @apply rounded-lg border bg-muted/20;
+    border-color: var(--mw-surface-border-soft);
+  }
+
+  .mw-form-alert {
+    @apply sticky top-0 z-10 shadow-sm;
+  }
+
+  .mw-inset {
+    @apply rounded-sm border bg-elevated/40;
+    border-color: var(--mw-surface-border-solid);
   }
 
   .mw-panel {
@@ -138,35 +145,13 @@
   }
 
   .mw-table-surface {
-    @apply min-w-0 max-w-full rounded-sm border bg-elevated/20;
+    @apply min-w-0 max-w-full rounded-lg border bg-elevated/20;
     border-color: var(--mw-surface-border-solid);
   }
 
   .mw-floating-surface {
-    @apply border bg-default/95 shadow-xl backdrop-blur-md;
+    @apply rounded-lg border bg-(--mw-floating-bg) shadow-(--mw-floating-shadow) backdrop-blur-md;
     border-color: var(--mw-surface-border-solid);
-    box-shadow: 0 1rem 2rem rgb(15 23 42 / 0.1);
-  }
-
-  .mw-floating-surface [data-slot='item'][data-highlighted]::before,
-  .mw-floating-surface [data-slot='item'][data-state='open']::before,
-  .mw-floating-surface [data-slot='item']:hover::before {
-    background-color: color-mix(in oklab, var(--ui-primary) 11%, transparent) !important;
-  }
-
-  .mw-floating-surface [data-slot='item'][data-disabled]::before {
-    background-color: transparent !important;
-  }
-
-  .dark .mw-floating-surface {
-    background: color-mix(in oklab, var(--ui-bg) 92%, var(--ui-bg-elevated) 8%);
-    box-shadow: 0 1rem 2rem rgb(0 0 0 / 0.3);
-  }
-
-  .dark .mw-floating-surface [data-slot='item'][data-highlighted]::before,
-  .dark .mw-floating-surface [data-slot='item'][data-state='open']::before,
-  .dark .mw-floating-surface [data-slot='item']:hover::before {
-    background-color: color-mix(in oklab, var(--ui-primary) 16%, transparent) !important;
   }
 
   .mw-border-top-soft {
@@ -189,7 +174,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 1rem;
-    background-color: var(--ui-bg-elevated);
+    background-color: color-mix(in srgb, var(--ui-bg-elevated) 40%, transparent);
     color: var(--ui-text);
     line-height: 1.7;
     border-radius: 0.5rem;
@@ -327,12 +312,16 @@
   --mw-border-strong: var(--ui-border-accented);
   --mw-surface-border-soft: var(--ui-border-accented);
   --mw-surface-border-solid: var(--ui-border-accented);
+  --mw-floating-bg: color-mix(in oklab, var(--ui-bg-elevated) 80%, transparent);
+  --mw-floating-shadow: 0 1rem 2rem rgb(15 23 42 / 0.1);
 }
 
 .dark {
   --mw-border-strong: var(--ui-border);
   --mw-surface-border-soft: color-mix(in oklab, var(--ui-border) 70%, transparent);
   --mw-surface-border-solid: var(--ui-border);
+  --mw-floating-bg: color-mix(in oklab, var(--ui-bg-elevated) 30%, transparent);
+  --mw-floating-shadow: 0 1rem 2rem rgb(0 0 0 / 0.3);
 }
 
 html:not(.no-page-anim) .page-enter-active {
@@ -349,6 +338,12 @@ html:not(.no-page-anim) .page-enter-from {
 }
 html:not(.no-page-anim) .page-leave-to {
   opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not(.no-page-anim) .page-enter-active,
+  html:not(.no-page-anim) .page-leave-active {
+    transition: none;
+  }
 }
 code {
   direction: ltr;

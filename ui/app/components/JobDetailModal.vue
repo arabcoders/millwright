@@ -6,6 +6,7 @@
     :ui="{
       content: fullscreen ? '' : 'w-[calc(100vw-1rem)] max-w-7xl',
       wrapper: 'min-w-0 flex-1',
+      title: 'wrap-anywhere',
       close: 'static',
       body: fullscreen ? 'min-h-0 overflow-y-auto' : 'max-h-[80vh] overflow-y-auto',
     }"
@@ -25,7 +26,7 @@
       </UTooltip>
     </template>
     <template #body>
-      <div v-if="detail" class="space-y-4">
+      <div v-if="detail" class="min-w-0 space-y-5 wrap-anywhere">
         <UAlert
           v-if="detailError"
           color="error"
@@ -34,77 +35,33 @@
           title="Unable to refresh job"
           :description="detailError"
         />
-        <section class="space-y-3">
+        <section class="min-w-0 space-y-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 items-start gap-3">
-              <JobProgressRing
-                v-if="detail.status === 'hold' || detail.status === 'pending'"
-                :status="detail.status"
-                :percent="null"
-                :cooldown-started-at="detail.cooldown_started_at"
-                :cooldown-until="detail.hold_until"
-                label="Job wait progress"
-                :color="detail.kind === 'healthcheck' ? 'success' : 'primary'"
-              />
-              <div
-                v-else-if="detailActive"
-                class="relative size-12 shrink-0"
-                role="progressbar"
-                aria-label="Job progress"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                :aria-valuenow="detailProgress === null ? undefined : Math.round(detailProgress)"
-                :aria-valuetext="
-                  detailProgress === null
-                    ? `${detailProgressLabel} progress`
-                    : `${Math.round(detailProgress)}%`
-                "
-              >
-                <svg class="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="15.5"
-                    fill="none"
-                    stroke="var(--ui-border-accented)"
-                    stroke-width="3.5"
-                    pathLength="100"
-                  />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="15.5"
-                    fill="none"
-                    :class="[
-                      detail.kind === 'healthcheck' ? 'stroke-success' : 'stroke-primary',
-                      detailProgress === null ? 'origin-center stroke-(--ui-text-muted)' : '',
-                      detailProgress === null ? 'animate-spin' : '',
-                    ]"
-                    stroke-width="3.5"
-                    stroke-linecap="round"
-                    pathLength="100"
-                    :stroke-dasharray="detailProgress === null ? '28 72' : `${detailProgress} 100`"
-                  />
-                </svg>
-                <span
-                  class="absolute inset-0 flex items-center justify-center text-center text-xs font-semibold text-highlighted tabular-nums"
-                >
-                  {{ detailProgressLabel }}
-                </span>
-              </div>
-              <span v-else class="mw-detail-icon size-10 shrink-0"
-                ><UIcon :name="statusInfo(detail.kind, 'kind').icon" class="size-5"
-              /></span>
+              <StatusIndicator v-if="indicator" :info="indicator">
+                <JobProgressRing
+                  v-if="detailActive"
+                  :status="detail.status"
+                  :percent="detailProgress"
+                  :cooldown-started-at="detail.cooldown_started_at"
+                  :cooldown-until="detail.hold_until"
+                  :label="indicator.label"
+                  :stage-label="detailStageLabel"
+                />
+              </StatusIndicator>
               <div class="min-w-0">
-                <h2 class="truncate text-lg font-semibold text-highlighted">
+                <h2
+                  class="wrap-anywhere text-lg font-semibold text-highlighted"
+                  :class="{ 'mask-it': detail.file }"
+                >
                   {{ detail.file ? fileName(detail.file.path) : 'File unavailable' }}
                 </h2>
                 <p v-if="imported" class="text-xs text-toned">Imported job (read-only)</p>
-                <UTooltip v-if="detail.file" :text="detail.file.path"
-                  ><p class="truncate text-sm text-toned">
+                <UTooltip v-if="detail.file" :text="detail.file.path" :ui="{ text: 'mask-it' }">
+                  <p class="mask-it wrap-anywhere text-sm text-toned">
                     {{ parentPath(detail.file.path) }}
-                  </p></UTooltip
-                >
+                  </p>
+                </UTooltip>
               </div>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
@@ -126,7 +83,7 @@
                 :loading="exportLoading"
                 @click="exportJob"
               >
-                Export Job
+                Export job
               </UButton>
               <UButton
                 v-if="!imported"
@@ -159,28 +116,41 @@
               :items="attemptOptions"
               value-key="value"
               icon="i-lucide-repeat-2"
+              aria-label="Job attempt"
               class="w-full min-w-0"
+              :ui="{
+                value: 'mask-it wrap-anywhere whitespace-normal text-start',
+                itemLabel: 'mask-it wrap-anywhere whitespace-normal',
+              }"
             />
           </div>
-          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Status"
               :value="statusInfo(detail.status).label"
               icon="i-lucide-activity"
-              :color="detail.error || detail.status === 'failed' ? 'error' : 'success'"
-            />
-            <StatCard label="Kind" :value="detail.kind" icon="i-lucide-workflow">
+              value-wrap
+            >
+              <template #value><StatusBadge :status="detail.status" /></template>
+            </StatCard>
+            <StatCard
+              label="Kind"
+              :value="statusInfo(detail.kind, 'kind').label"
+              icon="i-lucide-workflow"
+              value-wrap
+            >
               <template #value>
-                <span class="flex items-baseline gap-1.5">
+                <span class="flex flex-wrap items-center gap-1.5">
                   <bdi>{{ statusInfo(detail.kind, 'kind').label }}</bdi>
                   <UBadge
                     v-if="
-                      detail.kind === 'healthcheck' && selectedAttempt?.health?.['healthy'] === true
+                      detail.kind === 'healthcheck' &&
+                      typeof selectedAttempt?.health?.['healthy'] === 'boolean'
                     "
-                    color="success"
+                    :color="selectedAttempt?.health?.['healthy'] ? 'success' : 'error'"
                     variant="soft"
                     size="sm"
-                    >Healthy</UBadge
+                    >{{ selectedAttempt?.health?.['healthy'] ? 'Healthy' : 'Corrupt' }}</UBadge
                   >
                 </span>
               </template>
@@ -194,7 +164,18 @@
                 (selectedAttempt && detail.kind !== 'transcode' ? 'Server' : 'Unassigned')
               "
               icon="i-lucide-server"
-            />
+              value-wrap
+            >
+              <template #value="{ value }">
+                <bdi
+                  :class="{
+                    'mask-it': selectedAttempt?.node_name || selectedAttempt?.node_id != null,
+                  }"
+                >
+                  {{ value }}
+                </bdi>
+              </template>
+            </StatCard>
           </div>
           <p v-if="detailActive && progressStage(detail.progress)" class="text-sm text-toned">
             {{ progressStage(detail.progress) }}
@@ -204,19 +185,17 @@
             color="warning"
             variant="soft"
             icon="i-lucide-triangle-alert"
-            description="Server modify MKV in-place for statistics."
+            description="The server is modifying the MKV file in place to write statistics."
           />
           <dl
             v-if="metadata.length"
-            class="grid grid-cols-1 overflow-hidden rounded-md border border-default text-sm [&>div]:border-t [&>div]:border-default [&>div:first-child]:border-t-0 sm:grid-cols-2 sm:[&>div]:border-l sm:[&>div:nth-child(-n+2)]:border-t-0 sm:[&>div:nth-child(2n+1)]:border-l-0 lg:grid-cols-4 lg:[&>div:nth-child(-n+4)]:border-t-0 lg:[&>div:nth-child(2n+1)]:border-l lg:[&>div:nth-child(4n+1)]:border-l-0"
+            class="grid min-w-0 gap-x-8 gap-y-4 border-t border-default pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4"
           >
-            <div
-              v-for="row in metadata"
-              :key="row.key"
-              class="flex min-w-0 flex-col gap-1 border-default p-3"
-            >
-              <dt class="flex items-center gap-1 text-xs text-toned">
-                <UIcon :name="row.icon" class="size-3.5" />{{ row.label }}
+            <div v-for="row in metadata" :key="row.key" class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon :name="row.icon" class="size-3.5 shrink-0" aria-hidden="true" />{{
+                  row.label
+                }}
               </dt>
               <dd class="flex flex-wrap items-center gap-1.5" :class="row.color">
                 <UTooltip
@@ -232,7 +211,7 @@
                     :tabindex="row.tooltip ? 0 : undefined"
                   >
                     <span v-if="row.after !== null" class="sr-only">Before:</span>
-                    <span class="break-all">{{ row.value }}</span>
+                    <span class="wrap-anywhere">{{ row.value }}</span>
                     <template v-if="row.after !== null">
                       <span class="sr-only">{{ row.expected ? 'Planned:' : 'After:' }}</span>
                       <UIcon
@@ -240,7 +219,7 @@
                         class="size-3.5 shrink-0"
                         aria-hidden="true"
                       />
-                      <span class="break-all">{{ row.after }}</span>
+                      <span class="wrap-anywhere">{{ row.after }}</span>
                     </template>
                   </span>
                 </UTooltip>
@@ -268,6 +247,7 @@
           icon="i-lucide-triangle-alert"
           title="Waiting"
           :description="detail.warning"
+          :ui="{ description: 'mask-it' }"
         />
         <UAlert
           v-if="detail.error"
@@ -276,6 +256,7 @@
           icon="i-lucide-circle-alert"
           title="Job error"
           :description="detail.error"
+          :ui="{ description: 'mask-it' }"
         />
         <UAlert
           v-if="
@@ -288,8 +269,9 @@
           icon="i-lucide-circle-alert"
           :title="`Attempt ${selectedAttempt.attempt_number} error`"
           :description="selectedAttempt.error"
+          :ui="{ description: 'mask-it' }"
         />
-        <section>
+        <section class="border-t border-default pt-5">
           <dl class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-toned">
             <div
               v-if="detail.status === 'staging' || detail.status === 'queued'"
@@ -356,13 +338,13 @@
         <JobMediaSnapshots :attempt="selectedAttempt" :events="detail.events" />
         <section
           v-if="traceFlow || decisionSteps.length || detail.kind === 'transcode'"
-          class="space-y-3"
+          class="space-y-3 border-t border-default pt-5"
         >
           <h3
             class="flex items-center justify-between gap-2 text-base font-semibold text-highlighted"
           >
             <span class="flex items-center gap-2">
-              <UIcon name="i-lucide-git-branch" class="size-5" />
+              <UIcon name="i-lucide-git-branch" class="size-5 text-toned" aria-hidden="true" />
               Flow decisions
             </span>
             <UButton
@@ -378,7 +360,7 @@
             />
           </h3>
           <div v-if="flowDecisionsVisible" class="space-y-3">
-            <p v-if="traceFlow && detail.flow_snapshot" class="text-sm text-toned">
+            <p v-if="traceFlow && detail.flow_snapshot" class="wrap-anywhere text-sm text-toned">
               {{ detail.flow_snapshot.name }} · revision
               {{ detail.flow_snapshot.version }}
             </p>
@@ -393,25 +375,25 @@
             <p v-if="!traceFlow" class="text-sm text-toned">
               Flow definition was not recorded for this job.
             </p>
-            <ol v-if="!traceFlow && decisionSteps.length" class="mw-frame space-y-2 p-3">
+            <ol v-if="!traceFlow && decisionSteps.length" class="space-y-2">
               <li
                 v-for="(entry, index) in decisionSteps"
                 :key="index"
-                class="flex flex-wrap items-center gap-2 text-sm"
+                class="flex min-w-0 flex-wrap items-center gap-2 wrap-anywhere text-sm"
               >
                 <StatusBadge :status="entry.outcome" group="outcome" /><span>{{
                   entry.step ?? entry.node
                 }}</span>
                 <ReasonDisplay v-if="entry.reason" :reason="entry.reason" class="w-full" />
-                <span v-if="entry.error" class="text-xs text-error">{{ entry.error }}</span>
+                <span v-if="entry.error" class="mask-it text-xs text-error">{{ entry.error }}</span>
               </li>
             </ol>
           </div>
         </section>
-        <section v-if="argvText" class="space-y-3">
+        <section v-if="argvText" class="space-y-3 border-t border-default pt-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-              <UIcon name="i-lucide-terminal" class="size-5" />
+              <UIcon name="i-lucide-terminal" class="size-5 text-toned" aria-hidden="true" />
               Command
             </h3>
             <UButton
@@ -424,13 +406,16 @@
               >Copy command</UButton
             >
           </div>
-          <pre class="mw-frame overflow-x-auto p-3 font-mono text-xs leading-relaxed text-toned">{{
-            argvText
-          }}</pre>
+          <pre
+            class="mask-it mw-terminal p-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-toned"
+            >{{ argvText }}</pre>
         </section>
-        <section v-if="selectedAttempt?.health && healthIssues.length" class="space-y-3">
+        <section
+          v-if="selectedAttempt?.health && healthIssues.length"
+          class="space-y-3 border-t border-default pt-5"
+        >
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-heart-pulse" class="size-5" />
+            <UIcon name="i-lucide-heart-pulse" class="size-5 text-toned" aria-hidden="true" />
             Health
           </h3>
           <UAlert
@@ -440,50 +425,53 @@
             :description="`${healthIssues.length} finding${healthIssues.length === 1 ? '' : 's'}: ${healthIssues.slice(0, 3).join('; ')}`"
           />
         </section>
-        <section v-if="actionRows.length" class="space-y-3">
+        <section v-if="actionRows.length" class="space-y-3 border-t border-default pt-5">
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-list-checks" class="size-5" />
+            <UIcon name="i-lucide-list-checks" class="size-5 text-toned" aria-hidden="true" />
             Action results
           </h3>
-          <ul class="mw-frame space-y-2 p-3 text-sm">
+          <ul class="divide-y divide-default text-sm">
             <li
               v-for="(action, index) in actionRows"
               :key="index"
-              class="flex flex-wrap items-center gap-2"
+              class="flex min-w-0 flex-wrap items-center gap-2 py-3 wrap-anywhere"
             >
               <StatusBadge :status="action.ok ? 'ok' : 'failed'" group="action" /><span>{{
                 action.kind
               }}</span
               ><span v-if="action.phase" class="text-xs text-toned">{{ action.phase }}</span
-              ><span v-if="action.error" class="text-error">{{ action.error }}</span
-              ><span v-if="action.artifacts.length" class="text-xs text-toned">
+              ><span v-if="action.error" class="mask-it text-error">{{ action.error }}</span
+              ><span v-if="action.artifacts.length" class="mask-it text-xs text-toned">
                 {{ action.artifacts.join(', ') }}
               </span>
             </li>
           </ul>
         </section>
-        <section v-if="detail.notification_deliveries.length" class="space-y-3">
+        <section
+          v-if="detail.notification_deliveries.length"
+          class="space-y-3 border-t border-default pt-5"
+        >
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-bell" class="size-5" />
+            <UIcon name="i-lucide-bell" class="size-5 text-toned" aria-hidden="true" />
             Notification deliveries
           </h3>
-          <ul class="mw-frame space-y-2 p-3 text-sm">
+          <ul class="divide-y divide-default text-sm">
             <li
               v-for="delivery in detail.notification_deliveries"
               :key="delivery.id"
-              class="flex flex-wrap items-center gap-2"
+              class="flex min-w-0 flex-wrap items-center gap-2 py-3 wrap-anywhere"
             >
               <StatusBadge :status="delivery.status" group="notification" />
-              <span>{{ delivery.target_name }}</span>
+              <span class="mask-it">{{ delivery.target_name }}</span>
               <span class="text-xs text-toned">{{ delivery.attempts }} attempts</span>
-              <span v-if="delivery.error" class="text-error">{{ delivery.error }}</span>
+              <span v-if="delivery.error" class="mask-it text-error">{{ delivery.error }}</span>
             </li>
           </ul>
         </section>
-        <section class="space-y-3">
+        <section class="space-y-3 border-t border-default pt-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-              <UIcon name="i-lucide-scroll-text" class="size-5" />
+              <UIcon name="i-lucide-scroll-text" class="size-5 text-toned" aria-hidden="true" />
               Attempt activity
             </h3>
             <UButton
@@ -522,6 +510,7 @@
                 color="neutral"
                 variant="outline"
                 icon="i-lucide-refresh-cw"
+                :loading="logLoading"
                 @click="() => loadLog(true)"
                 >Refresh log</UButton
               ><UButton
@@ -560,8 +549,23 @@
                 Showing the latest {{ LOG_WINDOW }} matching log lines. Stored logs and exports
                 remain complete.
               </p>
-              <p v-if="!activityStages.length" class="px-3 py-6 text-center text-sm text-toned">
-                {{ logText ? `No lines match "${logFilter}".` : logMessage }}
+              <UAlert
+                v-if="logError"
+                color="error"
+                variant="soft"
+                icon="i-lucide-circle-alert"
+                title="Could not load log"
+                :description="logError"
+              />
+              <p
+                v-if="logLoading || (!logText && !logError)"
+                role="status"
+                class="px-3 py-2 text-sm text-toned"
+              >
+                {{ logMessage }}
+              </p>
+              <p v-else-if="logText && !logLines.length" class="px-3 py-2 text-sm text-toned">
+                No lines match "{{ logFilter }}".
               </p>
               <section
                 v-for="stage in activityStages"
@@ -578,12 +582,14 @@
                   <li
                     v-for="event in stage.events"
                     :key="event.id"
-                    class="flex items-start gap-2 text-xs"
+                    class="flex flex-wrap items-start gap-2 text-xs"
                   >
                     <span class="font-medium text-highlighted">{{ humanEvent(event.type) }}</span>
-                    <span v-if="eventSummary(event)" class="min-w-0 truncate text-toned">{{
-                      eventSummary(event)
-                    }}</span>
+                    <span
+                      v-if="eventSummary(event)"
+                      class="mask-it min-w-0 flex-1 wrap-anywhere text-toned"
+                      >{{ eventSummary(event) }}</span
+                    >
                     <span v-if="event.attempt_id" class="shrink-0 text-toned"
                       >Attempt {{ attemptNumber(event.attempt_id) }}</span
                     >
@@ -598,7 +604,7 @@
                 </ol>
                 <pre
                   v-if="stage.lines.length"
-                  class="mt-1 overflow-x-auto bg-elevated/20 px-2 py-1 font-mono text-xs leading-relaxed"
+                  class="mask-it mt-1 overflow-x-auto bg-elevated/20 px-2 py-1 font-mono text-xs leading-relaxed"
                   :class="logWrap ? 'whitespace-pre-wrap wrap-break-word' : 'whitespace-pre'"
                   >{{ stage.lines.join('\n') }}</pre>
               </section>
@@ -622,7 +628,6 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useStorage } from '@vueuse/core';
 import StatusBadge from '~/components/StatusBadge.vue';
-import StatCard from '~/components/StatCard.vue';
 import DecisionTraceFlow from '~/components/DecisionTraceFlow.vue';
 import ReasonDisplay from '~/components/ReasonDisplay.vue';
 import JobMediaSnapshots from '~/components/JobMediaSnapshots.vue';
@@ -634,7 +639,7 @@ import { healthSamples } from '~/utils/health';
 import { jobLogLines, LOG_WINDOW } from '~/utils/logs';
 import { formatRelativeTime } from '~/utils/relativeTime';
 import { estimatedJobCompletion, progressPercent, progressStage } from '~/utils/progress';
-import { statusInfo } from '~/utils/status';
+import { jobIndicatorInfo, statusInfo } from '~/utils/status';
 import { useEvents, type ServerEvent } from '~/composables/useEvents';
 import { useJobs } from '~/composables/useJobs';
 import { useJobRequeue } from '~/composables/useJobRequeue';
@@ -660,6 +665,11 @@ defineEmits<{ 'open-file': [id: number] }>();
 const open = defineModel<boolean>('open', { default: false });
 const fullscreen = useStorage('job_details_fullscreen', false);
 const detail = ref<JobDetail | null>(null);
+const indicator = computed(() =>
+  detail.value
+    ? jobIndicatorInfo(detail.value, detail.value.attempts.at(-1)?.health?.['healthy'])
+    : null,
+);
 const reason = computed(() => (detail.value ? jobReason(detail.value) : null));
 const jobTitle = computed(() => {
   const id = props.imported?.id ?? props.jobId;
@@ -670,8 +680,11 @@ const selectedAttemptId = ref<number | undefined>(undefined);
 const logText = ref('');
 const logComplete = ref(false);
 const logMessage = ref('No log recorded.');
+const logLoading = ref(false);
+const logError = ref('');
 const logRequest = ref(0);
 const logFilter = ref('');
+const logLines = computed(() => jobLogLines(logText.value, logFilter.value));
 const logWrap = useStorage('job_log_wrap', true);
 const activityLog = ref<HTMLDivElement | null>(null);
 const logFollowing = ref(true);
@@ -692,7 +705,7 @@ const stageDefinitions = [
   ['Queue', ['enqueued', 'staged', 'queued', 'retried', 'bumped'], 'i-lucide-list-ordered'],
   ['Assign', ['claimed', 'offered', 'offer_failed'], 'i-lucide-send'],
   ['Prepare', ['preparation', 'staging'], 'i-lucide-box'],
-  ['Run', ['started', 'progress'], 'i-lucide-loader-circle'],
+  ['Encode', ['started', 'progress'], 'i-lucide-loader-circle'],
   ['Verify', ['verifying'], 'i-lucide-file-check'],
   [
     'Finalize',
@@ -758,7 +771,7 @@ const activityStages = computed(() => {
     if (event.attempt_id !== null && event.attempt_id !== undefined) return false;
     return event.ts >= start && (!end || event.ts < end);
   });
-  const filteredLines = jobLogLines(logText.value, logFilter.value);
+  const filteredLines = logLines.value;
   const stages: ActivityStage[] = stageDefinitions.map(([name, _types, icon]) => {
     const stageName = name;
     return {
@@ -1026,6 +1039,8 @@ const loadForJob = async (id: number | null): Promise<void> => {
   logText.value = '';
   logComplete.value = false;
   logMessage.value = 'Loading log...';
+  logLoading.value = false;
+  logError.value = '';
   if (props.imported) {
     detail.value = props.imported;
     if (validFlowDefinition(detail.value.flow_snapshot?.definition))
@@ -1119,7 +1134,12 @@ const loadLog = async (complete = false): Promise<void> => {
   const token = ++logRequest.value;
   const jobId = detailJobId.value;
   const attemptId = selectedAttemptId.value;
-  if (jobId === null || attemptId === undefined) return;
+  logLoading.value = false;
+  logError.value = '';
+  if (jobId === null || attemptId === undefined) {
+    logMessage.value = 'No attempt log recorded.';
+    return;
+  }
   if (props.imported || (!complete && selectedAttempt.value?.log_data != null)) {
     const savedLog = selectedAttempt.value?.log_data ?? null;
     logText.value = savedLog ?? '';
@@ -1129,6 +1149,7 @@ const loadLog = async (complete = false): Promise<void> => {
     return;
   }
   logComplete.value = false;
+  logLoading.value = true;
   logMessage.value = 'Loading log...';
   try {
     const result = await attemptLog(jobId, attemptId, complete);
@@ -1150,11 +1171,18 @@ const loadLog = async (complete = false): Promise<void> => {
     if (result.complete && selectedAttempt.value) selectedAttempt.value.log_data = result.text;
     logMessage.value = logText.value ? '' : 'The log is empty.';
     await scrollLogBottom();
-  } catch {
+  } catch (error) {
     if (token === logRequest.value && !props.imported) {
       logText.value = '';
-      logMessage.value = "Couldn't load this attempt's log. Choose Refresh log to try again.";
+      logError.value = messageFor(
+        (error as { detail?: string }).detail,
+        error instanceof Error
+          ? error.message
+          : "Couldn't load this attempt's log. Choose Refresh log to try again.",
+      );
     }
+  } finally {
+    if (token === logRequest.value) logLoading.value = false;
   }
 };
 
@@ -1168,25 +1196,19 @@ watch(selectedAttemptId, () => {
 
 const detailProgress = computed<number | null>(() => {
   const job = detail.value;
-  if (!job || job.status === 'pending') return null;
+  if (!job || job.status === 'pending' || job.status === 'queued') return null;
   return progressPercent(job.progress);
 });
 
 const estimatedEnd = computed(() => (detail.value ? estimatedJobCompletion(detail.value) : null));
 
-const detailProgressLabel = computed(() => {
-  if (detailProgress.value !== null) return `${Math.round(detailProgress.value)}%`;
+const detailStageLabel = computed(() => {
   if (detail.value?.progress?.['tool'] === 'ffprobe') return 'Probe';
   if (detail.value?.progress?.['tool'] === 'mkvpropedit') return 'Stats';
   const stage = detail.value?.progress?.['stage'];
   if (stage === 'probe') return 'Probe';
   if (stage === 'decode') return 'Decode';
-  const status = detail.value?.status;
-  if (status === 'claimed') return 'Claim';
-  if (status === 'running') return 'Run';
-  if (status === 'verifying') return 'Verify';
-  if (status === 'finalizing') return 'Finish';
-  return '';
+  return undefined;
 });
 
 const eventSummary = (event: { payload: Record<string, unknown> | null }): string => {
@@ -1247,6 +1269,8 @@ watch(
       logText.value = '';
       logComplete.value = false;
       logMessage.value = 'No log recorded.';
+      logLoading.value = false;
+      logError.value = '';
     }
   },
   { immediate: true },

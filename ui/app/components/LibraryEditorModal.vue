@@ -6,7 +6,8 @@
     :close="{ disabled: saving }"
     :ui="{
       content: 'w-full sm:max-w-2xl lg:max-w-4xl',
-      body: 'max-h-[85vh] overflow-y-auto p-4 sm:p-6',
+      title: 'wrap-anywhere',
+      body: 'max-h-[85vh] overflow-y-auto p-4 sm:p-5',
     }"
     @update:open="handleOpenChange"
   >
@@ -21,7 +22,14 @@
         description="Retry before editing library settings. Cutoff dates use the server timezone."
       >
         <template #actions>
-          <UButton color="neutral" variant="outline" label="Retry" @click="loadTimezone" />
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="sm"
+            icon="i-lucide-refresh-cw"
+            label="Retry"
+            @click="loadTimezone"
+          />
         </template>
       </UAlert>
       <fieldset :disabled="saving" class="contents">
@@ -31,23 +39,32 @@
           :key="formKey"
           :library="library"
           :flow-items="flowItems"
-          :error="error"
           @submit="emit('submit', $event)"
         />
       </fieldset>
     </template>
     <template #footer>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <UButton
-          type="submit"
-          form="libraryForm"
-          color="primary"
-          icon="i-lucide-save"
-          :loading="saving"
-          :disabled="!timezone"
-          class="justify-center"
-          >Save</UButton
-        >
+      <div class="w-full space-y-3">
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          icon="i-lucide-triangle-alert"
+          :title="error"
+        />
+        <div class="flex justify-end">
+          <UButton
+            type="submit"
+            form="libraryForm"
+            color="primary"
+            size="sm"
+            icon="i-lucide-save"
+            :loading="saving"
+            :disabled="!timezone"
+            class="justify-center"
+            >Save</UButton
+          >
+        </div>
       </div>
     </template>
   </UModal>

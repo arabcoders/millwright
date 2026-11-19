@@ -3,16 +3,16 @@
     <StatCard
       label="Active workspaces"
       :value="snapshot?.summary.active_count ?? 'Unavailable'"
-      :hint="snapshot?.summary.count == null ? undefined : `${snapshot.summary.count} total`"
+      :hint="snapshot?.summary.count == null ? '' : `${snapshot.summary.count} total`"
       icon="i-lucide-folder-tree"
       to="/workspaces"
     />
     <StatCard
       label="Size used"
       :value="bytes(snapshot?.summary.size_bytes)"
-      icon="i-lucide-hard-drive"
       hint="Total file sizes"
       tooltip="Deleting files may free less space when they share disk data."
+      icon="i-lucide-hard-drive"
     />
     <StatCard
       label="Unused workspaces"

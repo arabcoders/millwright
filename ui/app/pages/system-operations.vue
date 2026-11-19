@@ -2,49 +2,66 @@
   <main class="w-full min-w-0 max-w-full space-y-6">
     <PageHeader page="system-operations" />
     <template v-if="status">
-      <div class="grid gap-6 md:grid-cols-2">
-        <section class="flex flex-col gap-4 py-4 md:pr-6" aria-labelledby="export-heading">
-          <div>
-            <h2 id="export-heading" class="font-semibold text-highlighted">
+      <div class="mw-card divide-y divide-default">
+        <section
+          class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          aria-labelledby="export-heading"
+        >
+          <div class="min-w-0">
+            <h2 id="export-heading" class="text-sm font-semibold text-highlighted">
               Export configuration backup
             </h2>
             <p class="mt-1 text-sm text-toned">
               Download an encrypted backup of server configuration and settings.
             </p>
           </div>
-          <UButton class="self-start" icon="i-lucide-download" @click="exportOpen = true"
+          <UButton
+            class="shrink-0 self-start"
+            color="primary"
+            variant="solid"
+            size="sm"
+            icon="i-lucide-download"
+            @click="exportOpen = true"
             >Export configuration backup</UButton
           >
         </section>
         <section
-          class="flex flex-col gap-4 border-t border-default py-4 md:border-t-0 md:border-l md:pl-6"
+          class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           aria-labelledby="restore-heading"
         >
-          <div>
-            <h2 id="restore-heading" class="font-semibold text-highlighted">
+          <div class="min-w-0">
+            <h2 id="restore-heading" class="text-sm font-semibold text-highlighted">
               Import configuration backup
             </h2>
             <p class="mt-1 text-sm text-toned">
               Preview a configuration backup and choose which settings to restore.
             </p>
           </div>
-          <UButton class="self-start" icon="i-lucide-rotate-ccw" @click="restoreOpen = true"
+          <UButton
+            class="shrink-0 self-start"
+            color="primary"
+            variant="solid"
+            size="sm"
+            icon="i-lucide-rotate-ccw"
+            @click="restoreOpen = true"
             >Import configuration backup</UButton
           >
         </section>
         <section
-          class="flex flex-col gap-4 border-t border-default py-4 md:border-l md:pl-6"
+          class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
           aria-labelledby="reset-heading"
         >
-          <div>
-            <h2 id="reset-heading" class="font-semibold text-highlighted">Reset data</h2>
+          <div class="min-w-0">
+            <h2 id="reset-heading" class="text-sm font-semibold text-highlighted">Reset data</h2>
             <p class="mt-1 text-sm text-toned">
               Clear job history, the file index, processing decisions, and selected settings.
             </p>
           </div>
           <UButton
-            class="self-start"
+            class="shrink-0 self-start"
             color="error"
+            variant="solid"
+            size="sm"
             icon="i-lucide-trash-2"
             @click="resetOpen = true"
             >Reset data</UButton
@@ -59,7 +76,7 @@
         @update:open="setResetOpen"
       >
         <template #body>
-          <div class="space-y-4">
+          <fieldset :disabled="busy !== null" class="min-w-0 space-y-4">
             <UAlert color="warning" icon="i-lucide-triangle-alert"
               ><template #description
                 ><ul class="list-disc space-y-1 pl-5">
@@ -82,37 +99,40 @@
                 </ul></template
               ></UAlert
             >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h3 class="font-semibold text-highlighted">Categories to keep</h3>
-              <UButton
-                size="sm"
-                color="neutral"
-                variant="outline"
-                :icon="
-                  resetKeep.length === resetItems.length
-                    ? 'i-lucide-square'
-                    : 'i-lucide-square-check-big'
-                "
-                :disabled="busy !== null || !resetItems.length"
-                :aria-label="`${resetKeep.length === resetItems.length ? 'Unselect' : 'Select'} all reset categories`"
-                @click="
-                  toggleAll(
-                    resetKeep,
-                    resetItems.map((item) => item.value),
-                  )
-                "
-              >
-                Select
-              </UButton>
-            </div>
-            <UCheckboxGroup v-model="resetKeep" :items="resetItems" class="mw-frame p-3" />
+            <section class="mw-card-padded-lg space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="font-semibold text-highlighted">Categories to keep</h3>
+                <UButton
+                  size="sm"
+                  color="neutral"
+                  variant="outline"
+                  :icon="
+                    resetKeep.length === resetItems.length
+                      ? 'i-lucide-square'
+                      : 'i-lucide-square-check-big'
+                  "
+                  :disabled="busy !== null || !resetItems.length"
+                  :aria-label="`${resetKeep.length === resetItems.length ? 'Unselect' : 'Select'} all reset categories`"
+                  @click="
+                    toggleAll(
+                      resetKeep,
+                      resetItems.map((item) => item.value),
+                    )
+                  "
+                >
+                  Select
+                </UButton>
+              </div>
+              <UCheckboxGroup v-model="resetKeep" :items="resetItems" />
+            </section>
             <p v-if="resetError" class="text-sm text-error">{{ resetError }}</p>
-          </div>
+          </fieldset>
         </template>
         <template #footer
           ><div class="flex w-full justify-end gap-2">
             <UButton
               color="error"
+              variant="solid"
               icon="i-lucide-trash-2"
               :loading="busy === 'reset'"
               :disabled="busy !== null"
@@ -133,31 +153,33 @@
       >
         <template #body>
           <form id="backupExportForm" class="space-y-4" @submit.prevent="exportBackup">
-            <UAlert
-              color="warning"
-              icon="i-lucide-triangle-alert"
-              title="Not backed up"
-              description="jobs, trash, media files."
-            />
-            <UFormField label="Backup password" required>
-              <PasswordInput
-                v-model="exportPassword"
-                class="w-full"
-                autocomplete="new-password"
-                required
-                :minlength="8"
+            <fieldset :disabled="busy !== null" class="min-w-0 space-y-4">
+              <UFormField label="Backup password" required>
+                <PasswordInput
+                  v-model="exportPassword"
+                  class="w-full"
+                  autocomplete="new-password"
+                  required
+                  :minlength="8"
+                />
+              </UFormField>
+              <UFormField label="Confirm backup password" required>
+                <PasswordInput
+                  v-model="confirmExportPassword"
+                  class="w-full"
+                  autocomplete="new-password"
+                  required
+                  :minlength="8"
+                />
+              </UFormField>
+              <UAlert
+                v-if="error"
+                color="error"
+                variant="soft"
+                icon="i-lucide-triangle-alert"
+                :description="error"
               />
-            </UFormField>
-            <UFormField label="Confirm backup password" required>
-              <PasswordInput
-                v-model="confirmExportPassword"
-                class="w-full"
-                autocomplete="new-password"
-                required
-                :minlength="8"
-              />
-            </UFormField>
-            <p v-if="error" class="text-sm text-error">{{ error }}</p>
+            </fieldset>
           </form>
         </template>
         <template #footer>
@@ -165,6 +187,8 @@
             <UButton
               type="submit"
               form="backupExportForm"
+              color="primary"
+              variant="solid"
               icon="i-lucide-download"
               :loading="busy === 'export'"
             >
@@ -188,7 +212,7 @@
           <form
             v-show="stage === 'file'"
             id="backupPreviewForm"
-            class="space-y-4"
+            class="mw-card-padded-lg space-y-4"
             @submit.prevent="previewBackup"
           >
             <UFormField label="Configuration backup file" required>
@@ -213,7 +237,11 @@
             </UFormField>
           </form>
 
-          <div v-if="stage === 'select' && preview" class="space-y-5">
+          <fieldset
+            v-if="stage === 'select' && preview"
+            :disabled="busy !== null"
+            class="min-w-0 space-y-5"
+          >
             <UFormField
               label="Backup password"
               required
@@ -228,7 +256,7 @@
                 :disabled="busy !== null"
               />
             </UFormField>
-            <p
+            <UEmpty
               v-if="
                 !preview.flows.length &&
                 !preview.libraries.length &&
@@ -239,17 +267,18 @@
                 !preview.config &&
                 !preview.settings
               "
-              class="text-sm text-toned"
-            >
-              This configuration backup has no restorable items.
-            </p>
+              size="sm"
+              variant="naked"
+              icon="i-lucide-archive"
+              title="This configuration backup has no restorable items."
+            />
             <UAlert
               color="warning"
               icon="i-lucide-triangle-alert"
               title="Not backed up"
               description="jobs, trash, media files."
             />
-            <section v-if="preview.flows.length" class="space-y-3">
+            <section v-if="preview.flows.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -283,10 +312,9 @@
                       : undefined,
                   }))
                 "
-                class="mw-frame p-3"
               />
             </section>
-            <section v-if="preview.libraries.length" class="space-y-3">
+            <section v-if="preview.libraries.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -314,36 +342,34 @@
                   Select
                 </UButton>
               </div>
-              <div class="mw-frame space-y-3 p-3">
-                <UCheckboxGroup
-                  v-model="selectedLibraries"
-                  :items="
-                    preview.libraries.map((item) => ({
-                      label: item.name,
-                      value: item.name,
-                      disabled: Boolean(item.flow_name && !flowNames.includes(item.flow_name)),
-                      description: item.flow_name
-                        ? flowNames.includes(item.flow_name)
-                          ? `Flow: ${item.flow_name}`
-                          : `Flow missing from backup: ${item.flow_name}`
-                        : undefined,
-                    }))
-                  "
-                  @update:model-value="setLibraries"
-                />
-                <UFormField
-                  v-for="item in preview.libraries.filter((item) =>
-                    selectedLibraries.includes(item.name),
-                  )"
-                  :key="item.name"
-                  :label="`Roots for ${item.name}`"
-                  description="One path per line"
-                >
-                  <UTextarea v-model="roots[item.name]" class="w-full" :rows="2" />
-                </UFormField>
-              </div>
+              <UCheckboxGroup
+                v-model="selectedLibraries"
+                :items="
+                  preview.libraries.map((item) => ({
+                    label: item.name,
+                    value: item.name,
+                    disabled: Boolean(item.flow_name && !flowNames.includes(item.flow_name)),
+                    description: item.flow_name
+                      ? flowNames.includes(item.flow_name)
+                        ? `Flow: ${item.flow_name}`
+                        : `Flow missing from backup: ${item.flow_name}`
+                      : undefined,
+                  }))
+                "
+                @update:model-value="setLibraries"
+              />
+              <UFormField
+                v-for="item in preview.libraries.filter((item) =>
+                  selectedLibraries.includes(item.name),
+                )"
+                :key="item.name"
+                :label="`Roots for ${item.name}`"
+                description="One path per line"
+              >
+                <UTextarea v-model="roots[item.name]" class="w-full" :rows="2" />
+              </UFormField>
             </section>
-            <section v-if="preview.notifications.length" class="space-y-3">
+            <section v-if="preview.notifications.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"><UIcon name="i-lucide-bell" class="size-4" /></span>
@@ -365,28 +391,20 @@
                   Select
                 </UButton>
               </div>
-              <UCheckboxGroup
-                v-model="selectedNotifications"
-                :items="preview.notifications"
-                class="mw-frame p-3"
-              />
+              <UCheckboxGroup v-model="selectedNotifications" :items="preview.notifications" />
             </section>
-            <section v-if="preview.webhooks.length" class="space-y-3">
+            <section v-if="preview.webhooks.length" class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"><UIcon name="i-lucide-webhook" class="size-4" /></span>
                 Incoming webhooks
               </h3>
-              <UCheckboxGroup
-                v-model="selectedWebhooks"
-                :items="preview.webhooks"
-                class="mw-frame p-3"
-              />
+              <UCheckboxGroup v-model="selectedWebhooks" :items="preview.webhooks" />
               <p class="text-xs text-toned">
                 Includes receiver API keys and path replacements. Review destinations for this
                 server.
               </p>
             </section>
-            <section v-if="preview.plugins.length" class="space-y-3">
+            <section v-if="preview.plugins.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -410,13 +428,9 @@
                   Select
                 </UButton>
               </div>
-              <UCheckboxGroup
-                v-model="selectedPlugins"
-                :items="preview.plugins"
-                class="mw-frame p-3"
-              />
+              <UCheckboxGroup v-model="selectedPlugins" :items="preview.plugins" />
             </section>
-            <section v-if="preview.nodes.length" class="space-y-3">
+            <section v-if="preview.nodes.length" class="mw-card-padded-lg space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                   <span class="mw-detail-icon"
@@ -445,66 +459,70 @@
                   Select
                 </UButton>
               </div>
-              <UCheckboxGroup v-model="selectedNodes" :items="preview.nodes" class="mw-frame p-3" />
+              <UCheckboxGroup v-model="selectedNodes" :items="preview.nodes" />
             </section>
-            <section v-if="preview.settings" class="space-y-3">
+            <section v-if="preview.settings" class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"
                   ><UIcon name="i-lucide-sliders-horizontal" class="size-4" /></span
                 >Settings
               </h3>
-              <div class="mw-frame p-3">
-                <UCheckbox v-model="selectedSettings" label="Server settings" />
-              </div>
+              <UCheckbox v-model="selectedSettings" label="Server settings" />
             </section>
-            <section v-if="preview.config" class="space-y-3">
+            <section v-if="preview.config" class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"
                   ><UIcon name="i-lucide-settings" class="size-4"
                 /></span>
                 Configuration
               </h3>
-              <div class="mw-frame p-3">
-                <UCheckbox v-model="selectedConfig" label="config.toml (includes secrets)" />
-              </div>
+              <UCheckbox v-model="selectedConfig" label="config.toml (includes secrets)" />
             </section>
-            <section class="space-y-3">
+            <section class="mw-card-padded-lg space-y-3">
               <h3 class="flex items-center gap-3 font-semibold text-highlighted">
                 <span class="mw-detail-icon"
                   ><UIcon name="i-lucide-list-checks" class="size-4"
                 /></span>
                 Restore options
               </h3>
-              <div class="mw-frame p-3">
-                <UCheckbox v-model="replace" label="Replace existing configuration" />
-              </div>
+              <UCheckbox v-model="replace" label="Replace existing configuration" />
             </section>
-          </div>
-          <p v-if="error" class="mt-4 text-sm text-error">{{ error }}</p>
+          </fieldset>
         </template>
         <template #footer>
-          <div class="flex w-full justify-end gap-2">
-            <UButton
-              v-if="stage === 'file'"
-              type="submit"
-              form="backupPreviewForm"
-              icon="i-lucide-eye"
-              color="neutral"
-              variant="outline"
-              :loading="busy === 'preview'"
-              :disabled="busy !== null"
-            >
-              Preview configuration backup
-            </UButton>
-            <UButton
-              v-else
-              icon="i-lucide-rotate-ccw"
-              :loading="busy === 'restore'"
-              :disabled="!hasSelection || !importPassword || busy !== null"
-              @click="restoreBackup"
-            >
-              Restore selected configuration
-            </UButton>
+          <div class="w-full space-y-3">
+            <UAlert
+              v-if="error"
+              color="error"
+              variant="soft"
+              icon="i-lucide-triangle-alert"
+              :description="error"
+            />
+            <div class="flex w-full justify-end gap-2">
+              <UButton
+                v-if="stage === 'file'"
+                type="submit"
+                form="backupPreviewForm"
+                icon="i-lucide-eye"
+                color="primary"
+                variant="solid"
+                :loading="busy === 'preview'"
+                :disabled="busy !== null"
+              >
+                Preview configuration backup
+              </UButton>
+              <UButton
+                v-else
+                color="primary"
+                variant="solid"
+                icon="i-lucide-rotate-ccw"
+                :loading="busy === 'restore'"
+                :disabled="!hasSelection || !importPassword || busy !== null"
+                @click="restoreBackup"
+              >
+                Restore selected configuration
+              </UButton>
+            </div>
           </div>
         </template>
       </UModal>
@@ -617,7 +635,7 @@ const resetData = async (): Promise<void> => {
   try {
     const result = await reset(resetKeep.value);
     if (!result.ok) {
-      resetError.value =
+      const guidance =
         result.status === 409
           ? 'Reset could not start because the server is busy or another reset is in progress. Wait and try again.'
           : result.status === 500
@@ -625,6 +643,7 @@ const resetData = async (): Promise<void> => {
             : result.status === null
               ? 'Reset outcome is unknown. Review the current settings before retrying.'
               : 'Data reset failed.';
+      resetError.value = result.detail ? `${result.detail} ${guidance}` : guidance;
       return;
     }
     toast.add({

@@ -8,17 +8,14 @@ tools are included in the image.
 Run this in the directory where you want to keep Millwright:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/arabcoders/millwright/HEAD/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/arabcoders/millwright/dev/install.sh)
 ```
 
-Enter your media folder when prompted. The installer asks before starting compose file. Press Enter to skip startup.
-Rerunning it keeps your existing configuration and credentials.
+Enter your media folder and confirm startup. Rerunning the installer keeps existing configuration and
+credentials.
 
-Open `http://YOUR_SERVER_IP:8000` and create your account. Use your server's IP address, or
-`http://localhost:8000` if your browser is on the same machine.
-
-Open **Nodes** and click **Claim** on the pending node. Then [add a library](usage.md#add-a-library),
-using `/media` for the folder you selected during installation.
+Open `http://<server-ip>:8000` and create your account before exposing the service. Claim the pending
+node under **Nodes**, then [add a library](usage.md#add-a-library) using `/media`.
 
 ## Update Millwright
 
@@ -33,12 +30,9 @@ Update any nodes on other machines too, using the same image version. See
 
 ## Configuration and storage
 
-Change processing limits, scanning, playback, and history retention under **Configuration -> Settings**.
-These changes don't need a restart.
-
-Other server settings are in `config/millwright/config.toml` inside your installation directory.
-See the [configuration example](../server/src/server/config.example.toml) for available options.
-After editing this file, restart the server:
+**Configuration -> Settings** changes apply without restarting. For startup options, see the
+[configuration example](../server/src/server/config.example.toml). After editing
+`config/millwright/config.toml`, restart the server:
 
 ```bash
 docker compose restart server
@@ -57,8 +51,6 @@ Keep these directories when updating or moving your installation:
 Accounts, settings, and job history are stored in the PostgreSQL volume `db-data`, not these
 directories. Include the database in your [backups](recovery.md#database-and-filesystem-backups).
 Don't use `docker compose down --volumes` for updates. It deletes the database volume.
-
-For disk space problems, see [Workspace cleanup](recovery.md#workspace-cleanup).
 
 To move retained originals, let active work and recovery finish, then stop the server and nodes. Copy
 the complete trash directory to the new location. Mount it writable in the server container and set
@@ -121,16 +113,12 @@ Start the node:
 docker compose up -d --pull always
 ```
 
-Open **Nodes** in the web interface and click **Claim**. Use **Edit** to set the node's processing limits.
-
-New node registration is enabled by default. The **Allow new nodes** switch on **Nodes** stops new
-registration.
+Claim the pending node under **Nodes**. If it doesn't appear, check that **Allow new nodes** is on.
 
 Keep each node's `node-config` and `node-data` directories separate. The node saves its credentials
 there and reconnects automatically after a restart. Only the workspace is shared.
 
-You can keep or remove the node on the server machine. For connections across an untrusted network,
-use [HTTPS](#reverse-proxies) for the server address.
+Across an untrusted network, use an [HTTPS server address](#reverse-proxies).
 
 ## Hardware acceleration
 
@@ -210,15 +198,13 @@ For OIDC login, follow the callback instructions in [Authentication](authenticat
 
 ### API reference
 
-To enable API documentation, add this at the top level of `config/millwright/config.toml` and restart
-the server:
+The API reference is off by default. Enable it in `config/millwright/config.toml` and restart the server:
 
 ```toml
 enable_docs = true
 ```
 
 Open `/api/docs` for Swagger, `/api/redoc` for ReDoc, or `/api/openapi.json` for the schema.
-Set `enable_docs = false` and restart to turn them off.
 
 ### File access errors
 

@@ -1,124 +1,166 @@
 <template>
   <main class="w-full min-w-0 max-w-full space-y-6">
     <PageHeader page="logs">
-      <template #actions>
-        <div class="flex flex-wrap items-center gap-2">
-          <UDropdownMenu :items="copyMenuItems" :modal="false">
-            <UButton
-              color="neutral"
-              variant="outline"
-              size="sm"
-              icon="i-lucide-refresh-cw"
-              :loading="loading"
-              @click="refresh"
-            >
-              Refresh
-            </UButton>
-            <UButton
-              color="neutral"
-              variant="outline"
-              size="sm"
-              :icon="live ? 'i-lucide-pause' : 'i-lucide-play'"
-              @click="setLive(!live)"
-            >
-              {{ live ? 'Pause live updates' : 'Resume live updates' }}
-            </UButton>
-            <UButton
-              v-if="!atBottom"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              icon="i-lucide-arrow-down"
-              @click="scrollBottom"
-            >
-              Scroll to bottom
-            </UButton>
-            <span class="text-sm font-medium text-toned">Copy</span>
-          </UDropdownMenu>
-          <UButton
-            v-if="filtered.length"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            icon="i-lucide-download"
-            @click="downloadVisible"
-          >
-            Download visible JSONL
-          </UButton>
-        </div>
-      </template>
-    </PageHeader>
-
-    <div class="space-y-3">
-      <div class="mw-card flex flex-wrap items-center gap-3 p-3 sm:p-4">
-        <UInput
-          v-model.lazy="query"
-          icon="i-lucide-search"
-          placeholder="Search logs..."
-          size="sm"
-          class="w-full sm:w-72"
+      <template #icon="{ icon }">
+        <UIcon
+          :name="icon"
+          :class="[
+            'size-5 transition-colors',
+            loading
+              ? 'text-info'
+              : error
+                ? 'text-error'
+                : live
+                  ? 'motion-safe:animate-pulse text-success'
+                  : 'text-muted',
+          ]"
+          role="img"
+          :title="logStatusLabel"
+          :aria-label="logStatusLabel"
         />
-        <UInputMenu
-          v-model="logger"
-          v-model:open="loggerOpen"
-          :items="loggerNames"
-          create-item="always"
-          :clear="{ 'aria-label': 'Clear logger filter' }"
-          icon="i-lucide-filter"
-          placeholder="Exact logger name..."
-          size="sm"
-          class="w-full sm:w-72"
-          aria-label="Filter by exact logger name"
-          @create="
-            (value) => {
-              logger = value.trim();
-              loggerOpen = false;
-            }
-          "
-        >
-          <template #create-item-label="{ item }">Use exact name: {{ item }}</template>
-        </UInputMenu>
-        <USelectMenu
-          v-model="selectedLevels"
-          :items="levelItems"
-          value-key="value"
-          label-key="label"
-          multiple
-          size="sm"
-          class="w-full sm:w-48"
-          aria-label="Filter log level"
-          >{{ levelFilterLabel }}</USelectMenu
-        >
+      </template>
+      <template #actions>
         <UButton
           color="neutral"
           variant="outline"
           size="sm"
-          :icon="wrap ? 'i-lucide-wrap-text' : 'i-lucide-align-justify'"
-          :aria-pressed="wrap"
-          @click="wrap = !wrap"
+          icon="i-lucide-refresh-cw"
+          :loading="loading"
+          @click="refresh"
         >
-          Wrap
+          Refresh
         </UButton>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
-    <UAlert v-if="error" color="error" variant="soft" title="Logs unavailable" :description="error">
-      <template #actions
-        ><UButton size="xs" color="error" variant="outline" @click="refresh"
-          >Retry</UButton
-        ></template
-      >
+    <UAlert
+      v-if="error"
+      color="error"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      title="Logs unavailable"
+      :description="error"
+    >
+      <template #actions>
+        <UButton
+          size="sm"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-refresh-cw"
+          :loading="loading"
+          @click="refresh"
+        >
+          Retry
+        </UButton>
+      </template>
     </UAlert>
-    <div class="mw-card overflow-hidden">
+    <section aria-label="Server logs" :aria-busy="loading" class="mw-card overflow-hidden">
+      <div class="bg-elevated/30 px-3 py-3 sm:px-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <UInput
+            v-model.lazy="query"
+            type="search"
+            icon="i-lucide-filter"
+            placeholder="Search logs..."
+            size="sm"
+            class="w-full sm:w-64"
+            aria-label="Search logs"
+          />
+          <UInputMenu
+            v-model="logger"
+            v-model:open="loggerOpen"
+            :items="loggerNames"
+            create-item="always"
+            :clear="{ 'aria-label': 'Clear logger filter' }"
+            icon="i-lucide-filter"
+            placeholder="Exact logger name..."
+            size="sm"
+            class="w-full sm:w-56"
+            aria-label="Filter by exact logger name"
+            @create="
+              (value) => {
+                logger = value.trim();
+                loggerOpen = false;
+              }
+            "
+          >
+            <template #create-item-label="{ item }">Use exact name: {{ item }}</template>
+          </UInputMenu>
+          <USelectMenu
+            v-model="selectedLevels"
+            :items="levelItems"
+            value-key="value"
+            label-key="label"
+            multiple
+            size="sm"
+            icon="i-lucide-list-filter"
+            class="w-44 shrink-0 sm:w-48"
+            aria-label="Filter log level"
+            >{{ levelFilterLabel }}</USelectMenu
+          >
+          <UButton
+            v-if="!atBottom"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            icon="i-lucide-arrow-down"
+            @click="scrollBottom"
+          >
+            Scroll to bottom
+          </UButton>
+          <div class="ms-auto flex flex-wrap items-center gap-2">
+            <UButton
+              color="neutral"
+              :variant="wrap ? 'soft' : 'outline'"
+              size="sm"
+              icon="i-lucide-wrap-text"
+              :aria-pressed="wrap"
+              @click="wrap = !wrap"
+            >
+              Wrap
+            </UButton>
+            <UDropdownMenu
+              v-if="filtered.length"
+              :items="copyMenuItems"
+              :content="{ align: 'end' }"
+              :modal="false"
+            >
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-copy"
+                trailing-icon="i-lucide-chevron-down"
+              >
+                Copy
+              </UButton>
+            </UDropdownMenu>
+            <UButton
+              v-if="filtered.length"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-lucide-download"
+              @click="downloadVisible"
+            >
+              Download visible logs
+            </UButton>
+          </div>
+        </div>
+      </div>
       <div
         ref="container"
-        class="max-h-[65vh] min-h-96 overflow-y-auto font-mono text-sm"
+        class="w-full min-w-0 max-w-full min-h-[55vh] max-h-[65vh] overflow-y-auto overflow-x-hidden border-t border-default font-mono text-sm text-default overscroll-x-contain"
+        dir="ltr"
         @scroll.passive="onScroll"
       >
-        <div v-if="hasOlder" class="border-b border-default p-3 text-center">
-          <UButton size="xs" color="neutral" variant="outline" :loading="loading" @click="loadOlder"
-            >Load older</UButton
-          >
+        <div
+          v-if="loading && entries.length"
+          class="flex justify-center border-b border-default p-3"
+          role="status"
+        >
+          <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin text-toned" />
+          <span class="sr-only">Loading logs</span>
         </div>
         <p v-if="truncated" class="border-b border-default px-4 py-3 text-sm text-warning">
           Older log files are no longer available.
@@ -149,15 +191,11 @@
                 <UButton
                   color="neutral"
                   variant="ghost"
-                  size="xs"
-                  icon="i-lucide-ellipsis-vertical"
-                  trailing-icon="i-lucide-chevron-down"
+                  size="sm"
+                  icon="i-lucide-ellipsis"
+                  square
                   aria-label="Log actions"
-                  class="inline-flex h-5! align-[-0.2em] opacity-70 hover:opacity-100"
-                  :ui="{ base: 'min-h-0 min-w-0', leadingIcon: 'size-3', trailingIcon: 'size-3' }"
-                >
-                  <span class="text-[10px] font-medium">Actions</span>
-                </UButton>
+                />
               </UDropdownMenu>
               <button
                 type="button"
@@ -185,11 +223,11 @@
               @click="toggleRow(entry.id)"
             >
               <span
-                class="block text-sm text-default"
+                class="text-sm text-default"
                 :class="
                   expanded.has(entry.id) || wrap
-                    ? 'whitespace-pre-wrap wrap-break-word'
-                    : 'message-collapsed md:truncate'
+                    ? 'block whitespace-pre-wrap wrap-break-word'
+                    : 'line-clamp-2 md:block md:truncate'
                 "
                 >{{ entry.message
                 }}<span v-if="entry.exception" class="text-error/90"
@@ -200,14 +238,24 @@
             </button>
           </div>
         </article>
-        <p v-if="!loading && !filtered.length" class="p-10 text-center text-sm text-toned">
-          No matching logs.
-        </p>
-        <div v-if="loading && !entries.length" class="p-10 text-center">
-          <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-toned" />
+        <div
+          v-if="!filtered.length"
+          class="flex min-h-[55vh] items-center justify-center px-6 py-8 font-sans"
+        >
+          <div v-if="loading" class="text-center" role="status">
+            <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-toned" />
+            <span class="sr-only">Loading logs</span>
+          </div>
+          <UEmpty
+            v-else-if="!error"
+            variant="naked"
+            size="sm"
+            :icon="hasFilters ? 'i-lucide-filter-x' : 'i-lucide-scroll-text'"
+            :title="hasFilters ? 'No matching logs.' : 'No logs.'"
+          />
         </div>
       </div>
-    </div>
+    </section>
     <LogDetailModal v-model="detailsOpen" :log="selectedLog" />
   </main>
 </template>
@@ -222,7 +270,7 @@ import { copyText } from '~/utils';
 import { formatDate } from '~/utils/date';
 import type { LogEntry } from '~/types/logs';
 import { getLogLevel, logLevels, normalizeLogLevels, type LogLevel } from '~/utils/logLevels';
-import { serializeLogs } from '~/utils/logs';
+import { formatLogText, serializeLogs } from '~/utils/logs';
 
 const {
   entries,
@@ -236,8 +284,16 @@ const {
   refreshHistory,
   searchHistory,
   loadOlder: fetchOlder,
-  setLive,
 } = useLogs();
+const logStatusLabel = computed(() =>
+  loading.value
+    ? 'Loading logs'
+    : error.value
+      ? error.value
+      : live.value
+        ? 'Live log updates'
+        : 'Browsing older logs',
+);
 const container = ref<HTMLElement | null>(null);
 const query = ref('');
 const logger = ref<string | null>(null);
@@ -266,6 +322,10 @@ const levelFilterLabel = computed(() =>
     : selectedLevels.value.length
       ? selectedLevels.value.join(', ')
       : 'No levels',
+);
+const hasFilters = computed(
+  () =>
+    !!query.value.trim() || !!logger.value?.trim() || selectedLevels.value.length !== levels.length,
 );
 const detailsOpen = ref(false);
 const notify = useNotification();
@@ -302,7 +362,10 @@ const scrollBottom = (): void => {
 };
 const onScroll = (): void => {
   const node = container.value;
-  if (node) atBottom.value = node.scrollHeight - node.scrollTop - node.clientHeight < 24;
+  if (!node) return;
+  atBottom.value = node.scrollHeight - node.scrollTop - node.clientHeight < 24;
+  if (!atBottom.value && node.scrollTop < 50 && hasOlder.value && !loading.value && !error.value)
+    void loadOlder();
 };
 const toggleRow = (id: number): void => {
   const next = new Set(expanded.value);
@@ -337,21 +400,25 @@ const loadOlder = async (): Promise<void> => {
     });
 };
 const refresh = async (): Promise<void> => {
+  atBottom.value = true;
   await refreshHistory();
-  if (atBottom.value) await nextTick(scrollBottom);
+  await nextTick(scrollBottom);
 };
 const openDetails = (entry: LogEntry): void => {
   selectedLog.value = entry;
   detailsOpen.value = true;
 };
-const rendered = (entry: LogEntry): string =>
-  `${formatDate(entry.timestamp, 'timestamp')} ${entry.level.toUpperCase()} [${entry.logger}] ${entry.message}${entry.exception ? `: ${entry.exception.type}: ${entry.exception.message ?? ''}` : ''}`;
 const copyMenuItems = [
   [
     {
-      label: 'Copy rendered',
+      label: 'Copy text',
       icon: 'i-lucide-file-text',
-      onSelect: () => copyText(filtered.value.map(rendered).join('\n')),
+      onSelect: () => copyText(filtered.value.map(formatLogText).join('\n')),
+    },
+    {
+      label: 'Copy raw',
+      icon: 'i-lucide-braces',
+      onSelect: () => copyText(serializeLogs(filtered.value)),
     },
   ],
 ];
@@ -363,14 +430,14 @@ const logMenuItems = (entry: LogEntry) => [
       onSelect: () => openDetails(entry),
     },
     {
-      label: 'Copy message',
-      icon: 'i-lucide-message-square-text',
-      onSelect: () => copyText(entry.message),
+      label: 'Copy text',
+      icon: 'i-lucide-file-text',
+      onSelect: () => copyText(formatLogText(entry)),
     },
     {
-      label: 'Copy rendered',
-      icon: 'i-lucide-file-text',
-      onSelect: () => copyText(rendered(entry)),
+      label: 'Copy raw',
+      icon: 'i-lucide-braces',
+      onSelect: () => copyText(serializeLogs([entry])),
     },
   ],
 ];

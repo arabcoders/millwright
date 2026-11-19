@@ -4,7 +4,11 @@
     :title="target ? 'Edit notification target' : 'New notification target'"
     :dismissible="!saving"
     :close="{ disabled: saving }"
-    :ui="{ content: 'w-full sm:max-w-lg' }"
+    :ui="{
+      content: 'w-full sm:max-w-lg',
+      body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5',
+      footer: 'justify-end',
+    }"
     @update:open="handleOpenChange"
     @after:leave="clearForm"
   >
@@ -14,37 +18,58 @@
         class="space-y-4"
         @submit.prevent="emit('save', { name, url })"
       >
-        <UFormField label="Name" required>
-          <UInput
-            v-model="name"
-            class="w-full"
-            autocomplete="off"
-            :disabled="Boolean(target) || saving"
-            required
-          />
-        </UFormField>
-        <UFormField label="Apprise URL" required>
-          <UInput v-model="url" :disabled="saving" class="w-full" autocomplete="off" required />
-        </UFormField>
-        <p class="text-xs text-toned">
-          Find your service's URL format in the
-          <a
-            href="https://appriseit.com/services"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-primary underline hover:text-primary/80"
-            >Apprise documentation</a
-          >.
-        </p>
-        <p v-if="saveError" class="text-sm text-error">{{ saveError }}</p>
+        <div class="mw-card-padded-lg space-y-4">
+          <UFormField label="Name" required>
+            <UInput
+              v-model="name"
+              icon="i-lucide-bell"
+              class="w-full"
+              autocomplete="off"
+              :disabled="Boolean(target) || saving"
+              required
+            />
+          </UFormField>
+          <UFormField label="Apprise URL" required>
+            <UInput
+              v-model="url"
+              icon="i-lucide-link"
+              :disabled="saving"
+              class="w-full"
+              autocomplete="off"
+              required
+            />
+            <template #help>
+              Find your service's URL format in the
+              <a
+                href="https://appriseit.com/services"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-primary underline hover:text-primary/80"
+                >Apprise documentation</a
+              >.
+            </template>
+          </UFormField>
+        </div>
+        <UAlert
+          v-if="saveError"
+          color="error"
+          variant="soft"
+          icon="i-lucide-circle-alert"
+          :description="saveError"
+          :ui="{ description: 'wrap-anywhere' }"
+        />
       </form>
     </template>
     <template #footer>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <UButton type="submit" form="notificationTargetForm" icon="i-lucide-save" :loading="saving">
-          {{ target ? 'Save changes' : 'Add target' }}
-        </UButton>
-      </div>
+      <UButton
+        type="submit"
+        form="notificationTargetForm"
+        size="sm"
+        icon="i-lucide-save"
+        :loading="saving"
+      >
+        {{ target ? 'Save changes' : 'Add target' }}
+      </UButton>
     </template>
   </UModal>
 </template>

@@ -1,7 +1,7 @@
 # Flow recipes
 
-Use these examples as starting points for your own library. Build them under **Flows**, save the flow,
-and [run a dry run](usage.md#preview-a-flow) before assigning it to automatic processing.
+Run a [dry run](usage.md#preview-a-flow) before assigning a new flow to a library. Unless marked as a
+full import, JSON snippets below show step inputs or conditions, not whole flows.
 
 In the editor, **Start** connects to the first step. Each step has outputs that lead to another step or
 a result. **Done** accepts the converted file, **Skip** leaves it alone, and **Veto** rejects the result.
@@ -10,10 +10,8 @@ a result. **Done** accepts the converted file, **Skip** leaves it alone, and **V
 
 To convert video to HEVC in an MKV container:
 
-1. Add **Video transcode** and set its target to HEVC.
-2. Connect **Start** to that step.
-3. Connect its `plan` output to a **Done** result and `skip` to **Skip**.
-4. Save the flow and preview it against a few files.
+Connect **Start** to **Video transcode** with the target set to HEVC. Connect `plan` to **Done** and
+`skip` to **Skip**.
 
 Leave the encoder unset to use `libx265` for HEVC, `libx264` for AVC, or `libsvtav1` for AV1. Use quality
 mode to choose quality without a fixed bitrate. Try a sample to judge the quality and file size.
@@ -90,18 +88,14 @@ choose a path. A Japanese-audio condition doesn't remove other audio tracks.
 
 ## Remux and convert selected audio
 
-Use **Remux** when you want to change containers without re-encoding video. For example, choose MKV,
-AAC audio at `192k`, and DTS as the audio codec to convert. Other audio tracks remain copied.
-
-These are the step inputs, not a complete flow import:
+This **Remux** step changes the container to MKV and converts DTS tracks to AAC. Video and other
+audio tracks are copied:
 
 ```json
 {"container": "mkv", "audio_codec": "aac", "audio_bitrate": "192k", "audio_when_codecs": ["dts"]}
 ```
 
-Connect `plan` to **Done** and `skip` to **Skip**, as in the video example. Leave the audio-codec filter
-empty to convert all selected audio. Use the language and commentary options if you also want to narrow
-the track selection.
+Leave the audio-codec filter empty to convert all selected audio.
 
 The [`transcode` trash mode](recovery.md#retain-originals) keeps the original when audio is re-encoded.
 
@@ -124,19 +118,9 @@ Use **Embed sidecar metadata** to copy metadata from Kodi NFO or yt-dlp JSON fil
 For `Example.mkv`, put `Example.nfo` or `Example.info.json` beside it. Add **Embed sidecar metadata**
 before the remux or video step, and connect its `next` output to that step.
 
-The step offers these settings:
-
-| Setting                 | Default                | Choice                                                                |
-| ----------------------- | ---------------------- | --------------------------------------------------------------------- |
-| `existing_tags`         | `fill_missing`         | Fill missing tags, or use `overwrite` to replace supplied fields      |
-| `source_priority`       | `["nfo", "info_json"]` | Prefer NFO or JSON when both supply a tag                             |
-| `when_no_media_changes` | `skip`                 | Use `remux` to update tags without re-encoding                        |
-
-NFO files must describe a Kodi movie or episode. JSON must describe one yt-dlp video, not a playlist or
-channel. Missing sidecars are allowed. If tags aren't added, check the job log and confirm that the step
-runs before conversion.
-
-MP4 tag support varies by player. Try a file in your player before applying this to a library.
+NFO files must describe a Kodi movie or episode. JSON must describe one yt-dlp video, not a playlist
+or channel. To update tags when no conversion is needed, choose `remux` for `when_no_media_changes`.
+MP4 tag support varies by player.
 
 ## Job notifications
 
@@ -144,27 +128,21 @@ Create a target under **Notifications** using an [Apprise URL](https://appriseit
 example, name a target `ops`, then add **Notify** to your flow before its first conversion step.
 Connect its `next` output to the conversion.
 
-Choose the target and the outcomes you want to receive. For success, failure, and cancellation:
+For success, failure, and cancellation:
 
 ```json
 {"targets": ["ops"], "on": ["job.succeeded", "job.failed", "job.cancelled"]}
 ```
 
-Turn off **Enabled** to stop notifications without removing the step. Notifications can occasionally
-arrive more than once.
+Notifications can arrive more than once.
 
 ## Notify external applications
 
 Use **Notify external application** to tell another application when Millwright replaces a file.
 Supported applications are Radarr, Sonarr, Plex, Jellyfin, and Emby.
 
-1. Add the step to the flow's successful path.
-2. Select the application and enter its URL and API key or token.
-3. Add **Path mappings** if the application uses different paths for your files.
-4. Save the flow.
-
-Use the application's base URL, such as `https://example.org/sonarr`, without an API endpoint. Add a
-separate step for each application.
+Add a step to the flow's successful path for each application. Use its base URL, such as
+`https://example.org/sonarr`, without an API endpoint.
 
 Each mapping pairs a **Millwright path** with an **Application path**. For example:
 

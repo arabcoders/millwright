@@ -3,7 +3,9 @@ import {
   filterChangelog,
   formatCommitMessage,
   initialChangelogReleases,
+  isInstalledGroup,
   loadChangelog,
+  matchesSha,
   type ChangelogGroup,
 } from '../app/utils/changelog';
 
@@ -118,38 +120,65 @@ describe('commit history filtering', () => {
     expect(filterChangelog(groups, '  ')).toEqual(groups);
   });
 
-  test('limits visible releases', () => {
+  test('searches older releases', () => {
     const history = Array.from({ length: 11 }, (_, index) => ({
       ...groups[0]!,
       tag: `v0.1.${10 - index}`,
     }));
-    const visible = filterChangelog(history, '');
-    expect(visible).toHaveLength(10);
-    expect(visible.at(-1)?.tag).toBe('v0.1.1');
-    expect(filterChangelog(history, 'v0.1.0')).toEqual([]);
+    expect(filterChangelog(history, '')).toEqual(history);
+    expect(filterChangelog(history, 'v0.1.0')).toEqual([history.at(-1)!]);
   });
 });
 
 test('opens installed releases', () => {
-  expect(initialChangelogReleases(groups, 'dev', '11223344')).toEqual(['Unreleased']);
-  expect(initialChangelogReleases(groups, 'v0.1.0-alpha.1', 'abcdef')).toEqual([
+  expect(initialChangelogReleases(groups, '11223344')).toEqual(['Unreleased']);
+  expect(initialChangelogReleases(groups, 'abcdef')).toEqual(['Unreleased', 'v0.1.0-alpha.1']);
+});
+
+test('matches shortened hashes', () => {
+  expect(matchesSha(' AABBCCDD ', 'aabbccdd11223344')).toBe(true);
+  expect(matchesSha('aabbccdd11223344', ' AABBCCDD ')).toBe(true);
+  expect(matchesSha('aabbccdd11223344', '11223344')).toBe(false);
+  expect(
+    isInstalledGroup({ ...groups[0]!, full_sha: 'AABBCCDD', commits: [] }, ' aabbccdd11223344 '),
+  ).toBe(true);
+});
+
+test('matches release commits', () => {
+  const release = {
+    ...groups[1]!,
+    tag: 'nightly-build',
+    full_sha: '99887766',
+    commits: [{ ...groups[1]!.commits[0]!, full_sha: 'unknown' }],
+  };
+  expect(isInstalledGroup(release, ' ABCDEF0123456789 ')).toBe(true);
+  expect(initialChangelogReleases([groups[0]!, release], ' ABCDEF0123456789 ')).toEqual([
     'Unreleased',
-    'v0.1.0-alpha.1',
+    'nightly-build',
   ]);
 });
 
-test('uses version fallback', () => {
+test('opens older matches', () => {
   const history = [
-    groups[0]!,
-    ...['v0.1.10', 'v0.1.9', 'v0.1.8'].map((tag) => ({ ...groups[1]!, tag })),
+    ...Array.from({ length: 10 }, (_, index) => ({ ...groups[0]!, tag: `build-${index}` })),
+    groups[1]!,
   ];
-  expect(initialChangelogReleases(history, 'v0.1.9', '')).toEqual(['v0.1.10', 'v0.1.9']);
-  expect(initialChangelogReleases(history, 'dev', '')).toEqual([
-    'Unreleased',
-    'v0.1.10',
-    'v0.1.9',
-    'v0.1.8',
-  ]);
+  expect(initialChangelogReleases(history, 'abcdef01')).toEqual(history.map((group) => group.tag));
+});
+
+test('opens newest unmatched', () => {
+  expect(initialChangelogReleases(groups, '99887766')).toEqual(['Unreleased']);
+  expect(initialChangelogReleases([], '99887766')).toEqual([]);
+});
+
+test('rejects unavailable hashes', () => {
+  for (const unavailable of ['', '  ', ' UnKnOwN ']) {
+    expect(matchesSha(unavailable, 'aabbccdd')).toBe(false);
+    expect(matchesSha('aabbccdd', unavailable)).toBe(false);
+    expect(matchesSha(unavailable, unavailable)).toBe(false);
+    expect(isInstalledGroup(groups[0]!, unavailable)).toBe(false);
+    expect(initialChangelogReleases(groups, unavailable)).toEqual(['Unreleased']);
+  }
 });
 
 test('formats commit messages', () => {

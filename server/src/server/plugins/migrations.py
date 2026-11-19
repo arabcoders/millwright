@@ -268,9 +268,8 @@ def migrate_action(
             ):
                 result["plugin_id"] = change.target
                 changes.append(f"rename_plugin: {change.source} -> {change.target}")
-            elif isinstance(change, RenameField) and change.scope == "action":
-                if _rename_field(result, change, record):
-                    changes.append(f"rename_field (action): {change.source} -> {change.target}")
+            elif isinstance(change, RenameField) and change.scope == "action" and _rename_field(result, change, record):
+                changes.append(f"rename_field (action): {change.source} -> {change.target}")
         result["config_version"] = migration.to_version
         if migration is steps[-1] and result.get("plugin_id") is None:
             result["plugin_id"] = manifest.id

@@ -1,9 +1,9 @@
 # Millwright documentation
 
 ## Getting started
-- [project overview](../README.md): Basic introduction to Millwright.
+
 - [Installation](installation.md): Run Millwright and give it access to your media.
-- [Using Millwright](usage.md): Add a library, choose a flow, and try your first conversion.
+- [Using Millwright](usage.md): Set up libraries, preview flows, and control automatic processing.
 - [Flow recipes](recipes.md): Examples you can adapt to your library.
 
 ## Setup and maintenance
@@ -21,5 +21,3 @@
 - [Development guide](development.md): Build containers, test OIDC, and change the database schema.
 
 For HTTP endpoints and the OpenAPI schema, [enable the API reference](installation.md#api-reference).
-It's off by default.
-

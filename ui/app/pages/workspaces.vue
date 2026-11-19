@@ -137,22 +137,9 @@
     <UEmpty
       v-else-if="snapshot && !rows.length && !lastError"
       :title="summary?.summary.count ? 'No workspaces match these filters.' : 'No workspaces.'"
-      variant="naked"
-      :ui="{
-        root: 'gap-1 p-0 sm:p-0 lg:p-0',
-        header: 'max-w-none gap-1',
-        title: 'text-sm font-normal text-toned',
-      }"
-      class="mw-card py-10 sm:py-10 lg:py-10"
-    >
-      <template #leading>
-        <UIcon
-          :name="summary?.summary.count ? 'i-lucide-search-x' : 'i-lucide-folder-tree'"
-          class="size-6 text-toned"
-        />
-      </template>
-    </UEmpty>
-    <div v-else class="space-y-2">
+      :icon="summary?.summary.count ? 'i-lucide-search-x' : 'i-lucide-folder-tree'"
+    />
+    <div v-else-if="rows.length" class="mw-card divide-y divide-default" :aria-busy="loading">
       <DeferredContent v-for="row in rows" :key="row.workspace_id" :min-height="112" keep-mounted>
         <WorkspaceRowCard
           :workspace="row"

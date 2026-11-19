@@ -1,30 +1,18 @@
 # Authentication
 
-Create your account the first time you open Millwright. You can sign in with that username and password,
-or add OIDC to use an existing identity provider.
+Account registration closes after the first account is created. See the
+[security policy](../SECURITY.md#who-should-have-access) for access limits.
 
-Every account has full access to the instance. There are no read-only accounts or per-library permissions.
+## Recover access
 
-## Create the first account
-
-Open the web interface and choose a username and password. Finish this step before making Millwright
-accessible to other people. Account registration closes after the first account is created.
-
-## Change your password
-
-Open **Account**, enter your current password, and enter the new password twice. Choose **Change password**.
-You stay signed in on this browser. Your other browsers and devices must sign in again.
-
-## Reset a forgotten password
-
-You need terminal access to the server. From the directory containing `compose.yml`, run:
+Changing your password in **Account** signs out other devices but keeps the current browser signed in.
+If you've forgotten your password, run this from the directory containing `compose.yml`:
 
 ```bash
 docker compose exec server millwright auth reset-password --username owner
 ```
 
-Replace `owner` with your username. Enter the new password twice when prompted, then sign in again.
-The reset signs that account out on all devices.
+Replace `owner` with your username. A reset signs that account out on all devices.
 
 ## Configure OIDC
 
@@ -66,11 +54,5 @@ Restart Millwright, then test both password and OIDC login. If you use a reverse
 Remove the person's access at the provider. To end existing Millwright logins too, reset the mapped
 account's password. This signs everyone using that account out.
 
-Changing a local password doesn't stop someone who still has provider access from signing in through
-OIDC again. Likewise, logging out of Millwright doesn't log you out of the provider.
-
-## Back up your account
-
-Configuration exports don't include accounts. Include PostgreSQL in your
-[backup plan](recovery.md#database-and-filesystem-backups) if you want to preserve your login when
-recovering the instance.
+Someone with provider access can still sign in through OIDC after a password reset. Signing out of
+Millwright doesn't sign you out of the provider.

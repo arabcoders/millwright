@@ -1,8 +1,8 @@
 <template>
   <UApp>
-    <div class="min-h-screen bg-default text-default">
+    <div class="shell-surface min-h-dvh text-default">
       <div
-        class="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6 lg:px-8"
+        class="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6 lg:px-8"
       >
         <header class="mb-6 flex items-center justify-between border-b border-default pb-4">
           <NuxtLink

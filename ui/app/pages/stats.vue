@@ -1,5 +1,5 @@
 <template>
-  <main class="w-full min-w-0 max-w-full space-y-5">
+  <main class="w-full min-w-0 max-w-full space-y-6" :aria-busy="loading">
     <PageHeader page="stats">
       <template #actions
         ><div class="flex flex-wrap justify-end gap-2">
@@ -15,6 +15,9 @@
             value-key="value"
             v-model="libraryId"
             :items="libraryItems"
+            :placeholder="libraryId ? `Library #${libraryId}` : 'All libraries'"
+            :loading="librariesLoading"
+            :disabled="librariesLoading"
             size="sm"
             class="w-44"
             aria-label="Library"
@@ -24,7 +27,7 @@
             variant="outline"
             size="sm"
             icon="i-lucide-refresh-cw"
-            :loading="loading"
+            :loading="loading || librariesLoading"
             @click="reload"
             >Refresh</UButton
           >
@@ -32,47 +35,75 @@
       >
     </PageHeader>
     <UAlert
+      v-if="librariesError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      title="Could not load libraries"
+      :description="librariesError.message"
+    >
+      <template #actions>
+        <UButton
+          color="neutral"
+          variant="outline"
+          size="sm"
+          icon="i-lucide-refresh-cw"
+          :loading="librariesLoading"
+          @click="reload"
+          >Retry</UButton
+        >
+      </template>
+    </UAlert>
+    <UAlert
       v-if="error"
       color="error"
       variant="soft"
+      icon="i-lucide-triangle-alert"
       title="Statistics loading failed"
       :description="error"
     />
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <StatCard
-        label="Current files"
-        :value="(overview?.inventory.files ?? 0).toLocaleString('en')"
-        icon="i-lucide-files"
-        :hint="formatBytes(overview?.inventory.bytes ?? 0)"
-      />
-      <StatCard
-        label="Completed"
-        :value="(overview?.jobs.completed ?? 0).toLocaleString('en')"
-        icon="i-lucide-circle-check"
-        color="info"
-        :hint="
-          overview?.jobs.avg_duration_s
-            ? `Avg ${formatTime(overview.jobs.avg_duration_s)}`
-            : 'No duration recorded'
-        "
-      />
-      <StatCard
-        label="Saved in range"
-        :value="formatBytes(windowSaved)"
-        icon="i-lucide-calendar-range"
-        color="success"
-        :hint="`${windowFiles.toLocaleString('en')} successful jobs`"
-      />
-      <StatCard
-        label="Total saved"
-        :value="formatBytes(overview?.savings.totals.saved_bytes ?? 0)"
-        icon="i-lucide-hard-drive-download"
-        color="success"
-        :hint="`${(overview?.savings.totals.files ?? 0).toLocaleString('en')} successful processing jobs · ${overview?.savings.totals.avg_reduction_pct ?? 0}% avg reduction`"
-      />
-    </div>
-    <p v-if="loading" class="py-8 text-center text-sm text-toned">Loading statistics...</p>
-    <template v-else-if="overview">
+    <UAlert
+      v-if="loading"
+      color="info"
+      variant="soft"
+      icon="i-lucide-loader-circle"
+      title="Loading statistics"
+      :ui="{ icon: 'animate-spin' }"
+    />
+    <template v-if="overview">
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Current files"
+          :value="overview.inventory.files.toLocaleString('en')"
+          icon="i-lucide-files"
+          :hint="formatBytes(overview.inventory.bytes)"
+        />
+        <StatCard
+          label="Completed"
+          :value="overview.jobs.completed.toLocaleString('en')"
+          icon="i-lucide-circle-check"
+          color="info"
+          :hint="
+            overview.jobs.avg_duration_s
+              ? `Avg ${formatTime(overview.jobs.avg_duration_s)}`
+              : 'No duration recorded'
+          "
+        />
+        <StatCard
+          label="Saved in range"
+          :value="formatBytes(windowSaved)"
+          icon="i-lucide-calendar-range"
+          color="success"
+          :hint="`${windowFiles.toLocaleString('en')} successful jobs`"
+        />
+        <StatCard
+          label="Total saved"
+          :value="formatBytes(overview.savings.totals.saved_bytes)"
+          icon="i-lucide-hard-drive-download"
+          color="success"
+          :hint="`${overview.savings.totals.files.toLocaleString('en')} successful processing jobs · ${overview.savings.totals.avg_reduction_pct}% avg reduction`"
+        />
+      </div>
       <div class="grid gap-3 sm:grid-cols-2">
         <StatCard
           v-for="item in processingSavings"
@@ -92,7 +123,7 @@
       <div class="grid gap-4 xl:grid-cols-3">
         <section class="mw-card min-w-0 space-y-3 p-4">
           <div class="flex flex-wrap justify-between gap-1">
-            <h2 class="font-semibold text-highlighted">Space saved</h2>
+            <h2 class="text-sm font-semibold text-highlighted">Space saved</h2>
             <span class="text-xs text-toned">Selected range</span>
           </div>
           <Chart
@@ -108,7 +139,7 @@
         </section>
         <section class="mw-card min-w-0 space-y-3 p-4">
           <div class="flex flex-wrap justify-between gap-1">
-            <h2 class="font-semibold text-highlighted">Files added</h2>
+            <h2 class="text-sm font-semibold text-highlighted">Files added</h2>
             <span class="text-xs text-toned">First indexed</span>
           </div>
           <Chart
@@ -123,7 +154,7 @@
         </section>
         <section class="mw-card min-w-0 space-y-3 p-4">
           <div class="flex flex-wrap justify-between gap-1">
-            <h2 class="font-semibold text-highlighted">Media size added</h2>
+            <h2 class="text-sm font-semibold text-highlighted">Media size added</h2>
             <UTooltip
               text="Earliest retained pre-conversion sizes, grouped by first indexed date. Files without recorded input sizes use their current catalog size. This is not necessarily the original download size."
             >
@@ -150,7 +181,7 @@
       <section class="space-y-3" aria-label="Job outcomes">
         <div class="flex items-center gap-2">
           <UIcon name="i-lucide-list-checks" class="size-4 text-toned" />
-          <h2 class="font-semibold text-highlighted">Job outcomes</h2>
+          <h2 class="text-sm font-semibold text-highlighted">Job outcomes</h2>
         </div>
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <StatsDistributionCard
@@ -164,82 +195,87 @@
           />
         </div>
       </section>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-chart-no-axes-combined" class="size-4 text-toned" />
-        <h2 class="font-semibold text-highlighted">Current media inventory</h2>
-      </div>
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <StatsDistributionCard
-          title="Containers"
-          icon="i-lucide-box"
-          :values="overview.inventory.containers"
-        />
-        <StatsDistributionCard
-          title="Resolutions"
-          icon="i-lucide-monitor"
-          :values="overview.inventory.resolutions"
-        />
-        <StatsDistributionCard
-          title="Video codecs"
-          icon="i-lucide-film"
-          :values="overview.inventory.video_codecs"
-        >
-          <template #empty>No indexed video tracks.</template>
-        </StatsDistributionCard>
-        <StatsDistributionCard
-          title="Audio tracks by codec"
-          icon="i-lucide-music"
-          :values="overview.inventory.audio_codecs"
-        >
-          <template #empty>No indexed audio tracks.</template>
-        </StatsDistributionCard>
-        <StatsDistributionCard
-          title="Audio tracks by language"
-          icon="i-lucide-languages"
-          :values="overview.inventory.audio_languages"
-        >
-          <template #label="{ row }">{{ languageName(row.key) }}</template>
-          <template #empty>No indexed audio tracks.</template>
-        </StatsDistributionCard>
-        <StatsDistributionCard
-          title="Health status"
-          status-group="health"
-          icon="i-lucide-heart-pulse"
-          :values="overview.inventory.health_status"
-        />
-        <StatsDistributionCard
-          title="Subtitle tracks by codec"
-          icon="i-lucide-captions"
-          :values="overview.inventory.subtitle_codecs"
-        >
-          <template #empty>No indexed subtitle tracks.</template>
-        </StatsDistributionCard>
-        <StatsDistributionCard
-          title="Subtitle tracks by language"
-          icon="i-lucide-languages"
-          :values="overview.inventory.subtitle_languages"
-        >
-          <template #label="{ row }">{{ languageName(row.key) }}</template>
-          <template #empty>No indexed subtitle tracks.</template>
-        </StatsDistributionCard>
-        <StatsDistributionCard
-          title="Transcode status"
-          status-group="media"
-          icon="i-lucide-settings-2"
-          :values="overview.inventory.transcode_status"
-        />
-      </div>
-      <section class="mw-card space-y-3 p-4">
+      <section class="space-y-3" aria-label="Current media inventory">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-chart-no-axes-combined" class="size-4 text-toned" />
+          <h2 class="text-sm font-semibold text-highlighted">Current media inventory</h2>
+        </div>
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <StatsDistributionCard
+            title="Containers"
+            icon="i-lucide-box"
+            :values="overview.inventory.containers"
+          />
+          <StatsDistributionCard
+            title="Resolutions"
+            icon="i-lucide-monitor"
+            :values="overview.inventory.resolutions"
+          />
+          <StatsDistributionCard
+            title="Video codecs"
+            icon="i-lucide-film"
+            :values="overview.inventory.video_codecs"
+          >
+            <template #empty>No indexed video tracks.</template>
+          </StatsDistributionCard>
+          <StatsDistributionCard
+            title="Audio tracks by codec"
+            icon="i-lucide-music"
+            :values="overview.inventory.audio_codecs"
+          >
+            <template #empty>No indexed audio tracks.</template>
+          </StatsDistributionCard>
+          <StatsDistributionCard
+            title="Audio tracks by language"
+            icon="i-lucide-languages"
+            :values="overview.inventory.audio_languages"
+          >
+            <template #label="{ row }">{{ languageName(row.key) }}</template>
+            <template #empty>No indexed audio tracks.</template>
+          </StatsDistributionCard>
+          <StatsDistributionCard
+            title="Health status"
+            status-group="health"
+            icon="i-lucide-heart-pulse"
+            :values="overview.inventory.health_status"
+          />
+          <StatsDistributionCard
+            title="Subtitle tracks by codec"
+            icon="i-lucide-captions"
+            :values="overview.inventory.subtitle_codecs"
+          >
+            <template #empty>No indexed subtitle tracks.</template>
+          </StatsDistributionCard>
+          <StatsDistributionCard
+            title="Subtitle tracks by language"
+            icon="i-lucide-languages"
+            :values="overview.inventory.subtitle_languages"
+          >
+            <template #label="{ row }">{{ languageName(row.key) }}</template>
+            <template #empty>No indexed subtitle tracks.</template>
+          </StatsDistributionCard>
+          <StatsDistributionCard
+            title="Transcode status"
+            status-group="media"
+            icon="i-lucide-settings-2"
+            :values="overview.inventory.transcode_status"
+          />
+        </div>
+      </section>
+      <section class="space-y-3" aria-label="All-time savings by library">
         <div class="flex items-center gap-2">
           <UIcon name="i-lucide-library" class="size-4 text-toned" />
           <div>
-            <h2 class="font-semibold text-highlighted">All-time savings by library</h2>
+            <h2 class="text-sm font-semibold text-highlighted">All-time savings by library</h2>
             <p class="text-xs text-toned">All libraries</p>
           </div>
         </div>
-        <p v-if="!overview.libraries.length" class="text-sm text-toned">
-          No library savings available.
-        </p>
+        <UEmpty
+          v-if="!overview.libraries.length"
+          size="sm"
+          icon="i-lucide-library"
+          title="No library savings available."
+        />
         <div v-else class="overflow-x-auto">
           <UTable :data="overview.libraries" :columns="libraryColumns">
             <template #files-cell="{ row }"
@@ -349,7 +385,12 @@ const rangeItems = [7, 30, 90, 365].map((value) => ({
 }));
 const days = useStorage('stats_range_days', 30);
 const libraryId = useStorage('stats_library_id', 0);
-const { items: libraries, ensure: ensureLibraries } = useLibraries();
+const {
+  items: libraries,
+  isLoading: librariesLoading,
+  lastError: librariesError,
+  ensure: ensureLibraries,
+} = useLibraries();
 const {
   overview,
   libraryTotals,
@@ -449,12 +490,16 @@ const windowFiles = computed(() =>
   (overview.value?.savings.series ?? []).reduce((sum, point) => sum + point.files, 0),
 );
 const formatDay = (ts: DateInput) => formatDate(ts, 'shortDate');
-const reload = () => loadOverview(days.value, libraryId.value);
-onMounted(async () => {
+const reload = async (): Promise<void> => {
   await ensureLibraries();
-  if (libraryId.value && !libraries.value.some((library) => library.id === libraryId.value)) {
+  if (
+    !librariesError.value &&
+    libraryId.value &&
+    !libraries.value.some((library) => library.id === libraryId.value)
+  ) {
     libraryId.value = 0;
-  } else reload();
-});
+  } else await loadOverview(days.value, libraryId.value);
+};
+onMounted(reload);
 watch([days, libraryId], reload);
 </script>

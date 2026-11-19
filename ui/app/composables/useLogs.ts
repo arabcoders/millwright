@@ -144,16 +144,12 @@ export const useLogs = () => {
     }
   };
 
-  const setLive = (value: boolean): void => {
-    live.value = value;
-    if (!value) {
-      streamController?.abort();
-      streamController = null;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      return;
-    }
-    void fetchHistory().then(connectStream);
+  const pauseLive = (): void => {
+    live.value = false;
+    streamController?.abort();
+    streamController = null;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   };
   const handleVisibility = (): void => {
     if (document.visibilityState === 'visible' && live.value) void connectStream();
@@ -174,7 +170,12 @@ export const useLogs = () => {
     }
     if (live.value && document.visibilityState === 'visible') void connectStream();
   };
-  const refreshHistory = (): Promise<void> => fetchHistory();
+  const refreshHistory = async (): Promise<void> => {
+    live.value = true;
+    await fetchHistory();
+    if (mounted && live.value && !error.value && document.visibilityState === 'visible')
+      void connectStream();
+  };
   const searchHistory = async (
     query: string,
     levels: string[] = [],
@@ -188,7 +189,7 @@ export const useLogs = () => {
     await fetchHistory();
   };
   const loadOlder = (): Promise<void> => {
-    setLive(false);
+    pauseLive();
     return fetchHistory(true);
   };
   onBeforeUnmount(() => {
@@ -210,7 +211,6 @@ export const useLogs = () => {
     refreshHistory,
     searchHistory,
     loadOlder,
-    setLive,
     latestId,
   };
 };

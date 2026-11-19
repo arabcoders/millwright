@@ -29,20 +29,26 @@
     </PageHeader>
     <UAlert
       v-if="error"
+      class="mx-auto w-full max-w-4xl"
       color="error"
       variant="soft"
       icon="i-lucide-triangle-alert"
       title="Settings request failed"
       :description="error"
     />
-    <USkeleton v-if="loading && !draft" class="h-80 rounded-lg" />
-    <form v-if="draft" id="settingsForm" class="space-y-6" @submit.prevent="saveSettings">
-      <fieldset
-        :disabled="loading || saving"
-        class="grid items-start gap-6 xl:grid-cols-2 2xl:grid-cols-3"
-      >
-        <section class="mw-card space-y-4 p-4">
-          <h2 class="font-semibold text-highlighted">Processing</h2>
+    <USkeleton v-if="loading && !draft" class="mx-auto h-80 w-full max-w-4xl rounded-lg" />
+    <form
+      v-if="draft"
+      id="settingsForm"
+      class="mx-auto w-full max-w-4xl"
+      @submit.prevent="saveSettings"
+    >
+      <fieldset :disabled="loading || saving" class="min-w-0 space-y-4">
+        <section class="mw-card-padded-lg space-y-4">
+          <h2 class="flex items-center gap-2 font-semibold text-highlighted">
+            <UIcon name="i-lucide-workflow" class="size-5 text-toned" aria-hidden="true" />
+            Processing
+          </h2>
           <div class="grid gap-4 md:grid-cols-2">
             <UFormField label="Health checks"
               ><USelect v-model="draft.healthcheck_location" :items="locations" class="w-full"
@@ -63,8 +69,11 @@
             label="Use Hardware acceleration when available"
           />
         </section>
-        <section class="mw-card space-y-4 p-4">
-          <h2 class="font-semibold text-highlighted">Server limits</h2>
+        <section class="mw-card-padded-lg space-y-4">
+          <h2 class="flex items-center gap-2 font-semibold text-highlighted">
+            <UIcon name="i-lucide-gauge" class="size-5 text-toned" aria-hidden="true" />
+            Server limits
+          </h2>
           <div class="grid gap-4 sm:grid-cols-2">
             <UFormField
               v-for="field in capacityFields"
@@ -83,8 +92,11 @@
             </UFormField>
           </div>
         </section>
-        <section class="mw-card space-y-4 p-4">
-          <h2 class="font-semibold text-highlighted">Playback</h2>
+        <section class="mw-card-padded-lg space-y-4">
+          <h2 class="flex items-center gap-2 font-semibold text-highlighted">
+            <UIcon name="i-lucide-monitor-play" class="size-5 text-toned" aria-hidden="true" />
+            Playback
+          </h2>
           <div class="grid gap-4 sm:grid-cols-2">
             <UFormField
               v-for="field in playbackFields"
@@ -103,8 +115,11 @@
             </UFormField>
           </div>
         </section>
-        <section class="mw-card space-y-4 p-4">
-          <h2 class="font-semibold text-highlighted">Scanner filters</h2>
+        <section class="mw-card-padded-lg space-y-4">
+          <h2 class="flex items-center gap-2 font-semibold text-highlighted">
+            <UIcon name="i-lucide-list-filter" class="size-5 text-toned" aria-hidden="true" />
+            Scanner filters
+          </h2>
           <div class="space-y-4">
             <UFormField label="Extensions"
               ><UInput v-model="containers" placeholder="mkv, mp4, avi" class="w-full"
@@ -114,8 +129,11 @@
             /></UFormField>
           </div>
         </section>
-        <section class="mw-card space-y-4 p-4">
-          <h2 class="font-semibold text-highlighted">Retention and login sessions</h2>
+        <section class="mw-card-padded-lg space-y-4">
+          <h2 class="flex items-center gap-2 font-semibold text-highlighted">
+            <UIcon name="i-lucide-history" class="size-5 text-toned" aria-hidden="true" />
+            Retention and login sessions
+          </h2>
           <div class="grid gap-4 md:grid-cols-2">
             <UFormField
               label="Keep job history (days)"

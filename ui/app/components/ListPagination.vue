@@ -1,7 +1,7 @@
 <template>
   <nav
     :aria-label="`${label} pagination (${position})`"
-    class="flex flex-wrap items-center justify-between gap-3"
+    class="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-3"
   >
     <div class="flex min-w-0 flex-wrap items-center gap-2">
       <slot />
@@ -13,17 +13,18 @@
         }}
       </span>
     </div>
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
       <USelectMenu
         value-key="value"
         :model-value="limit"
         :items="pageSizeItems"
         size="sm"
+        class="w-36 shrink-0"
         :aria-label="`${label} per page`"
         :disabled="disabled"
         @update:model-value="(value) => value !== undefined && emit('update:limit', value)"
       />
-      <UFieldGroup size="sm">
+      <UFieldGroup size="sm" class="min-w-0 basis-64 grow sm:basis-auto sm:grow-0">
         <UButton
           color="neutral"
           variant="outline"
@@ -42,7 +43,7 @@
           color="neutral"
           variant="outline"
           size="sm"
-          class="min-w-44"
+          class="min-w-0 flex-1 sm:min-w-40"
           :aria-label="`Jump to ${label.toLowerCase()} page`"
           :disabled="disabled"
           @update:model-value="changePage"
@@ -87,7 +88,7 @@ const pageSizeItems: Array<{ label: string; value: number }> = LIST_PAGE_SIZES.m
   value,
 }));
 const currentPage = computed(() => Math.floor(props.offset / props.limit) + 1);
-const pageCount = computed(() => Math.max(currentPage.value, Math.ceil(props.total / props.limit)));
+const pageCount = computed(() => Math.max(1, Math.ceil(props.total / props.limit)));
 const pageItems = computed(() =>
   Array.from({ length: pageCount.value }, (_, index) => ({
     label: `Page ${index + 1}`,

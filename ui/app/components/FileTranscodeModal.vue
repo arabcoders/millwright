@@ -8,27 +8,29 @@
   >
     <template #body>
       <div class="space-y-5">
-        <div class="flex min-w-0 items-start gap-3">
-          <span class="mw-detail-icon size-10 shrink-0">
-            <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
-          </span>
-          <UTooltip :text="filePath">
-            <p class="min-w-0 truncate text-lg font-semibold text-highlighted">
-              {{ filePath.split(/[\\/]/).at(-1) || filePath }}
-            </p>
-          </UTooltip>
+        <div class="mw-card-padded-lg space-y-4">
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="mw-detail-icon size-10 shrink-0">
+              <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
+            </span>
+            <UTooltip :text="filePath">
+              <p tabindex="0" class="min-w-0 truncate text-lg font-semibold text-highlighted">
+                {{ filePath.split(/[\\/]/).at(-1) || filePath }}
+              </p>
+            </UTooltip>
+          </div>
+          <UFormField label="Flow">
+            <USelectMenu
+              v-model="selectedFlowId"
+              :items="flowItems"
+              value-key="value"
+              placeholder="Pick a flow"
+              :loading="loading"
+              :disabled="loading || !!error || !flows.length"
+              class="w-full"
+            />
+          </UFormField>
         </div>
-        <UFormField label="Flow">
-          <USelectMenu
-            v-model="selectedFlowId"
-            :items="flowItems"
-            value-key="value"
-            placeholder="Pick a flow"
-            :loading="loading"
-            :disabled="loading || !!error || !flows.length"
-            class="w-full"
-          />
-        </UFormField>
         <UAlert
           v-if="error"
           color="error"
@@ -48,10 +50,7 @@
       </div>
     </template>
     <template #footer>
-      <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="outline" @click="$emit('update:open', false)">
-          Cancel
-        </UButton>
+      <div class="flex w-full flex-wrap justify-end gap-2">
         <UButton
           color="neutral"
           variant="outline"

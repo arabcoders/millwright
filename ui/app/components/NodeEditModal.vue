@@ -4,39 +4,75 @@
     :title="`Edit ${props.node?.display_name ?? 'node'}`"
     :dismissible="!saving"
     :close="{ disabled: saving }"
-    :ui="{ content: 'w-full sm:max-w-md' }"
+    :ui="{
+      content: 'w-full sm:max-w-md',
+      title: 'wrap-anywhere',
+      body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5',
+      footer: 'justify-end',
+    }"
     @update:open="handleOpenChange"
   >
     <template #body>
-      <form v-if="props.node" id="nodeLimitForm" class="space-y-2" @submit.prevent="submit">
-        <UFormField label="Display name" required>
-          <UInput v-model="displayName" :disabled="saving" required class="w-full" />
-        </UFormField>
-        <UFormField v-for="limit in limits" :key="limit.key" :label="limit.label" required>
+      <form v-if="props.node" id="nodeLimitForm" class="space-y-5" @submit.prevent="submit">
+        <UAlert
+          v-if="saveError"
+          color="error"
+          variant="soft"
+          icon="i-lucide-circle-alert"
+          title="Could not save node"
+          :description="saveError"
+        />
+        <UFormField
+          label="Display name"
+          :error="!displayName.trim() && 'Enter a display name.'"
+          required
+        >
           <UInput
-            v-model.number="draft[limit.key]"
-            type="number"
-            :min="limit.min"
-            :step="1"
+            v-model="displayName"
+            icon="i-lucide-server"
             :disabled="saving"
             required
             class="w-full"
           />
         </UFormField>
+        <section class="mw-card-padded-lg space-y-4">
+          <h3 class="flex items-center gap-2 font-semibold text-highlighted">
+            <UIcon name="i-lucide-gauge" class="size-5 text-toned" aria-hidden="true" />
+            Job limits
+          </h3>
+          <UFormField
+            v-for="limit in limits"
+            :key="limit.key"
+            :label="limit.label"
+            :error="
+              (!Number.isInteger(draft[limit.key]) || draft[limit.key] < limit.min) &&
+              `Enter a whole number of at least ${limit.min}.`
+            "
+            required
+          >
+            <UInput
+              v-model.number="draft[limit.key]"
+              type="number"
+              :min="limit.min"
+              :step="1"
+              :disabled="saving"
+              required
+              class="w-full"
+            />
+          </UFormField>
+        </section>
       </form>
     </template>
     <template #footer>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <UButton
-          type="submit"
-          form="nodeLimitForm"
-          icon="i-lucide-save"
-          :loading="saving"
-          :disabled="!valid || saving"
-          :title="!valid ? 'Check the name and limits.' : undefined"
-          >Save changes</UButton
-        >
-      </div>
+      <UButton
+        type="submit"
+        form="nodeLimitForm"
+        size="sm"
+        icon="i-lucide-save"
+        :loading="saving"
+        :disabled="!valid || saving"
+        >Save changes</UButton
+      >
     </template>
   </UModal>
 </template>
@@ -48,6 +84,7 @@ import type { NodeChanges, NodeRow } from '~/types/api';
 const props = defineProps<{
   node: NodeRow | null;
   saving: boolean;
+  saveError: string;
 }>();
 
 const emit = defineEmits<{

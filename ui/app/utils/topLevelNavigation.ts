@@ -5,6 +5,7 @@ export type SectionId = 'overview' | 'media' | 'processing' | 'configuration' | 
 type NavSection = {
   id: SectionId;
   label: string;
+  icon: string;
 };
 
 type NavDefinition = {
@@ -39,11 +40,11 @@ type LocationPath = {
 };
 
 const SECTIONS: Array<NavSection> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'media', label: 'Media' },
-  { id: 'processing', label: 'Processing' },
-  { id: 'configuration', label: 'Configuration' },
-  { id: 'documentation', label: 'Documentation' },
+  { id: 'overview', label: 'Overview', icon: 'i-lucide-layout-dashboard' },
+  { id: 'media', label: 'Media', icon: 'i-lucide-folders' },
+  { id: 'processing', label: 'Processing', icon: 'i-lucide-workflow' },
+  { id: 'configuration', label: 'Configuration', icon: 'i-lucide-settings' },
+  { id: 'documentation', label: 'Documentation', icon: 'i-lucide-book-open' },
 ];
 
 const NavItems: Array<NavDefinition> = [
@@ -170,7 +171,7 @@ const NavItems: Array<NavDefinition> = [
     id: 'webhooks',
     section: 'configuration',
     group: 'configuration',
-    label: 'Incoming webhooks',
+    label: 'Webhooks',
     description:
       'Receive file and folder updates from other apps and scan the affected library paths.',
     icon: 'i-lucide-webhook',
@@ -190,7 +191,7 @@ const NavItems: Array<NavDefinition> = [
     id: 'system-operations',
     section: 'configuration',
     group: 'configuration',
-    label: 'System operations',
+    label: 'System',
     description: 'Export or restore configuration backups and reset server data.',
     icon: 'i-lucide-hard-drive-download',
     to: '/system-operations',

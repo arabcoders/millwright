@@ -41,6 +41,7 @@
               v-model="row.key"
               :items="facetOptions"
               placeholder="Facet key"
+              :aria-label="`Facet key ${rowIndex + 1}`"
               size="sm"
               class="min-w-44 flex-1"
             />
@@ -49,8 +50,8 @@
               :items="OPERATORS"
               value-key="value"
               size="sm"
-              class="w-20"
-              aria-label="Operator"
+              class="w-40"
+              :aria-label="`Operator ${rowIndex + 1}`"
             />
             <UInput
               v-if="isNumericOperand(row, factType(row.key))"
@@ -59,14 +60,15 @@
               step="any"
               size="sm"
               class="min-w-44 flex-1"
-              aria-label="Value"
+              :aria-label="`Value ${rowIndex + 1}`"
             />
             <UInput
               v-else
               :model-value="String(row.value)"
               size="sm"
               class="min-w-44 flex-1"
-              aria-label="Value"
+              :aria-label="`Value ${rowIndex + 1}`"
+              :placeholder="isListOperand(row, factType(row.key)) ? 'JSON list' : undefined"
               @update:model-value="(value) => (row.value = value)"
             />
             <UButton
@@ -98,6 +100,7 @@
               size="xs"
               color="neutral"
               :variant="condition.mode === 'all' ? 'solid' : 'soft'"
+              :aria-pressed="condition.mode === 'all'"
               @click="condition.mode = 'all'"
             >
               all
@@ -106,6 +109,7 @@
               size="xs"
               color="neutral"
               :variant="condition.mode === 'any' ? 'solid' : 'soft'"
+              :aria-pressed="condition.mode === 'any'"
               @click="condition.mode = 'any'"
             >
               any
@@ -123,6 +127,7 @@ import type { FlowFact } from '~/types/api';
 import {
   OPERATORS,
   isNumericOperand,
+  isListOperand,
   addConditionRow,
   type DraftCondition,
 } from '~/utils/condition';

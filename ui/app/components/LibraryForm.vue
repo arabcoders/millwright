@@ -1,20 +1,34 @@
 <template>
-  <form id="libraryForm" autocomplete="off" class="space-y-5" @submit.prevent="submitForm">
-    <section class="space-y-3" aria-labelledby="library-details-heading">
+  <form id="libraryForm" autocomplete="off" class="space-y-4" @submit.prevent="submitForm">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-details-heading">
       <h3
         id="library-details-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
       >
-        <UIcon name="i-lucide-folder-tree" class="size-5" />
+        <UIcon name="i-lucide-folder-tree" class="size-5 text-toned" aria-hidden="true" />
         Library
       </h3>
       <div class="grid gap-4 lg:grid-cols-2">
         <UFormField label="Name" description="Used in job lists." required>
-          <UInput v-model="name" placeholder="movies-hevc" class="w-full" />
+          <UInput
+            v-model="name"
+            placeholder="movies-hevc"
+            icon="i-lucide-folder-tree"
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField label="Flow" description="Processes files found in this library.">
-          <USelectMenu v-model="flowId" :items="flowItems" value-key="value" class="w-full" />
+          <USelectMenu
+            v-model="flowId"
+            :items="flowItems"
+            value-key="value"
+            class="w-full"
+            :ui="{
+              value: 'wrap-anywhere whitespace-normal text-start',
+              itemLabel: 'wrap-anywhere whitespace-normal',
+            }"
+          />
         </UFormField>
       </div>
 
@@ -24,27 +38,30 @@
         required
       >
         <div class="space-y-2">
-          <div v-for="(_, index) in roots" :key="index" class="flex gap-2">
-            <UInput
-              v-model="roots[index]"
-              placeholder="/media/movies"
-              class="w-full"
-              :aria-label="`Folder ${index + 1}`"
-            />
+          <div v-for="(_, index) in roots" :key="index" class="flex min-w-0 items-center gap-2">
+            <UFieldGroup size="md" class="min-w-0 flex-1">
+              <UInput
+                v-model="roots[index]"
+                placeholder="/media/movies"
+                class="w-full min-w-0 flex-1"
+                :aria-label="`Folder ${index + 1}`"
+              />
+
+              <UButton
+                type="button"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-folder-open"
+                aria-label="Browse folders"
+                @click="openPicker(index)"
+              />
+            </UFieldGroup>
 
             <UButton
               type="button"
               color="neutral"
               variant="outline"
-              icon="i-lucide-folder-open"
-              aria-label="Browse folders"
-              @click="openPicker(index)"
-            />
-
-            <UButton
-              type="button"
-              color="neutral"
-              variant="outline"
+              size="sm"
               icon="i-lucide-trash"
               aria-label="Remove folder"
               :disabled="roots.length === 1"
@@ -56,6 +73,7 @@
             type="button"
             color="neutral"
             variant="outline"
+            size="sm"
             icon="i-lucide-plus"
             aria-label="Add folder"
             @click="roots.push('')"
@@ -66,12 +84,12 @@
       </UFormField>
     </section>
 
-    <section class="space-y-3" aria-labelledby="library-scanning-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-scanning-heading">
       <h3
         id="library-scanning-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
       >
-        <UIcon name="i-lucide-radar" class="size-5" />
+        <UIcon name="i-lucide-radar" class="size-5 text-toned" aria-hidden="true" />
         Scanning
       </h3>
       <div class="grid gap-4 sm:grid-cols-2">
@@ -161,12 +179,12 @@
       </div>
     </section>
 
-    <section class="space-y-3" aria-labelledby="library-cutoff-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-cutoff-heading">
       <h3
         id="library-cutoff-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
       >
-        <UIcon name="i-lucide-calendar-range" class="size-5" />
+        <UIcon name="i-lucide-calendar-range" class="size-5 text-toned" aria-hidden="true" />
         Automatic processing
       </h3>
       <UFormField
@@ -203,12 +221,12 @@
       </p>
     </section>
 
-    <section class="space-y-3" aria-labelledby="library-timing-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-timing-heading">
       <h3
         id="library-timing-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
       >
-        <UIcon name="i-lucide-clock" class="size-5" />
+        <UIcon name="i-lucide-clock" class="size-5 text-toned" aria-hidden="true" />
         Job timing
       </h3>
       <UFormField
@@ -227,16 +245,16 @@
         :label="`Schedule (${timezone})`"
         description="Choose when jobs can run for this library."
       >
-        <ScheduleEditor v-model="schedule" :error="error" />
+        <ScheduleEditor v-model="schedule" />
       </UFormField>
     </section>
 
-    <section class="space-y-3" aria-labelledby="library-retention-heading">
+    <section class="mw-card-padded-lg space-y-4" aria-labelledby="library-retention-heading">
       <h3
         id="library-retention-heading"
         class="flex items-center gap-2 text-base font-semibold text-highlighted"
       >
-        <UIcon name="i-lucide-trash-2" class="size-5" />
+        <UIcon name="i-lucide-trash-2" class="size-5 text-toned" aria-hidden="true" />
         File retention
       </h3>
       <div class="grid gap-4 sm:grid-cols-2">
@@ -298,7 +316,6 @@ import type {
 const props = defineProps<{
   library: LibraryRow | null;
   flowItems: Array<{ label: string; value: number }>;
-  error?: string | null;
 }>();
 
 const emit = defineEmits<{

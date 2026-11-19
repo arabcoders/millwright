@@ -1,38 +1,38 @@
 <template>
   <UModal
-    v-model:open="open"
+    :open="open"
     title="Account"
     :dismissible="!busy"
     :close="{ disabled: busy }"
-    :ui="{ content: 'max-w-md' }"
+    :ui="{ content: 'w-full sm:max-w-md', body: 'max-h-[80vh] overflow-y-auto p-4 sm:p-5' }"
+    @update:open="handleOpenChange"
     @after:leave="clearForm"
   >
     <template #body>
-      <div class="space-y-5">
-        <section class="space-y-3">
+      <div class="space-y-4">
+        <section class="mw-card-padded-lg space-y-4">
           <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-user-round" class="size-5" />
+            <UIcon name="i-lucide-user-round" class="size-5 text-toned" aria-hidden="true" />
             <p class="text-base font-semibold text-highlighted">Account details</p>
           </div>
-          <div class="divide-y divide-default rounded-sm border border-default bg-elevated/40">
-            <div class="flex items-center gap-3 p-3">
-              <UIcon name="i-lucide-user" class="size-4 shrink-0 text-toned" />
-              <div class="min-w-0">
-                <p class="text-xs font-medium text-toned">Username</p>
-                <p class="truncate font-semibold text-highlighted">{{ username }}</p>
-              </div>
+          <dl>
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs font-medium text-muted">Username</dt>
+              <dd class="wrap-anywhere text-sm font-medium text-highlighted">
+                <bdi>{{ username }}</bdi>
+              </dd>
             </div>
-          </div>
+          </dl>
           <UBadge v-if="apiKey" color="neutral" variant="soft" size="sm"> API key access </UBadge>
         </section>
         <form
           v-if="!apiKey"
           id="changePasswordForm"
-          class="space-y-4"
+          class="mw-card-padded-lg space-y-4"
           @submit.prevent="changePassword"
         >
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-key-round" class="size-5" />
+            <UIcon name="i-lucide-key-round" class="size-5 text-toned" aria-hidden="true" />
             Change password
           </h3>
           <UFormField label="Current password" required>
@@ -65,16 +65,24 @@
               class="w-full"
             />
           </UFormField>
-          <p v-if="saveError" class="text-sm text-error">{{ saveError }}</p>
+          <UAlert
+            v-if="saveError"
+            color="error"
+            variant="soft"
+            icon="i-lucide-circle-alert"
+            :description="saveError"
+            :ui="{ description: 'wrap-anywhere' }"
+          />
         </form>
       </div>
     </template>
 
     <template #footer>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <div class="flex w-full flex-wrap items-center justify-between gap-2">
         <UButton
           color="error"
-          variant="soft"
+          variant="outline"
+          size="sm"
           icon="i-lucide-log-out"
           :loading="loggingOut"
           :disabled="busy"
@@ -87,6 +95,7 @@
           v-if="!apiKey"
           type="submit"
           form="changePasswordForm"
+          size="sm"
           icon="i-lucide-save"
           :loading="saving"
           :disabled="busy"
@@ -113,6 +122,17 @@ const currentPassword = ref('');
 const password = ref('');
 const confirmation = ref('');
 const saveError = ref('');
+const dirty = useDirtyState(
+  computed(() => ({
+    currentPassword: currentPassword.value,
+    password: password.value,
+    confirmation: confirmation.value,
+  })),
+);
+dirty.markClean();
+const { handleOpenChange } = useDirtyCloseGuard(open, dirty.isDirty, () => {
+  if (!busy.value) open.value = false;
+});
 
 const me = computed(() => auth.status.value);
 const apiKey = computed(() => me.value?.auth_method === 'api_key');
@@ -123,6 +143,7 @@ const clearForm = (): void => {
   password.value = '';
   confirmation.value = '';
   saveError.value = '';
+  dirty.markClean();
 };
 
 const changePassword = async (): Promise<void> => {

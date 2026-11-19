@@ -8,41 +8,45 @@
       <div class="space-y-5">
         <section class="space-y-3">
           <div class="flex items-start gap-3">
-            <span class="mw-detail-icon size-10 shrink-0">
-              <UIcon name="i-lucide-puzzle" class="size-5" />
-            </span>
+            <UIcon
+              name="i-lucide-puzzle"
+              class="mt-1 size-5 shrink-0 text-toned"
+              aria-hidden="true"
+            />
             <div class="min-w-0">
-              <h2 class="text-lg font-semibold text-highlighted">{{ plugin.manifest.name }}</h2>
-              <p class="break-all text-sm text-toned">{{ plugin.manifest.id }}</p>
+              <h2 class="wrap-anywhere text-lg font-semibold text-highlighted">
+                {{ plugin.manifest.name }}
+              </h2>
+              <p class="wrap-anywhere text-sm text-toned">{{ plugin.manifest.id }}</p>
             </div>
           </div>
-          <p class="text-sm text-toned">{{ plugin.manifest.description }}</p>
+          <p class="wrap-anywhere text-sm text-toned">{{ plugin.manifest.description }}</p>
         </section>
-        <section class="space-y-3">
+        <section class="space-y-4 border-t border-default pt-5">
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-info" class="size-5" />
+            <UIcon name="i-lucide-info" class="size-5 text-toned" aria-hidden="true" />
             Plugin metadata
           </h3>
-          <dl class="grid gap-3 text-sm sm:grid-cols-3">
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">Kind</dt>
-              <dd class="wrap-break-word">{{ plugin.manifest.kind }}</dd>
+          <dl class="grid min-w-0 gap-x-8 gap-y-4 text-sm sm:grid-cols-3">
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs text-muted">Kind</dt>
+              <dd class="wrap-anywhere">{{ plugin.manifest.kind }}</dd>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">Version</dt>
-              <dd class="wrap-break-word">{{ plugin.manifest.version }}</dd>
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs text-muted">Version</dt>
+              <dd class="wrap-anywhere">{{ plugin.manifest.version }}</dd>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">Source</dt>
-              <dd class="wrap-break-word">{{ plugin.source }}</dd>
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs text-muted">Source</dt>
+              <dd class="wrap-anywhere">{{ plugin.source }}</dd>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">State</dt>
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs text-muted">State</dt>
               <dd><StatusBadge :status="plugin.state" group="plugin" /></dd>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">Author</dt>
-              <dd class="wrap-break-word">
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs text-muted">Author</dt>
+              <dd class="wrap-anywhere">
                 <a
                   :href="plugin.manifest.url"
                   target="_blank"
@@ -52,15 +56,15 @@
                 >
               </dd>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">Requires</dt>
-              <dd class="wrap-break-word">
+            <div class="min-w-0 space-y-1">
+              <dt class="text-xs text-muted">Requires</dt>
+              <dd class="wrap-anywhere">
                 {{ plugin.manifest.requires.length ? plugin.manifest.requires.join(', ') : 'None' }}
               </dd>
             </div>
-            <div class="min-w-0">
-              <dt class="text-xs text-toned">Required plugins</dt>
-              <dd class="wrap-break-word">
+            <div class="min-w-0 space-y-1 sm:col-span-3">
+              <dt class="text-xs text-muted">Required plugins</dt>
+              <dd class="wrap-anywhere">
                 {{
                   plugin.manifest.require_plugins.length
                     ? plugin.manifest.require_plugins.join(', ')
@@ -70,41 +74,42 @@
             </div>
           </dl>
         </section>
-        <section v-if="Object.keys(plugin.manifest.facets).length" class="space-y-3">
+        <section
+          v-if="Object.keys(plugin.manifest.facets).length"
+          class="space-y-3 border-t border-default pt-5"
+        >
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-info" class="size-5" />
+            <UIcon name="i-lucide-info" class="size-5 text-toned" aria-hidden="true" />
             Provided facts
           </h3>
-          <div class="space-y-2">
+          <div class="divide-y divide-default">
             <div
               v-for="[key, type] in Object.entries(plugin.manifest.facets)"
               :key="key"
-              class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-elevated/40 p-3 text-sm"
+              class="flex min-w-0 flex-wrap items-center justify-between gap-2 py-3 text-sm"
             >
-              <span class="break-all">{{
+              <span class="wrap-anywhere">{{
                 `${plugin.manifest.id.split('.')[1] ?? plugin.manifest.id}.${key}`
               }}</span>
               <UBadge color="neutral" variant="subtle" size="sm">{{ type }}</UBadge>
             </div>
           </div>
         </section>
-        <section v-if="plugin.manifest.help" class="space-y-3">
+        <section v-if="plugin.manifest.help" class="space-y-3 border-t border-default pt-5">
           <h3 class="flex items-center gap-2 text-base font-semibold text-highlighted">
-            <UIcon name="i-lucide-book-open" class="size-5" />
+            <UIcon name="i-lucide-book-open" class="size-5 text-toned" aria-hidden="true" />
             Help
           </h3>
-          <div class="rounded-lg bg-elevated/40 p-3">
-            <p class="wrap-break-word whitespace-pre-wrap text-sm text-toned">
-              {{ plugin.manifest.help.trim() }}
-            </p>
-          </div>
+          <p class="wrap-anywhere whitespace-pre-wrap text-sm text-toned">
+            {{ plugin.manifest.help.trim() }}
+          </p>
         </section>
-        <section class="space-y-3">
+        <section class="space-y-3 border-t border-default pt-5">
           <h3
             class="flex items-center justify-between gap-2 text-base font-semibold text-highlighted"
           >
             <span class="flex items-center gap-2">
-              <UIcon name="i-lucide-settings-2" class="size-5" />
+              <UIcon name="i-lucide-settings-2" class="size-5 text-toned" aria-hidden="true" />
               Inputs
             </span>
             <UButton
@@ -118,11 +123,11 @@
               @click="inputsVisible = !inputsVisible"
             />
           </h3>
-          <div v-if="plugin.inputs.length && inputsVisible" class="space-y-2">
+          <div v-if="plugin.inputs.length && inputsVisible" class="divide-y divide-default">
             <div
               v-for="field in plugin.inputs"
               :key="field.name"
-              class="rounded-lg bg-elevated/60 p-3 text-sm"
+              class="min-w-0 py-3 wrap-anywhere text-sm"
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-medium">{{ field.name }}</span
@@ -137,7 +142,13 @@
               </p>
             </div>
           </div>
-          <p v-if="!plugin.inputs.length" class="text-sm text-toned">This plugin has no inputs.</p>
+          <UEmpty
+            v-if="!plugin.inputs.length"
+            size="sm"
+            variant="naked"
+            icon="i-lucide-settings-2"
+            title="No inputs"
+          />
         </section>
       </div>
     </template>

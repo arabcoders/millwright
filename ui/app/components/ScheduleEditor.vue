@@ -36,16 +36,14 @@
           class="size-5 shrink-0 rounded-sm transition-colors"
           :class="on ? 'bg-primary' : 'bg-elevated ring-1 ring-inset ring-default'"
           :aria-label="`${DAYS[day]} ${hour}:00 ${on ? 'on' : 'off'}`"
+          :aria-pressed="on"
           :title="`${DAYS[day]} ${String(hour).padStart(2, '0')}:00`"
           @pointerdown.prevent="startPaint(day, hour)"
           @pointerenter="paint(day, hour)"
-          @keydown.enter.prevent="toggleCell(day, hour)"
-          @keydown.space.prevent="toggleCell(day, hour)"
+          @click="$event.detail === 0 && toggleCell(day, hour)"
         />
       </div>
     </div>
-
-    <p v-if="error" class="text-sm text-error">{{ error }}</p>
   </div>
 </template>
 
@@ -56,7 +54,6 @@ type Mode = 'always' | 'grid';
 
 const props = defineProps<{
   modelValue: ScheduleSpec | null;
-  error?: string | null;
 }>();
 
 const emit = defineEmits<{

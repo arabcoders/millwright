@@ -23,6 +23,12 @@ export const useFileDryRun = (onOpenFile?: (id: number) => void) => {
   const running = ref(false);
   const result = ref<DryRunResult | null>(null);
   const error = ref('');
+  const flowsLoading = ref(false);
+  const flowLoadError = computed(() =>
+    !capturedFlow.value && flowError.value
+      ? messageFor(flowError.value.detail, 'Could not load saved flows.')
+      : '',
+  );
   let request = 0;
   let disposed = false;
   let modal: ReturnType<typeof overlay.create<typeof FlowDryRunModal>> | null = null;
@@ -33,6 +39,7 @@ export const useFileDryRun = (onOpenFile?: (id: number) => void) => {
     isOpen.value = false;
     isOpening.value = false;
     running.value = false;
+    flowsLoading.value = false;
     result.value = null;
     error.value = '';
     file.value = null;
@@ -54,7 +61,8 @@ export const useFileDryRun = (onOpenFile?: (id: number) => void) => {
       return;
     }
     if (!flow) {
-      error.value = 'The selected flow is unavailable. Pick a saved flow.';
+      if (availableFlows.value.length)
+        error.value = 'The selected flow is unavailable. Pick a saved flow.';
       return;
     }
     running.value = true;
@@ -74,6 +82,25 @@ export const useFileDryRun = (onOpenFile?: (id: number) => void) => {
     } finally {
       if (requestId === request) running.value = false;
     }
+  };
+
+  const refreshFlows = async (): Promise<void> => {
+    if (capturedFlow.value || flowsLoading.value || !isOpen.value) return;
+    const requestId = ++request;
+    flowsLoading.value = true;
+    running.value = false;
+    result.value = null;
+    error.value = '';
+    await reloadFlows();
+    if (disposed || requestId !== request || !isOpen.value) return;
+    flowsLoading.value = false;
+    if (selectedFlowId.value === undefined) {
+      const bound = libraries.value.find(
+        (library) => library.id === file.value?.library_id,
+      )?.flow_id;
+      selectedFlowId.value = bound ?? flows.value[0]?.id;
+    }
+    await run();
   };
 
   const modalProps = computed(() => ({
@@ -100,6 +127,8 @@ export const useFileDryRun = (onOpenFile?: (id: number) => void) => {
     running: running.value,
     result: result.value,
     error: error.value,
+    flowError: flowLoadError.value,
+    flowsLoading: flowsLoading.value,
     argvPreview: result.value?.argv?.join(' ') ?? '',
     'onUpdate:open': close,
     'onUpdate:selectedFlowId': (id: number | undefined) => {
@@ -112,6 +141,7 @@ export const useFileDryRun = (onOpenFile?: (id: number) => void) => {
         }
       : undefined,
     onRun: run,
+    onRefresh: capturedFlow.value ? undefined : refreshFlows,
   }));
 
   const open = async (row: MediaFileRow, selection?: number | FlowRow): Promise<void> => {

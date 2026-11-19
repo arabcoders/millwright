@@ -4,6 +4,8 @@ import { parse_api_error, request } from '~/utils';
 import { useApiErrorMessage } from '~/composables/useApiErrorMessage';
 
 const summary = ref<StatsResponse | null>(null);
+const isLoadingSummary = ref(false);
+const summaryError = ref<string | null>(null);
 const overview = ref<StatsOverview | null>(null);
 const libraryTotals = computed(() => {
   const totals = {
@@ -48,14 +50,24 @@ let overviewRequest = 0;
 const { messageFor } = useApiErrorMessage();
 
 const loadSummary = async (): Promise<void> => {
+  if (isLoadingSummary.value) return;
+  isLoadingSummary.value = true;
+  summaryError.value = null;
   try {
     const response = await request('/api/stats');
-    if (response.ok) summary.value = (await response.json()) as StatsResponse;
-  } catch {}
+    if (!response.ok)
+      throw new Error(await parse_api_error(await response.json().catch(() => null)));
+    summary.value = (await response.json()) as StatsResponse;
+  } catch (cause) {
+    summaryError.value = messageFor(cause instanceof Error ? cause.message : undefined);
+  } finally {
+    isLoadingSummary.value = false;
+  }
 };
 
 const setSummary = (payload: StatsResponse): void => {
   summary.value = payload;
+  summaryError.value = null;
 };
 
 const loadOverview = async (days: number, libraryId?: number): Promise<void> => {
@@ -88,6 +100,8 @@ const loadOverview = async (days: number, libraryId?: number): Promise<void> => 
 
 export const useStats = () => ({
   summary: shallowReadonly(summary),
+  isLoadingSummary: shallowReadonly(isLoadingSummary),
+  summaryError: shallowReadonly(summaryError),
   loadSummary,
   setSummary,
   overview: shallowReadonly(overview),

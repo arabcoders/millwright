@@ -7,7 +7,7 @@
     <template #body>
       <div class="space-y-3">
         <nav
-          class="flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border border-default bg-muted/30 p-1.5"
+          class="mw-inset flex min-w-0 items-center gap-1 overflow-x-auto p-1.5"
           aria-label="Path"
         >
           <UButton
@@ -33,24 +33,40 @@
           </template>
         </nav>
 
-        <div class="space-y-1.5">
-          <label for="directory-search" class="text-sm font-medium text-highlighted"
-            >Search subdirectories</label
-          >
+        <UFormField
+          label="Search subdirectories"
+          help="Filters subdirectories in the current folder."
+        >
           <UInput
             id="directory-search"
             v-model="query"
             icon="i-lucide-search"
             placeholder="Search subdirectories"
-            aria-describedby="directory-search-help"
             class="w-full"
           />
-          <p id="directory-search-help" class="text-xs text-toned">
-            Filters subdirectories in the current folder.
-          </p>
-        </div>
+        </UFormField>
 
-        <div class="max-h-64 overflow-y-auto rounded-lg border border-default">
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          icon="i-lucide-circle-alert"
+          title="Could not load folders"
+          :description="error"
+        >
+          <template #actions>
+            <UButton
+              color="neutral"
+              variant="outline"
+              size="sm"
+              icon="i-lucide-refresh-cw"
+              :loading="loading"
+              @click="load(currentPath)"
+              >Retry</UButton
+            >
+          </template>
+        </UAlert>
+        <div class="mw-frame max-h-64 overflow-y-auto">
           <button
             v-for="item in filteredItems"
             :key="item.path"
@@ -62,28 +78,35 @@
             <span class="truncate" dir="ltr">{{ item.name }}</span>
           </button>
           <UEmpty
-            v-if="!loading && !items.length"
+            v-if="resolved && !items.length"
+            size="sm"
+            variant="naked"
             icon="i-lucide-folder-open"
             title="No subdirectories"
-            description="This folder has no subdirectories."
-            class="p-4"
           />
           <UEmpty
-            v-else-if="!loading && !filteredItems.length"
+            v-else-if="resolved && !filteredItems.length"
+            size="sm"
+            variant="naked"
             icon="i-lucide-search-x"
             title="No matching subdirectories"
-            :description="`No folders match “${query}”.`"
-            class="p-4"
           />
           <div v-if="loading" class="flex justify-center px-3 py-2">
             <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin text-toned" />
+            <span class="sr-only">Loading folders.</span>
           </div>
         </div>
       </div>
     </template>
     <template #footer>
       <div class="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-        <UButton color="primary" icon="i-lucide-check" @click="select">
+        <UButton
+          color="primary"
+          icon="i-lucide-check"
+          :loading="loading"
+          :disabled="!resolved"
+          @click="select"
+        >
           Select this folder
         </UButton>
       </div>
@@ -93,7 +116,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useApiErrorMessage } from '~/composables/useApiErrorMessage';
 import type { DirectoryEntry } from '~/types/api';
 import { useDirectories } from '~/composables/useDirectories';
 
@@ -104,8 +126,6 @@ const emit = defineEmits<{
   'update:open': [value: boolean];
   select: [path: string];
 }>();
-const notify = useNotification();
-const { messageFor } = useApiErrorMessage();
 const { load: loadDirectory } = useDirectories();
 
 const open = computed({
@@ -116,6 +136,8 @@ const open = computed({
 const currentPath = ref('/');
 const items = ref<DirectoryEntry[]>([]);
 const loading = ref(false);
+const resolved = ref(false);
+const error = ref('');
 const query = ref('');
 let loadGeneration = 0;
 
@@ -139,21 +161,23 @@ const segments = computed<Array<{ label: string; path: string }>>(() => {
 
 const load = async (path: string): Promise<void> => {
   const generation = ++loadGeneration;
+  currentPath.value = path;
+  items.value = [];
+  query.value = '';
+  resolved.value = false;
+  error.value = '';
   loading.value = true;
   try {
     const result = await loadDirectory(path);
     if (generation !== loadGeneration) return;
     if (!result.ok) {
-      notify.error(messageFor(undefined, 'Could not load folders.'));
+      error.value = result.error;
       return;
     }
     const data = result.data;
     currentPath.value = data.path;
     items.value = data.items;
-    query.value = '';
-  } catch {
-    if (generation !== loadGeneration) return;
-    notify.error(messageFor(undefined, 'Could not load folders.'));
+    resolved.value = true;
   } finally {
     if (generation === loadGeneration) {
       loading.value = false;
@@ -162,6 +186,7 @@ const load = async (path: string): Promise<void> => {
 };
 
 const select = (): void => {
+  if (!resolved.value) return;
   emit('select', currentPath.value);
   open.value = false;
 };
@@ -170,8 +195,6 @@ watch(
   () => props.open,
   (value) => {
     if (value) {
-      query.value = '';
-      currentPath.value = props.initialPath;
       void load(props.initialPath);
     }
   },

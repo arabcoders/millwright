@@ -1,8 +1,5 @@
 <template>
-  <aside
-    v-if="node || entrySelected"
-    class="w-full min-w-0 space-y-4 rounded-lg border border-default p-4"
-  >
+  <aside v-if="node || entrySelected" class="mw-card-padded w-full space-y-4">
     <div>
       <h2 class="text-base font-semibold text-highlighted">
         {{ entrySelected ? 'Start settings' : 'Step settings' }}
@@ -76,7 +73,7 @@
             >
           </template>
           <template #content>
-            <pre class="mt-2 text-xs whitespace-pre-wrap wrap-break-word">{{
+            <pre class="mw-terminal mt-2 p-2 text-xs whitespace-pre-wrap wrap-break-word">{{
               JSON.stringify(node.rawInputs, null, 2)
             }}</pre>
           </template>
@@ -115,7 +112,7 @@
             >
           </template>
           <template #content>
-            <pre class="mt-2 text-xs whitespace-pre-wrap wrap-break-word">{{
+            <pre class="mw-terminal mt-2 p-2 text-xs whitespace-pre-wrap wrap-break-word">{{
               JSON.stringify(storedWhen, null, 2)
             }}</pre>
           </template>
@@ -153,7 +150,21 @@
           :items="pluginOptions"
           value-key="value"
           class="w-full"
-          @update:model-value="pick(String($event))" /></UFormField
+          @update:model-value="pick(String($event))"
+      /></UFormField>
+      <template v-if="!pluginManifest">
+        <UAlert
+          color="warning"
+          variant="soft"
+          icon="i-lucide-triangle-alert"
+          title="Plugin metadata is unavailable"
+          description="Stored inputs are kept unchanged."
+        />
+        <UFormField label="Stored inputs (JSON)">
+          <pre class="mw-terminal p-2 text-xs whitespace-pre-wrap wrap-anywhere">{{
+            JSON.stringify(node.rawInputs, null, 2)
+          }}</pre>
+        </UFormField> </template
       ><UFormField
         v-for="field in editableFields"
         :key="field.name"

@@ -53,6 +53,15 @@
 
       <template v-else-if="'confirm' === state.current?.type || 'prompt' === state.current?.type">
         <UButton
+          type="button"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-x"
+          @click="cancel()"
+        >
+          Cancel
+        </UButton>
+        <UButton
           id="primaryButton"
           :color="state.current?.opts.confirmColor ?? 'primary'"
           :icon="state.current?.opts.confirmIcon ?? 'i-lucide-check'"
@@ -97,7 +106,7 @@ watch(
   { immediate: true },
 );
 
-const inputEl = ref<{ inputRef?: { value?: HTMLInputElement | null } } | null>(null);
+const inputEl = ref<{ inputRef: HTMLInputElement | null } | null>(null);
 
 const focusPrimary = () => {
   const root = document.getElementById('primaryButton');
@@ -107,7 +116,7 @@ const focusPrimary = () => {
 const focusInput = async () => {
   await nextTick();
   if ('prompt' === state.current?.type) {
-    requestAnimationFrame(() => inputEl.value?.inputRef?.value?.focus?.({ preventScroll: true }));
+    requestAnimationFrame(() => inputEl.value?.inputRef?.focus({ preventScroll: true }));
     return;
   }
   requestAnimationFrame(focusPrimary);

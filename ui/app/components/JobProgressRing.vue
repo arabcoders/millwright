@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative size-12 shrink-0"
+    class="flex shrink-0 items-center gap-2"
     role="progressbar"
     :aria-label="label"
     aria-valuemin="0"
@@ -8,50 +8,58 @@
     :aria-valuenow="percent === null ? undefined : Math.round(percent)"
     :aria-valuetext="ariaValueText"
   >
-    <svg class="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
-      <circle
-        cx="18"
-        cy="18"
-        r="15.5"
-        fill="none"
-        stroke="var(--ui-border-accented)"
-        stroke-width="3.5"
-        pathLength="100"
-      />
-      <circle
-        cx="18"
-        cy="18"
-        r="15.5"
-        fill="none"
-        :class="[
-          props.status === 'hold' || remaining !== null
-            ? cooldownColor(percent)
-            : color === 'success'
-              ? 'stroke-success'
-              : 'stroke-primary',
-          percent === null ? 'origin-center stroke-(--ui-text-muted)' : '',
-          percent === null && props.status !== 'hold' ? 'animate-spin' : '',
-        ]"
-        stroke-width="3.5"
-        stroke-linecap="round"
-        pathLength="100"
-        :stroke-dasharray="percent === null ? '28 72' : `${percent} 100`"
-        stroke-dashoffset="0"
-      />
-    </svg>
-    <span
-      class="absolute inset-0 flex items-center justify-center text-center text-xs font-semibold text-highlighted tabular-nums"
-    >
-      {{
-        remaining !== null
-          ? formatCountdown(remaining)
-          : props.status === 'hold'
-            ? 'Hold'
-            : percent === null
-              ? statusLabel
-              : `${Math.round(percent)}%`
-      }}
-    </span>
+    <div class="relative shrink-0" :class="layout === 'ring' ? 'size-12' : 'size-8'">
+      <svg class="size-full -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
+        <circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          fill="none"
+          stroke="var(--ui-border-accented)"
+          stroke-width="3.5"
+          pathLength="100"
+        />
+        <circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          fill="none"
+          :class="[
+            props.status === 'hold' || remaining !== null
+              ? cooldownColor(percent)
+              : waiting
+                ? 'stroke-(--ui-text-muted)'
+                : 'stroke-info',
+            percent === null && !waiting ? 'origin-center animate-spin' : '',
+          ]"
+          stroke-width="3.5"
+          stroke-linecap="round"
+          pathLength="100"
+          :stroke-dasharray="percent === null ? '28 72' : `${percent} 100`"
+          stroke-dashoffset="0"
+        />
+      </svg>
+      <span
+        v-if="layout === 'icon' && percent !== null"
+        class="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-highlighted tabular-nums"
+      >
+        {{ Math.round(percent) }}%
+      </span>
+      <span
+        v-if="layout === 'ring'"
+        class="absolute inset-0 flex items-center justify-center text-center text-xs font-semibold text-highlighted tabular-nums"
+      >
+        {{
+          remaining !== null
+            ? formatCountdown(remaining)
+            : props.status === 'hold' && percent === null
+              ? 'Hold'
+              : percent === null
+                ? statusLabel
+                : `${Math.round(percent)}%`
+        }}
+      </span>
+    </div>
   </div>
 </template>
 
@@ -72,16 +80,19 @@ const props = withDefaults(
     cooldownStartedAt?: string | null;
     cooldownUntil?: string | null;
     label?: string;
-    color?: 'primary' | 'success';
+    stageLabel?: string;
+    layout?: 'ring' | 'icon';
   }>(),
   {
     cooldownStartedAt: null,
     cooldownUntil: null,
     label: 'Job progress',
-    color: 'primary',
+    stageLabel: undefined,
+    layout: 'ring',
   },
 );
 const { now, pause, resume } = useNow({ interval: 1000, controls: true, immediate: false });
+const waiting = computed(() => ['pending', 'queued', 'hold'].includes(props.status));
 const remaining = computed(() =>
   cooldownRemaining(props.status, props.cooldownStartedAt, props.cooldownUntil, now.value),
 );
@@ -95,7 +106,7 @@ watch(cooldownActive, (active) => (active ? resume() : pause()), { immediate: tr
 const percent = computed(() =>
   props.status === 'hold' || remaining.value !== null
     ? cooldown.value
-    : props.status === 'pending'
+    : props.status === 'pending' || props.status === 'queued'
       ? null
       : props.percent,
 );
@@ -109,7 +120,10 @@ const ariaValueText = computed(() =>
         : `${Math.round(percent.value)}%`,
 );
 const statusLabel = computed(() => {
+  if (props.stageLabel && !waiting.value) return props.stageLabel;
   if (props.status === 'pending') return 'Wait';
+  if (props.status === 'staging') return 'Prep';
+  if (props.status === 'queued') return 'Queue';
   if (props.status === 'claimed') return 'Claim';
   if (props.status === 'running') return 'Run';
   if (props.status === 'verifying') return 'Verify';

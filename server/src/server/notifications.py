@@ -16,6 +16,7 @@ from common.enums import JobStatus
 from common.process import drain
 from sqlalchemy import select, update
 
+from server.core.db import postgres_disconnect_reason
 from server.external_notifications import notify_external
 from server.models import (
     FinalizationJournal,
@@ -311,7 +312,11 @@ class NotificationService:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                LOG.warning("Notification delivery pass failed", extra={"error": error_message(exc)})
+                reason = postgres_disconnect_reason(exc)
+                if reason is None:
+                    LOG.warning("Notification delivery pass failed.", extra={"error": error_message(exc)})
+                else:
+                    LOG.warning("Notification delivery will retry. PostgreSQL: %s", reason)
                 await asyncio.sleep(self._interval)
 
     async def deliver_pending(self) -> int:

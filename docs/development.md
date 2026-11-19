@@ -2,12 +2,6 @@
 
 For the standard setup and check commands, see [Contributing](../CONTRIBUTING.md).
 
-## Frontend runtime
-
-Vue type checking requires Node.js because
-[`vue-tsc` doesn't work under Bun](https://github.com/oven-sh/bun/issues/4754).
-This also affects the type check during production builds.
-
 ## Keep development data
 
 In `compose.dev.yml`, the `postgres` and `postgres-test` services use temporary storage. To keep
@@ -32,21 +26,13 @@ Then start the server and a local node from the repository root:
 uv run python run.py --role all
 ```
 
-Open `http://localhost:8000` and claim the pending node on **Nodes**. Use `--role server` if you don't
-need a local node.
+The built interface is at `http://localhost:8000`.
 
 For a separate source node, set `MW_NODE_SERVER_URL` and `MW_NODE_WORKSPACE_DIR`, then run
 `uv run python -m node` from `node/`. Claim it on **Nodes**. See
 [Add a node](installation.md#add-a-node) for connection and shared-storage setup.
 
-## Use the CLI
-
-Run CLI commands from `server/`:
-
-```bash
-uv run millwright libraries list
-uv run millwright auth reset-password --username owner
-```
+Run `uv run millwright` from `server/` for [CLI access](usage.md#command-line-and-api-access).
 
 ## Build the container
 

@@ -17,11 +17,11 @@
             variant="outline"
             size="sm"
             icon="i-lucide-refresh-cw"
-            aria-label="Reload nodes"
+            aria-label="Refresh nodes"
             :loading="loading"
             @click="loadNodes"
           >
-            Reload
+            Refresh
           </UButton>
         </div>
       </template>
@@ -36,87 +36,73 @@
       :description="lastError.message"
     />
     <div v-if="loading && !allNodes.length" class="space-y-2">
-      <USkeleton v-for="index in 4" :key="index" class="h-20 rounded-xl" />
+      <USkeleton v-for="index in 4" :key="index" class="h-44 rounded-xl" />
     </div>
-    <div v-else-if="allNodes.length" class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+    <div v-else-if="allNodes.length" class="mw-card divide-y divide-default" :aria-busy="loading">
       <article
         v-for="node in allNodes"
         :key="'request_id' in node ? node.request_id : node.id"
-        class="mw-card flex h-full flex-col gap-3 p-4"
-        :class="{ 'border-warning': 'request_id' in node }"
+        class="w-full min-w-0 max-w-full space-y-4 p-4 sm:p-5"
       >
-        <div class="flex min-w-0 items-center gap-2">
-          <div class="min-w-0">
-            <button
-              v-if="'id' in node"
-              type="button"
-              class="truncate text-start font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
-              @click="selectNode(node)"
-            >
-              {{ node.display_name }}
-            </button>
-            <h2 v-else class="truncate font-semibold text-highlighted">
-              {{ node.capabilities.hostname || 'Unnamed node' }}
+        <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0 flex-1 space-y-2">
+            <h2 class="min-w-0 text-base font-semibold text-highlighted">
+              <button
+                v-if="'id' in node"
+                type="button"
+                class="wrap-anywhere text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                @click="selectNode(node)"
+              >
+                {{ node.display_name }}
+              </button>
+              <span v-else class="wrap-anywhere">
+                {{ node.capabilities.hostname || 'Unnamed node' }}
+              </span>
             </h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <UBadge
+                v-if="'request_id' in node"
+                color="warning"
+                variant="soft"
+                size="sm"
+                class="shrink-0 gap-1"
+              >
+                <UIcon name="i-lucide-user-round-plus" class="size-3.5 shrink-0" />
+                Unclaimed
+              </UBadge>
+              <template v-else>
+                <StatusBadge
+                  class="shrink-0"
+                  :status="
+                    node.state === 'online' && node.active_jobs > 0
+                      ? 'busy'
+                      : node.state === 'online' && node.paused
+                        ? 'paused'
+                        : node.state
+                  "
+                  group="node"
+                />
+                <UBadge color="neutral" variant="subtle" size="sm" icon="i-lucide-repeat-2">
+                  {{ node.active_jobs }} active
+                </UBadge>
+                <span class="inline-flex min-w-0 flex-wrap items-center gap-1 text-xs text-toned">
+                  <span>Last seen:</span>
+                  <UTooltip
+                    v-if="node.last_seen_at"
+                    :text="formatDate(node.last_seen_at, 'detail')"
+                  >
+                    <time :datetime="node.last_seen_at" class="wrap-anywhere">{{
+                      formatRelativeTime(node.last_seen_at, 'en')
+                    }}</time>
+                  </UTooltip>
+                  <span v-else>Never</span>
+                </span>
+              </template>
+            </div>
           </div>
-          <UBadge
-            v-if="'request_id' in node"
-            color="warning"
-            variant="soft"
-            size="sm"
-            class="ms-auto shrink-0 gap-1"
-          >
-            <UIcon name="i-lucide-user-round-plus" class="size-3.5 shrink-0" />
-            Unclaimed
-          </UBadge>
-          <template v-else>
-            <span
-              class="ms-auto flex shrink-0 items-center gap-1 rounded-md bg-elevated px-2 py-0.5 text-xs text-toned"
-            >
-              <UIcon name="i-lucide-repeat-2" class="size-3" />
-              {{ node.active_jobs }} active
-            </span>
-            <StatusBadge
-              class="shrink-0"
-              :status="
-                node.state === 'online' && node.active_jobs > 0
-                  ? 'busy'
-                  : node.state === 'online' && node.paused
-                    ? 'paused'
-                    : node.state
-              "
-              group="node"
-            />
-          </template>
-        </div>
-
-        <dl v-if="'id' in node" class="grid grid-cols-3 gap-2 text-xs text-toned">
-          <div>
-            <dt>Transcodes</dt>
-            <dd>{{ node.active_transcodes }}/{{ node.max_transcodes }}</dd>
-          </div>
-          <div>
-            <dt>Health checks</dt>
-            <dd>{{ node.active_healthchecks }}/{{ node.max_healthchecks }}</dd>
-          </div>
-          <div>
-            <dt>MKV statistics</dt>
-            <dd>{{ node.active_mkv_stats }}/{{ node.max_mkv_stats }}</dd>
-          </div>
-        </dl>
-        <NodeUsageGauges
-          :usage="'id' in node ? node.usage : null"
-          :cpu-name="node.capabilities?.cpu_model"
-          :cpu-cores="node.capabilities?.cpu_cores"
-          :gpu-names="node.capabilities?.gpus"
-          :offline="'id' in node && node.state !== 'online'"
-        />
-        <div class="mt-auto flex flex-wrap items-center justify-between gap-2">
-          <template v-if="'request_id' in node">
-            <p class="min-w-0 truncate font-mono text-xs text-toned">
-              Request: {{ node.request_id }}
-            </p>
+          <div class="ms-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             <UButton
+              v-if="'request_id' in node"
               size="sm"
               icon="i-lucide-check"
               :loading="claimingId === node.request_id"
@@ -131,18 +117,7 @@
               @click="claimPending(node.request_id)"
               >Claim</UButton
             >
-          </template>
-          <template v-else>
-            <div class="flex min-w-0 items-center gap-1 text-xs text-toned">
-              <span class="shrink-0">Last seen:</span>
-              <UTooltip v-if="node.last_seen_at" :text="formatDate(node.last_seen_at, 'detail')">
-                <time :datetime="node.last_seen_at" class="truncate">{{
-                  formatRelativeTime(node.last_seen_at, 'en')
-                }}</time>
-              </UTooltip>
-              <span v-else>never</span>
-            </div>
-            <div class="flex flex-wrap items-center justify-end gap-2">
+            <template v-else>
               <UButton
                 color="neutral"
                 variant="outline"
@@ -152,58 +127,82 @@
                 @click.stop="openEdit(node)"
                 >Edit</UButton
               >
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                :icon="node.paused ? 'i-lucide-play' : 'i-lucide-pause'"
-                :loading="pausingId === node.id"
-                :disabled="pausingId !== null"
-                @click.stop="pauseNode(node)"
+              <UDropdownMenu
+                :items="nodeActions(node)"
+                :modal="false"
+                :content="{ align: 'end' }"
+                :ui="{ content: 'w-72', itemDescription: 'whitespace-normal' }"
               >
-                {{ node.paused ? 'Resume' : 'Pause' }}
-              </UButton>
-              <UTooltip
-                :disabled="!node.active_jobs && !removing"
-                :text="
-                  node.active_jobs
-                    ? 'Wait for active work to finish before removing this node.'
-                    : 'Wait for the current node removal to finish.'
-                "
-              >
-                <span class="inline-flex">
-                  <UButton
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    icon="i-lucide-trash-2"
-                    :loading="removingId === node.id"
-                    :disabled="removing || node.active_jobs > 0"
-                    @click.stop="openRemoveConfirm(node)"
-                  >
-                    Remove node
-                  </UButton>
-                </span>
-              </UTooltip>
-            </div>
-          </template>
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  icon="i-lucide-ellipsis"
+                  square
+                  :aria-label="`Actions for ${node.display_name}`"
+                  :loading="pausingId === node.id || removingId === node.id"
+                  :disabled="pausingId !== null || removing"
+                />
+              </UDropdownMenu>
+            </template>
+          </div>
         </div>
+        <p v-if="'request_id' in node" class="min-w-0 wrap-anywhere font-mono text-xs text-toned">
+          Request: {{ node.request_id }}
+        </p>
+        <template v-else>
+          <dl class="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:max-w-2xl sm:grid-cols-3">
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-film" class="size-3.5 shrink-0" aria-hidden="true" />
+                Transcodes
+              </dt>
+              <dd class="tabular-nums">{{ node.active_transcodes }}/{{ node.max_transcodes }}</dd>
+            </div>
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-heart-pulse" class="size-3.5 shrink-0" aria-hidden="true" />
+                Health checks
+              </dt>
+              <dd class="tabular-nums">
+                {{ node.active_healthchecks }}/{{ node.max_healthchecks }}
+              </dd>
+            </div>
+            <div class="min-w-0 space-y-1">
+              <dt class="flex items-center gap-1.5 text-xs text-muted">
+                <UIcon
+                  name="i-lucide-chart-no-axes-column"
+                  class="size-3.5 shrink-0"
+                  aria-hidden="true"
+                />
+                MKV statistics
+              </dt>
+              <dd class="tabular-nums">{{ node.active_mkv_stats }}/{{ node.max_mkv_stats }}</dd>
+            </div>
+          </dl>
+          <NodeUsageGauges
+            v-if="node.usage"
+            :usage="node.usage"
+            :cpu-name="node.capabilities?.cpu_model"
+            :cpu-cores="node.capabilities?.cpu_cores"
+            :gpu-names="node.capabilities?.gpus"
+            :offline="node.state !== 'online'"
+          />
+          <p v-else class="text-sm text-toned">No usage reported yet.</p>
+        </template>
       </article>
     </div>
 
-    <div
+    <UEmpty
       v-else-if="!loading && !lastError"
-      class="mw-card flex flex-col items-center gap-1 py-12 text-center"
-    >
-      <UIcon name="i-lucide-server-off" class="size-6 text-toned" />
-      <p class="text-sm text-toned">
-        {{
-          registration?.enabled
-            ? 'No nodes connected. Start a node and claim it here.'
-            : 'No nodes connected. Enable Allow new nodes to register a node.'
-        }}
-      </p>
-    </div>
+      icon="i-lucide-server-off"
+      title="No nodes connected."
+      :description="
+        registration?.enabled
+          ? 'Start a node and claim it here.'
+          : 'Enable Allow new nodes to register a node.'
+      "
+    />
 
     <NodeDetailsModal
       v-if="selectedNode"
@@ -216,6 +215,7 @@
     <NodeEditModal
       :node="editNode"
       :saving="savingNode"
+      :save-error="saveError"
       @close="editNode = null"
       @save="saveNode"
     />
@@ -224,6 +224,7 @@
 
 <script setup lang="ts">
 import StatusBadge from '~/components/StatusBadge.vue';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NodeDetailsModal from '~/components/NodeDetailsModal.vue';
 import NodeEditModal from '~/components/NodeEditModal.vue';
@@ -350,6 +351,7 @@ const selectNode = (node: NodeRow | undefined): void => {
 };
 
 const openEdit = (node: NodeRow): void => {
+  saveError.value = '';
   editNode.value = node;
 };
 
@@ -374,6 +376,7 @@ const openRemoveConfirm = async (node: NodeRow): Promise<void> => {
 };
 
 const savingNode = ref(false);
+const saveError = ref('');
 const pausingId = ref<number | null>(null);
 
 const pauseNode = async (node: NodeRow): Promise<void> => {
@@ -391,15 +394,40 @@ const saveNode = async (changes: NodeChanges): Promise<void> => {
   const node = editNode.value;
   if (!node || savingNode.value) return;
   savingNode.value = true;
+  saveError.value = '';
   try {
     const updated = await update(node.id, changes);
     if (selectedNode.value?.id === updated.id) selectedNode.value = updated;
     editNode.value = null;
-  } catch {
+  } catch (error) {
+    saveError.value = error instanceof Error ? error.message : 'Could not save the node.';
   } finally {
     savingNode.value = false;
   }
 };
+
+const nodeActions = (node: NodeRow): DropdownMenuItem[][] => [
+  [
+    {
+      label: node.paused ? 'Resume' : 'Pause',
+      icon: node.paused ? 'i-lucide-play' : 'i-lucide-pause',
+      disabled: pausingId.value !== null || removing.value,
+      onSelect: () => pauseNode(node),
+    },
+  ],
+  [
+    {
+      label: 'Remove node',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      description: node.active_jobs
+        ? 'Wait for active work to finish before removing this node.'
+        : undefined,
+      disabled: removing.value || pausingId.value !== null || node.active_jobs > 0,
+      onSelect: () => openRemoveConfirm(node),
+    },
+  ],
+];
 
 const ffmpegVersion = (node: NodeRow): string =>
   (node.capabilities?.ffmpeg_version ?? '').split(' ').slice(0, 3).join(' ');

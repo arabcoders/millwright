@@ -13,51 +13,71 @@
         :nodes="nodes"
         :edges="edges"
         fit-view-on-init
+        @init="canvas = $event"
         @node-click="clickNode"
         @pane-click="emit('select', null)"
         :nodes-draggable="movable"
         :nodes-connectable="!readonly"
         :edges-updatable="!readonly"
-        :nodes-focusable="!readonly"
+        :nodes-focusable="false"
         :delete-key-code="null"
         @node-drag-stop="drag"
         @connect="connect"
+        @edge-update="
+          ({ edge, connection }) => !readonly && emit('updateEdge', edge.id, connection)
+        "
         @edge-click="removeEdge"
         ><template #node-flow="{ data }"
           ><div
-            class="relative min-w-64 rounded-md border px-3 py-2 text-sm shadow-sm"
+            class="relative min-w-64 rounded-md border px-3 py-2 text-sm shadow-sm backdrop-blur-md"
             :class="[
               data.border,
-              data.added ? 'bg-success/10' : data.selected ? 'bg-primary/10' : 'bg-elevated',
+              data.added
+                ? 'bg-success/10'
+                : data.selected
+                  ? 'bg-primary/10'
+                  : 'bg-(--mw-floating-bg)',
               data.selected ? 'ring-2 ring-primary' : data.added ? 'ring-2 ring-success' : '',
             ]"
-            :role="readonly ? 'button' : undefined"
-            :tabindex="readonly ? 0 : undefined"
-            :aria-label="readonly ? `Inspect ${data.label}` : undefined"
-            @keydown="inspectKey($event, data.id)"
           >
-            <div v-if="data.id !== 'start'" class="absolute -top-5 left-1 text-[10px] text-toned">
+            <div
+              v-if="data.id !== 'start'"
+              class="absolute text-[10px] text-toned"
+              :class="horizontal ? '-left-9 top-1' : '-top-5 left-1'"
+            >
               input
             </div>
             <Handle
               v-if="data.id !== 'start'"
               type="target"
-              :position="Position.Top"
+              :position="horizontal ? Position.Left : Position.Top"
               aria-label="Input connector"
-            /><UTooltip text="Remove step"
-              ><button
-                v-if="data.id !== 'start' && !readonly"
+            />
+            <UTooltip v-if="data.id !== 'start' && !readonly" text="Remove step">
+              <UButton
                 type="button"
-                class="absolute -right-2 -top-2 rounded-full bg-error px-1 text-white"
+                color="error"
+                variant="soft"
+                size="xs"
+                icon="i-lucide-trash-2"
+                square
+                class="nodrag absolute -right-2 -top-2"
                 aria-label="Remove step"
                 @click.stop="emit('remove', data.id)"
-              >
-                <UIcon name="i-lucide-trash-2" class="size-3.5" /></button
-            ></UTooltip>
+              />
+            </UTooltip>
             <div class="flex items-center justify-between gap-2">
-              <span class="font-medium" :class="{ 'text-primary': data.entry }">{{
-                data.label
-              }}</span>
+              <button
+                type="button"
+                class="nodrag text-start font-medium hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                :class="{ 'text-primary': data.entry }"
+                :aria-label="`${readonly ? 'Inspect' : 'Edit'} ${data.label}`"
+                :aria-pressed="data.selected"
+                @click.stop="emit('select', { kind: 'node', id: data.id })"
+                @keydown="inspectKey($event, data.id)"
+              >
+                {{ data.label }}
+              </button>
               <UBadge v-if="data.added" color="success" variant="subtle" size="xs">New</UBadge>
               <StatusBadge v-if="data.step" :status="data.step.outcome" group="outcome" />
             </div>
@@ -67,27 +87,33 @@
               :reason="data.step.reason"
               class="mt-1 max-w-64"
             />
-            <p v-if="data.step?.error" class="max-w-56 wrap-break-word text-xs text-error">
+            <p
+              v-if="data.step?.error"
+              class="max-w-56 whitespace-pre-wrap wrap-anywhere text-xs text-error"
+            >
               {{ data.step.error }}
             </p>
             <div
               v-if="data.ports.length"
               class="mt-2"
               :class="
-                data.ports.length === 1
-                  ? 'flex justify-center'
-                  : data.kind === 'condition'
-                    ? 'flex justify-between'
-                    : 'flex justify-end gap-3'
+                horizontal
+                  ? 'flex flex-col items-end gap-2'
+                  : data.ports.length === 1
+                    ? 'flex justify-center'
+                    : data.kind === 'condition'
+                      ? 'flex justify-between'
+                      : 'flex justify-end gap-3'
               "
             >
               <span
                 v-for="port in data.ports"
                 :key="port"
-                class="relative pb-2 text-[10px] text-toned"
+                class="relative text-[10px] text-toned"
+                :class="horizontal ? 'pr-2' : 'pb-2'"
                 ><Handle
                   type="source"
-                  :position="Position.Bottom"
+                  :position="horizontal ? Position.Right : Position.Bottom"
                   :id="port"
                   :aria-label="`${port === 'plan' ? statusInfo(port, 'outcome').label : port} output`"
                 />{{ port === 'plan' ? statusInfo(port, 'outcome').label : port }}</span
@@ -102,11 +128,19 @@
 </template>
 <script setup lang="ts">
 import ReasonDisplay from './ReasonDisplay.vue';
-import { computed } from 'vue';
+import { computed, shallowRef, watch } from 'vue';
 import { Handle, MarkerType, Position, VueFlow } from '@vue-flow/core';
-import type { Connection, Edge, Node, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core';
+import type {
+  Connection,
+  Edge,
+  Node,
+  NodeDragEvent,
+  NodeMouseEvent,
+  VueFlowStore,
+} from '@vue-flow/core';
 import type { FlowEdge, FlowNodeResult, FlowUiNodePos, PluginRow } from '~/types/api';
 import type { DraftNode, CanvasSelection } from '~/utils/stepDraft';
+import { nodePorts } from '~/utils/stepDraft';
 import { conditionSummary, type DraftCondition } from '~/utils/condition';
 import { statusInfo } from '~/utils/status';
 import StatusBadge from './StatusBadge.vue';
@@ -131,18 +165,19 @@ const emit = defineEmits<{
   remove: [string];
   move: [string, FlowUiNodePos];
   connect: [Connection];
+  updateEdge: [id: string, connection: Connection];
   removeEdge: [string];
 }>();
 const readonly = computed(() => props.readonly ?? false);
+const canvas = shallowRef<VueFlowStore>();
 const movable = computed(() => props.movable ?? !readonly.value);
 const plugin = (id: string) => props.plugins.find((p) => p.manifest.id === id);
-const ports = (id: string) =>
-  ({
-    filter: ['match', 'veto'],
-    inspector: ['match', 'skip', 'veto'],
-    transcode: ['plan', 'skip'],
-    action: ['next'],
-  })[plugin(id)?.manifest.kind ?? 'action'] ?? ['next'];
+const horizontal = computed(() => {
+  const start = props.positions.start;
+  const entry = props.entry ? props.positions[props.entry] : undefined;
+  return Boolean(start && entry && Math.abs(entry.x - start.x) > Math.abs(entry.y - start.y));
+});
+watch(horizontal, () => canvas.value?.updateNodeInternals(), { flush: 'post' });
 const borderFor = (id: string) => {
   if (!props.steps) return 'border-default';
   const step = props.steps.find((step) => step.node === id);
@@ -184,7 +219,7 @@ const nodes = computed<Node[]>(() => [
               plugin(node.plugin)?.manifest.kind ?? (readonly.value ? 'Plugin' : 'Choose a plugin'),
             ports: [
               ...new Set([
-                ...(plugin(node.plugin) || !readonly.value ? ports(node.plugin) : []),
+                ...nodePorts(node, plugin(node.plugin)),
                 ...props.edges.filter((edge) => edge.src === node.uid).map((edge) => edge.port),
               ]),
             ],
@@ -285,7 +320,13 @@ const edges = computed<Edge[]>(() => [
 const clickNode = (e: NodeMouseEvent) => emit('select', { kind: 'node', id: e.node.id });
 const inspectKey = (event: KeyboardEvent, id: string) => {
   if (event.target !== event.currentTarget) return;
-  if (!readonly.value || !['Enter', ' '].includes(event.key)) return;
+  if (!readonly.value && id !== 'start' && ['Delete', 'Backspace'].includes(event.key)) {
+    event.preventDefault();
+    event.stopPropagation();
+    emit('remove', id);
+    return;
+  }
+  if (!['Enter', ' '].includes(event.key)) return;
   event.preventDefault();
   event.stopPropagation();
   emit('select', { kind: 'node', id });
@@ -313,5 +354,16 @@ const removeEdge = (e: { edge: Edge }) => !readonly.value && emit('removeEdge', 
   position: absolute;
   inset: -8px -4px;
   content: '';
+}
+
+:deep(.vue-flow__handle-left),
+:deep(.vue-flow__handle-right) {
+  width: 4px;
+  height: 14px;
+}
+
+:deep(.vue-flow__handle-left::before),
+:deep(.vue-flow__handle-right::before) {
+  inset: -4px -8px;
 }
 </style>

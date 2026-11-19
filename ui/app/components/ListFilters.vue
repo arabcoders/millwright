@@ -1,46 +1,41 @@
 <template>
-  <div class="mw-card flex flex-wrap items-end gap-3 p-3 sm:p-4">
+  <div class="flex min-w-0 flex-wrap items-center gap-2">
     <UInput
       v-model.lazy="query"
+      type="search"
       :disabled="disabled"
-      icon="i-lucide-search"
+      icon="i-lucide-filter"
       :placeholder="searchPlaceholder"
+      aria-label="Search"
       size="sm"
-      class="w-full sm:min-w-56 sm:flex-1 lg:max-w-md"
+      class="w-full sm:min-w-48 sm:flex-1 lg:max-w-md"
     />
     <slot />
-    <USelectMenu
-      value-key="value"
-      :model-value="sortBy"
-      :disabled="disabled"
-      :items="sortOptions"
-      size="sm"
-      class="w-full sm:w-auto sm:min-w-36"
-      :aria-label="sortLabel"
-      @update:model-value="(value) => value !== undefined && emit('update:sortBy', value)"
-    />
-    <UTooltip
-      :text="
-        sortDir === 'asc' ? 'Ascending. Switch to descending' : 'Descending. Switch to ascending'
-      "
-    >
+    <UDropdownMenu :items="sortItems" :content="{ align: 'end' }" :modal="false">
       <UButton
         color="neutral"
         variant="outline"
         size="sm"
-        :icon="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'"
-        :aria-label="sortDir === 'asc' ? 'Sort descending' : 'Sort ascending'"
+        :icon="directionIcon"
+        trailing-icon="i-lucide-chevron-down"
+        :aria-label="sortLabel"
         :disabled="disabled"
-        @click="emit('update:sortDir', sortDir === 'asc' ? 'desc' : 'asc')"
-      />
-    </UTooltip>
-    <slot name="trailing" />
+      >
+        Sort: {{ sortName }}
+      </UButton>
+    </UDropdownMenu>
+    <div v-if="$slots.trailing" class="ms-auto flex flex-wrap items-center gap-2">
+      <slot name="trailing" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import type { DropdownMenuItem } from '@nuxt/ui';
+
 const query = defineModel<string>('query', { required: true });
-defineProps<{
+const props = defineProps<{
   searchPlaceholder: string;
   sortBy: string;
   sortDir: 'asc' | 'desc';
@@ -52,4 +47,26 @@ const emit = defineEmits<{
   'update:sortBy': [value: string];
   'update:sortDir': [value: 'asc' | 'desc'];
 }>();
+const directionIcon = computed(() =>
+  props.sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down',
+);
+const sortName = computed(
+  () => props.sortOptions.find((option) => option.value === props.sortBy)?.label,
+);
+const sortItems = computed<DropdownMenuItem[]>(() =>
+  props.sortOptions.map((option) => ({
+    label:
+      option.value === props.sortBy
+        ? `${option.label} (${props.sortDir === 'asc' ? 'ASC' : 'DESC'})`
+        : option.label,
+    icon: option.value === props.sortBy ? directionIcon.value : undefined,
+    color: option.value === props.sortBy ? 'primary' : 'neutral',
+    disabled: props.disabled,
+    onSelect: () => {
+      if (option.value === props.sortBy)
+        emit('update:sortDir', props.sortDir === 'asc' ? 'desc' : 'asc');
+      else emit('update:sortBy', option.value);
+    },
+  })),
+);
 </script>

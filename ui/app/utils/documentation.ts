@@ -11,7 +11,7 @@ export type DocumentationEntry = {
 export const DOCUMENTATION: DocumentationEntry[] = [
   {
     id: 'docs-index',
-    title: 'Documentation',
+    title: 'Help',
     description: 'Installation, operation, and references for Millwright.',
     file: 'docs/README.md',
     route: '/docs',
@@ -116,6 +116,31 @@ export const DOCUMENTATION: DocumentationEntry[] = [
     icon: 'i-lucide-shield-check',
   },
 ];
+
+export const getDocumentationGroups = () =>
+  [
+    { id: 'start', title: 'Start', ids: ['docs-overview', 'docs-installation'] },
+    {
+      id: 'guides',
+      title: 'Guides',
+      ids: ['docs-authentication', 'docs-usage', 'docs-recipes', 'docs-recovery', 'docs-webhooks'],
+    },
+    {
+      id: 'reference',
+      title: 'Reference',
+      ids: [
+        'docs-plugins',
+        'docs-events',
+        'docs-contributing',
+        'docs-development',
+        'docs-security',
+      ],
+    },
+  ].map((group) => ({
+    id: group.id,
+    title: group.title,
+    entries: group.ids.flatMap((id) => DOCUMENTATION.filter((entry) => entry.id === id)),
+  }));
 
 const REPOSITORY = 'https://github.com/arabcoders/millwright/blob/dev/';
 const SOURCE_ORIGIN = 'https://millwright.invalid';

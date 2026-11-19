@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="min-w-0 space-y-6">
     <DefinePagination v-slot="{ position }">
       <ListPagination
         v-if="!lastError && (jobs.length || offset > 0)"
@@ -26,23 +26,23 @@
         <UBadge v-if="selectedIds.size" color="primary" variant="subtle"
           >{{ selectedIds.size }} selected</UBadge
         >
-        <UTooltip
-          v-for="action in availableBulkActions"
-          :key="action.value"
-          :text="action.hint"
-          :disabled="!action.hint"
+        <UDropdownMenu
+          v-if="availableBulkActions.length"
+          :items="bulkActionItems"
+          :modal="false"
+          :ui="{ content: 'w-80', itemDescription: 'whitespace-normal' }"
         >
           <UButton
-            size="xs"
+            size="sm"
             color="neutral"
             variant="outline"
             :loading="bulkBusy"
-            :disabled="actionsBlocked"
-            :icon="action.icon"
-            @click="runBulk(action.value)"
-            >{{ action.label }}{{ action.partial ? ` (${action.count})` : '' }}</UButton
+            :disabled="actionsBlocked || actionLoading.size > 0"
+            icon="i-lucide-list"
+            trailing-icon="i-lucide-chevron-down"
+            >Actions</UButton
           >
-        </UTooltip>
+        </UDropdownMenu>
       </ListPagination>
     </DefinePagination>
     <PageHeader v-if="!dashboard" page="jobs">
@@ -72,7 +72,7 @@
             aria-label="Refresh jobs"
             :loading="loading"
             :disabled="bulkBusy"
-            @click="loadJobs"
+            @click="refreshJobs"
             >Refresh</UButton
           >
         </div>
@@ -86,6 +86,14 @@
       icon="i-lucide-triangle-alert"
       title="Could not load jobs"
       :description="loadError"
+    />
+    <UAlert
+      v-if="libraryError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      title="Could not load libraries"
+      :description="libraryError.message"
     />
 
     <ListFilters
@@ -105,7 +113,7 @@
         :items="jobKindOptions"
         :disabled="bulkBusy"
         size="sm"
-        class="w-full sm:w-auto sm:min-w-40"
+        class="w-full sm:w-44"
         aria-label="Filter by job type"
         @update:model-value="updateQuery({ kind })"
       />
@@ -118,7 +126,7 @@
         :clear="{ 'aria-label': 'Clear status filter' }"
         :disabled="bulkBusy"
         size="sm"
-        class="w-full sm:w-64"
+        class="w-full sm:w-56"
         aria-label="Filter by job status"
         @update:model-value="updateQuery({ status: statuses.join(',') })"
       />
@@ -133,29 +141,34 @@
           aria-label="Refresh jobs"
           :loading="loading"
           :disabled="bulkBusy"
-          @click="loadJobs"
+          @click="refreshJobs"
           >Refresh</UButton
         >
       </template>
     </ListFilters>
-    <div class="space-y-3">
+    <div class="min-w-0 space-y-4">
       <PaginationControls position="top" />
       <div
         v-if="loading && !jobs.length"
-        class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+        class="mw-card divide-y divide-default"
         aria-label="Loading jobs"
       >
-        <USkeleton v-for="n in 6" :key="n" class="h-64 rounded-xl" />
+        <div v-for="n in 6" :key="n" class="space-y-3 p-4 sm:p-5">
+          <USkeleton class="h-5 w-2/3" />
+          <USkeleton class="h-4 w-1/3" />
+          <USkeleton v-if="!compact" class="h-20 w-full" />
+        </div>
       </div>
       <div
         v-else-if="jobs.length"
-        class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
+        class="mw-card divide-y divide-default"
+        :aria-busy="loading || bulkBusy || actionLoading.size > 0"
       >
         <DeferredContent
           v-for="job in jobs"
           :key="job.id"
-          :min-height="compact ? 208 : 384"
-          class="min-w-0"
+          :min-height="compact ? 144 : 280"
+          class="w-full min-w-0 max-w-full"
         >
           <JobCard
             :job="job"
@@ -163,7 +176,7 @@
             :compact="compact"
             selectable
             :selected="selectedIds.has(job.id)"
-            :busy="loading || bulkBusy"
+            :busy="loading || bulkBusy || actionLoading.has(job.id)"
             :file-loading="fileLoadingId === job.file?.id"
             @open="openDetail(job)"
             @play="job.file && openPlayer(job.file)"
@@ -179,18 +192,9 @@
       <UEmpty
         v-else-if="!loading && !lastError"
         title="No jobs match the current filters."
-        variant="naked"
-        :ui="{
-          root: 'gap-1 p-0 sm:p-0 lg:p-0',
-          header: 'max-w-none gap-1',
-          title: 'text-sm font-normal text-toned',
-        }"
-        class="mw-card py-10 sm:py-10 lg:py-10"
-      >
-        <template #leading>
-          <UIcon name="i-lucide-inbox" class="size-6 text-toned" />
-        </template>
-      </UEmpty>
+        icon="i-lucide-inbox"
+        :size="dashboard ? 'sm' : undefined"
+      />
 
       <PaginationControls position="bottom" />
     </div>
@@ -208,11 +212,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { createReusableTemplate } from '@vueuse/core';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import { useDialog } from '~/composables/useDialog';
 import { useJobRequeue } from '~/composables/useJobRequeue';
 import { useLibraries } from '~/composables/useLibraries';
 import { useJobs, type BulkJobAction } from '~/composables/useJobs';
 import { useFiles } from '~/composables/useFiles';
+import {
+  applyFileProgress,
+  applyQueuedFileJob,
+  newerJobTime,
+  retainFileJobStatus,
+  type FileJobProgress,
+} from '~/composables/stateHelpers';
 import FileDetailModal from '~/components/FileDetailModal.vue';
 import MediaPlayerModal from '~/components/MediaPlayerModal.vue';
 import { validJobExport } from '~/utils/jobExport';
@@ -229,7 +241,7 @@ import {
   remainingJobSelection,
   updateJobRoute,
 } from '~/utils/jobList';
-import type { JobDetail, JobFile, JobRow } from '~/types/api';
+import type { JobDetail, JobFile, JobRow, MediaFileDetail, MediaFileRow } from '~/types/api';
 
 const props = defineProps<{ dashboard?: boolean; compact?: boolean }>();
 const statusOptions = props.dashboard ? dashboardJobStatusOptions : jobStatusOptions;
@@ -272,6 +284,14 @@ const fileLoadingId = ref<number | null>(null);
 let fileModal: ReturnType<typeof overlay.create<typeof FileDetailModal>> | null = null;
 let playerModal: ReturnType<typeof overlay.create<typeof MediaPlayerModal>> | null = null;
 const playerModalFileId = ref<number | null>(null);
+const fileDetail = ref<MediaFileDetail | null>(null);
+const fileDetailId = ref<number | null>(null);
+const terminalFileRefreshes = new Set<string>();
+let fileDetailLoad: {
+  id: number;
+  row?: MediaFileRow;
+  progress: Map<number, FileJobProgress>;
+} | null = null;
 let disposed = false;
 
 const openPlayer = (file: JobFile): void => {
@@ -291,19 +311,55 @@ const openPlayer = (file: JobFile): void => {
   });
 };
 
+const loadOpenFile = async (id: number): Promise<void> => {
+  const journal: NonNullable<typeof fileDetailLoad> = { id, progress: new Map() };
+  fileDetailLoad = journal;
+  try {
+    const detail = await loadFileDetail(id);
+    if (disposed || fileDetailLoad !== journal || fileDetailId.value !== id) return;
+    const merged = { ...detail, ...journal.row };
+    if (fileDetail.value?.id === id) retainFileJobStatus(merged, fileDetail.value);
+    if (merged.active_job_id !== null) {
+      const update = journal.progress.get(merged.active_job_id);
+      if (update) applyFileProgress(merged, update);
+    }
+    fileDetail.value = merged;
+  } catch (error) {
+    if (!disposed && fileDetailLoad === journal)
+      notify.error(error instanceof Error ? error.message : 'Could not load file.');
+  } finally {
+    if (fileDetailLoad === journal) fileDetailLoad = null;
+  }
+};
+watch(
+  fileDetail,
+  (detail) => {
+    if (detail) fileModal?.patch({ detail });
+  },
+  { deep: true },
+);
+
 const openFile = async (id: number): Promise<void> => {
   if (disposed || fileLoadingId.value !== null) return;
   fileLoadingId.value = id;
+  fileModal?.close();
+  fileModal = null;
+  fileDetailId.value = id;
+  fileDetail.value = null;
+  terminalFileRefreshes.clear();
   try {
-    const detail = await loadFileDetail(id);
-    if (disposed) return;
-    fileModal?.close();
+    await loadOpenFile(id);
+    if (disposed || fileDetailId.value !== id) return;
+    if (!fileDetail.value) {
+      fileDetailId.value = null;
+      return;
+    }
     const modal = overlay.create(FileDetailModal, {
       destroyOnClose: true,
       props: {
         open: true,
         rawOpen: false,
-        detail,
+        detail: fileDetail.value,
         readOnly: true,
         healthChecking: false,
         transcoding: false,
@@ -315,7 +371,12 @@ const openFile = async (id: number): Promise<void> => {
     });
     fileModal = modal;
     void modal.open().result.then(() => {
-      if (fileModal === modal) fileModal = null;
+      if (fileModal === modal) {
+        fileModal = null;
+        fileDetailId.value = null;
+        fileDetail.value = null;
+        fileDetailLoad = null;
+      }
     });
   } catch (error) {
     if (!disposed) notify.error(error instanceof Error ? error.message : 'Could not load file.');
@@ -328,16 +389,85 @@ const { on } = useEvents();
 const stopEvents = on((event) => {
   if (
     event.type === 'file.status' &&
-    event.payload.media_file_id === playerModalFileId.value &&
     (event.payload.action === 'deleted' || event.payload.action === 'pruned')
   ) {
-    playerModal?.close();
-    playerModalFileId.value = null;
+    const id = event.payload.media_file_id;
+    if (id === playerModalFileId.value) {
+      playerModal?.close();
+      playerModalFileId.value = null;
+    }
+    if (id === fileDetailId.value) {
+      fileModal?.close();
+      fileDetailId.value = null;
+      fileDetail.value = null;
+      fileDetailLoad = null;
+    }
+    return;
+  }
+  if (event.type === 'job.progress') {
+    if (fileDetailLoad) {
+      const update = event.payload;
+      const previous = fileDetailLoad.progress.get(update.job_id);
+      if (!previous || newerJobTime(update.updated_at, previous.updated_at))
+        fileDetailLoad.progress.set(update.job_id, update);
+    }
+    if (fileDetail.value) applyFileProgress(fileDetail.value, event.payload);
+    return;
+  }
+  if (event.type === 'file.status' && event.payload.file) {
+    const file = { ...event.payload.file };
+    if (fileDetailLoad?.id === file.id) fileDetailLoad.row = file;
+    if (file.id !== fileDetailId.value) return;
+    if (fileDetail.value) {
+      retainFileJobStatus(file, fileDetail.value);
+      if (
+        fileDetail.value.active_job_id !== null &&
+        fileDetail.value.active_job_updated_at !== null
+      )
+        applyFileProgress(file, {
+          job_id: fileDetail.value.active_job_id,
+          progress: fileDetail.value.active_job_progress,
+          updated_at: fileDetail.value.active_job_updated_at,
+        });
+      Object.assign(fileDetail.value, file);
+    }
+    if (['probed', 'probe_error'].includes(event.payload.action)) void loadOpenFile(file.id);
+    return;
+  }
+  if (event.type === 'job.status' && fileDetail.value) {
+    if (!('job' in event.payload)) {
+      applyQueuedFileJob(fileDetail.value, event.payload);
+      return;
+    }
+    const job = event.payload.job;
+    if (job.file?.id !== fileDetail.value.id) return;
+    retainFileJobStatus(fileDetail.value, job);
+    fileDetail.value.jobs = [
+      {
+        id: job.id,
+        kind: job.kind,
+        status: job.status,
+        error: job.error,
+        created_at: job.created_at,
+      },
+      ...fileDetail.value.jobs.filter((item) => item.id !== job.id),
+    ].sort((a, b) => b.id - a.id);
+    if (['succeeded', 'failed', 'cancelled', 'skipped'].includes(job.status)) {
+      const key = `${job.id}:${job.status}`;
+      if (!terminalFileRefreshes.has(key)) {
+        terminalFileRefreshes.add(key);
+        void loadOpenFile(fileDetail.value.id);
+      }
+    }
+  }
+  if (event.type === 'job.deleted' && fileDetail.value) {
+    fileDetail.value.jobs = fileDetail.value.jobs.filter((job) => job.id !== event.payload.job_id);
   }
 });
 
 onBeforeUnmount(() => {
   disposed = true;
+  fileDetailLoad = null;
   stopEvents();
   fileModal?.close();
   playerModal?.close();
@@ -351,6 +481,7 @@ watch(
   },
 );
 const bulkBusy = ref(false);
+const actionLoading = ref(new Set<number>());
 const actionsBlocked = computed(() => bulkBusy.value || loading.value);
 const sortBy = ref('created_at');
 const sortDir = ref<'asc' | 'desc'>('desc');
@@ -403,6 +534,16 @@ const availableBulkActions = computed(() =>
     ];
   }),
 );
+const bulkActionItems = computed<DropdownMenuItem[]>(() =>
+  availableBulkActions.value.map((action): DropdownMenuItem => ({
+    label: `${action.label}${action.partial ? ` (${action.count})` : ''}`,
+    icon: action.icon,
+    description: action.hint || undefined,
+    color: action.value === 'delete' ? 'error' : undefined,
+    disabled: actionsBlocked.value || actionLoading.value.size > 0,
+    onSelect: () => void runBulk(action.value),
+  })),
+);
 const allVisibleSelected = computed(
   () => jobs.value.length > 0 && jobs.value.every((job) => selectedIds.value.has(job.id)),
 );
@@ -452,6 +593,16 @@ const loadJobs = async (): Promise<void> => {
     );
 };
 let mounted = false;
+const refreshJobs = async (): Promise<void> => {
+  await Promise.all([loadJobs(), reloadLibraries()]);
+};
+watch([total, offset, loading, bulkBusy], async () => {
+  if (!mounted || actionsBlocked.value || lastError.value) return;
+  if (offset.value > 0 && offset.value >= total.value) {
+    const lastOffset = Math.max(0, Math.ceil(total.value / limit.value) - 1) * limit.value;
+    await updateQuery({ offset: String(lastOffset) });
+  }
+});
 
 watch(
   () => route.query,
@@ -483,7 +634,12 @@ watch(query, async (value) => {
     await updateQuery({ query: normalized });
 });
 
-const { items: libraries, ensure: ensureLibraries } = useLibraries();
+const {
+  items: libraries,
+  ensure: ensureLibraries,
+  reload: reloadLibraries,
+  lastError: libraryError,
+} = useLibraries();
 
 onMounted(() => {
   mounted = true;
@@ -492,21 +648,28 @@ onMounted(() => {
 });
 
 const rowAction = async (job: JobRow, action: 'cancel' | 'retry' | 'bump'): Promise<void> => {
-  if (actionsBlocked.value) return;
-  if (action === 'retry') {
-    await requeue(job.id);
-    return;
+  if (actionsBlocked.value || actionLoading.value.has(job.id)) return;
+  actionLoading.value = new Set(actionLoading.value).add(job.id);
+  try {
+    if (action === 'retry') {
+      await requeue(job.id);
+      return;
+    }
+    const result = await runJobAction(job.id, action);
+    if (!result.ok) {
+      notify.error(messageFor(result.error.detail, 'Request failed.'));
+      return;
+    }
+    notify.success(
+      action === 'bump'
+        ? `Job #${job.id} moved to the top of the queue.`
+        : `Cancellation requested for job #${job.id}.`,
+    );
+  } finally {
+    const next = new Set(actionLoading.value);
+    next.delete(job.id);
+    actionLoading.value = next;
   }
-  const result = await runJobAction(job.id, action);
-  if (!result.ok) {
-    notify.error(messageFor(result.error.detail, 'Request failed.'));
-    return;
-  }
-  notify.success(
-    action === 'bump'
-      ? `Job #${job.id} moved to the top of the queue.`
-      : `Cancellation requested for job #${job.id}.`,
-  );
 };
 
 const cancelJob = (job: JobRow): void => {
@@ -522,26 +685,33 @@ const bumpJob = async (job: JobRow): Promise<void> => {
 };
 
 const deleteJob = async (job: JobRow): Promise<void> => {
-  if (actionsBlocked.value) return;
+  if (actionsBlocked.value || actionLoading.value.has(job.id)) return;
   const result = await confirmDialog({
     title: 'Delete job?',
     message: `This permanently removes job #${job.id} and its history. The media file is kept.`,
     confirmText: 'Delete',
     confirmColor: 'error',
   });
-  if (result.status && !actionsBlocked.value) {
-    const result = await remove(job.id);
-    if (result.ok) {
-      selectedIds.value = remainingJobSelection(selectedIds.value, [job.id]);
-      notify.success(`Deletion requested for job #${job.id}.`);
-    } else {
-      notify.error(messageFor(result.error.detail, 'Request failed.'));
+  if (result.status && !actionsBlocked.value && !actionLoading.value.has(job.id)) {
+    actionLoading.value = new Set(actionLoading.value).add(job.id);
+    try {
+      const result = await remove(job.id);
+      if (result.ok) {
+        selectedIds.value = remainingJobSelection(selectedIds.value, [job.id]);
+        notify.success(`Deletion requested for job #${job.id}.`);
+      } else {
+        notify.error(messageFor(result.error.detail, 'Request failed.'));
+      }
+    } finally {
+      const next = new Set(actionLoading.value);
+      next.delete(job.id);
+      actionLoading.value = next;
     }
   }
 };
 
 const runBulk = async (action: BulkJobAction): Promise<void> => {
-  if (actionsBlocked.value) return;
+  if (actionsBlocked.value || actionLoading.value.size > 0) return;
   const ids = jobActionIds(jobs.value, selectedIds.value, action);
   if (!ids.length) return;
   if (action !== 'bump' && action !== 'retry') {

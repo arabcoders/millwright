@@ -1,5 +1,5 @@
 <template>
-  <div class="mw-card p-3">
+  <div class="mw-card bg-elevated/40 p-3">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0 space-y-1">
         <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-toned">
@@ -8,7 +8,7 @@
           >
         </p>
         <UTooltip v-if="tooltip" :text="tooltip" :content="{ side: 'left' }">
-          <div class="flex items-baseline gap-1.5">
+          <div :class="valueWrap ? 'space-y-1' : 'flex items-baseline gap-1.5'">
             <NuxtLink v-if="to" :to="to" :class="[valueClass, 'hover:underline']">
               <slot name="value" :value="value"
                 ><bdi>{{ value }}</bdi></slot
@@ -34,13 +34,13 @@
               v-if="hint"
               :class="[
                 'min-w-0 text-xs leading-5 text-toned',
-                hintWrap ? 'line-clamp-2' : 'truncate',
+                valueWrap ? 'block wrap-break-word' : hintWrap ? 'line-clamp-2' : 'truncate',
               ]"
               ><bdi>{{ hint }}</bdi></span
             >
           </div>
         </UTooltip>
-        <div v-else class="flex items-baseline gap-1.5">
+        <div v-else :class="valueWrap ? 'space-y-1' : 'flex items-baseline gap-1.5'">
           <NuxtLink v-if="to" :to="to" :class="[valueClass, 'hover:underline']">
             <slot name="value" :value="value"
               ><bdi>{{ value }}</bdi></slot
@@ -66,7 +66,7 @@
             v-if="hint"
             :class="[
               'min-w-0 text-xs leading-5 text-toned',
-              hintWrap ? 'line-clamp-2' : 'truncate',
+              valueWrap ? 'block wrap-break-word' : hintWrap ? 'line-clamp-2' : 'truncate',
             ]"
             ><bdi>{{ hint }}</bdi></span
           >
@@ -82,7 +82,7 @@
           iconTileClass,
         ]"
       >
-        <UIcon :name="icon" :class="['size-4', iconTextClass]" />
+        <UIcon :name="icon" :class="['size-4', iconTextClass]" aria-hidden="true" />
       </span>
     </div>
   </div>

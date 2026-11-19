@@ -28,7 +28,7 @@
         >
         <UButton
           v-if="selected.size"
-          size="xs"
+          size="sm"
           color="neutral"
           variant="outline"
           icon="i-lucide-trash-2"
@@ -49,7 +49,7 @@
           aria-label="Refresh trash"
           :loading="loading"
           :disabled="mutationBusy"
-          @click="loadTrash"
+          @click="refreshTrash"
         >
           Refresh
         </UButton>
@@ -75,6 +75,14 @@
       title="Could not load trash"
       :description="lastError.message"
     />
+    <UAlert
+      v-if="libraryError"
+      color="error"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      title="Could not load libraries"
+      :description="libraryError.message"
+    />
 
     <ListFilters
       v-model:query="query"
@@ -87,18 +95,16 @@
       @update:sort-by="updateQuery({ sort_by: $event })"
       @update:sort-dir="updateQuery({ sort_dir: $event })"
     >
-      <UFormField label="" size="sm" class="w-full sm:w-auto">
-        <USelectMenu
-          value-key="value"
-          v-model="libraryId"
-          :items="libraryOptions"
-          :disabled="mutationBusy"
-          size="sm"
-          class="w-full sm:min-w-40"
-          aria-label="Filter by library"
-          @update:model-value="updateQuery({ library_id: libraryId })"
-        />
-      </UFormField>
+      <USelectMenu
+        value-key="value"
+        v-model="libraryId"
+        :items="libraryOptions"
+        :disabled="mutationBusy"
+        size="sm"
+        class="w-full sm:w-48"
+        aria-label="Filter by library"
+        @update:model-value="updateQuery({ library_id: libraryId })"
+      />
       <template #trailing>
         <UBadge class="ml-auto self-center" color="neutral" variant="subtle"
           >{{ formatBytes(totalSizeBytes) }} in trash</UBadge
@@ -108,87 +114,71 @@
 
     <div class="space-y-3">
       <PaginationControls position="top" />
-      <div
-        v-if="loading && !entries.length"
-        class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
-        aria-label="Loading trash"
-      >
-        <USkeleton v-for="index in 6" :key="index" class="h-64 rounded-xl" />
+      <div v-if="loading && !entries.length" class="space-y-3" aria-label="Loading trash">
+        <USkeleton v-for="index in 6" :key="index" class="h-36 rounded-lg" />
       </div>
-      <div
+      <UEmpty
         v-else-if="entries.length === 0 && !lastError"
-        class="mw-card flex flex-col items-center justify-center gap-1 py-10 text-center"
-      >
-        <UIcon name="i-lucide-trash-2" class="size-6 text-toned" />
-        <p class="text-sm text-toned">
-          {{
-            query || libraryId !== TRASH_FILTER_ALL
-              ? 'No trash matches the current filters.'
-              : 'Trash is empty.'
-          }}
-        </p>
-      </div>
-      <div
-        v-else-if="entries.length"
-        class="grid grid-cols-1 gap-3 @min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3"
-      >
-        <DeferredContent v-for="entry in entries" :key="entry.id" :min-height="256" class="min-w-0">
+        :icon="query || libraryId !== TRASH_FILTER_ALL ? 'i-lucide-search-x' : 'i-lucide-trash-2'"
+        :title="
+          query || libraryId !== TRASH_FILTER_ALL
+            ? 'No trash matches the current filters.'
+            : 'Trash is empty.'
+        "
+      />
+      <div v-else-if="entries.length" class="mw-card divide-y divide-default" :aria-busy="loading">
+        <DeferredContent v-for="entry in entries" :key="entry.id" :min-height="144" class="min-w-0">
           <article
-            class="mw-card @container/trash-card flex h-full min-w-0 flex-col gap-3 p-4"
-            :class="selected.has(entry.id) ? 'ring-2 ring-primary' : ''"
+            class="grid min-w-0 gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_22rem_auto]"
+            :class="{ 'bg-primary/5': selected.has(entry.id) }"
           >
-            <div class="flex items-start gap-3">
-              <UCheckbox
-                class="shrink-0 self-center"
-                :model-value="selected.has(entry.id)"
-                :aria-label="`Select file ${fileName(entry.original_path)}`"
-                :disabled="actionsBlocked"
-                @update:model-value="toggleSelection(entry.id, $event)"
-              />
+            <div class="flex min-w-0 items-start gap-3">
               <div class="min-w-0 flex-1">
                 <h2 class="min-w-0">
-                  <UTooltip :text="entry.original_path">
-                    <p class="mt-1 truncate text-xs text-dimmed">
-                      {{ trashDirectory(entry.original_path) }}
-                    </p>
-                  </UTooltip>
-                  <UTooltip :text="fileName(entry.original_path)">
+                  <UTooltip :text="entry.original_path" :content="{ align: 'start' }">
                     <button
                       v-if="entry.current_file_id !== null"
                       type="button"
                       :aria-label="`Open details for ${fileName(entry.original_path)}`"
                       :disabled="mutationBusy"
                       @click="openDetail(entry.current_file_id)"
-                      class="line-clamp-2 min-h-10 w-full break-all text-left text-sm font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                      class="w-full wrap-anywhere text-left text-base font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
                     >
                       {{ fileName(entry.original_path) }}
                     </button>
-                    <span
-                      v-else
-                      class="line-clamp-2 min-h-10 break-all text-sm font-semibold text-highlighted"
-                      >{{ fileName(entry.original_path) }}</span
-                    >
+                    <span v-else class="wrap-anywhere text-base font-semibold text-highlighted">{{
+                      fileName(entry.original_path)
+                    }}</span>
                   </UTooltip>
                 </h2>
+                <p class="mt-2 flex min-w-0 items-start gap-1.5 text-xs text-toned">
+                  <UIcon
+                    name="i-lucide-folder"
+                    class="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span class="wrap-anywhere font-mono">{{
+                    trashDirectory(entry.original_path)
+                  }}</span>
+                </p>
               </div>
-              <span
-                class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-              >
-                <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
-              </span>
             </div>
-            <dl
-              class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs @min-[22rem]/trash-card:grid-cols-3"
-            >
-              <div>
-                <dt class="text-dimmed">File size</dt>
-                <dd class="mt-0.5 text-toned">
+            <dl class="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-hard-drive" class="size-3.5 shrink-0" aria-hidden="true" />
+                  File size
+                </dt>
+                <dd class="tabular-nums">
                   {{ formatBytes(entry.size_bytes) }}
                 </dd>
               </div>
-              <div>
-                <dt class="text-dimmed">Trashed</dt>
-                <dd class="mt-0.5 text-toned">
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon name="i-lucide-clock-3" class="size-3.5 shrink-0" aria-hidden="true" />
+                  Trashed
+                </dt>
+                <dd>
                   <UTooltip :text="formatDate(entry.trashed_at, 'detail')">
                     <time :datetime="toIsoString(entry.trashed_at)">{{
                       formatRelativeTime(entry.trashed_at, 'en')
@@ -196,9 +186,16 @@
                   </UTooltip>
                 </dd>
               </div>
-              <div>
-                <dt class="text-dimmed">Purges</dt>
-                <dd class="mt-0.5 text-toned">
+              <div class="min-w-0 space-y-1">
+                <dt class="flex items-center gap-1.5 text-xs text-muted">
+                  <UIcon
+                    name="i-lucide-calendar-clock"
+                    class="size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  Purges
+                </dt>
+                <dd>
                   <UTooltip :text="formatDate(entry.purge_at, 'detail')">
                     <time :datetime="toIsoString(entry.purge_at)">{{
                       formatRelativeTime(entry.purge_at, 'en')
@@ -207,18 +204,14 @@
                 </dd>
               </div>
             </dl>
-            <div class="mt-auto flex flex-wrap items-center justify-end gap-2" @click.stop>
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                icon="i-lucide-trash-2"
-                :aria-label="`Delete ${fileName(entry.original_path)}`"
-                :loading="deletingId === entry.id"
+            <div class="flex flex-wrap items-start justify-end gap-1.5" @click.stop>
+              <UCheckbox
+                class="self-center shrink-0"
+                :model-value="selected.has(entry.id)"
+                :aria-label="`Select file ${fileName(entry.original_path)}`"
                 :disabled="actionsBlocked"
-                @click="deleteEntry(entry)"
-                >Delete</UButton
-              >
+                @update:model-value="toggleSelection(entry.id, $event)"
+              />
               <UButton
                 color="neutral"
                 variant="outline"
@@ -230,6 +223,22 @@
                 :aria-label="`Restore ${fileName(entry.original_path)}`"
                 >Restore</UButton
               >
+              <UDropdownMenu
+                :items="entryActions(entry)"
+                :modal="false"
+                :content="{ align: 'end' }"
+              >
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  icon="i-lucide-ellipsis"
+                  square
+                  :aria-label="`Actions for ${fileName(entry.original_path)}`"
+                  :loading="deletingId === entry.id"
+                  :disabled="actionsBlocked"
+                />
+              </UDropdownMenu>
             </div>
           </article>
         </DeferredContent>
@@ -257,6 +266,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { createReusableTemplate } from '@vueuse/core';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import ListFilters from '~/components/ListFilters.vue';
 import ListPagination from '~/components/ListPagination.vue';
 import { useDialog } from '~/composables/useDialog';
@@ -275,6 +285,13 @@ import {
   useFiles,
 } from '~/composables/useFiles';
 import {
+  applyFileProgress,
+  applyQueuedFileJob,
+  newerJobTime,
+  retainFileJobStatus,
+  type FileJobProgress,
+} from '~/composables/stateHelpers';
+import {
   TRASH_FILTER_ALL,
   trashDirectory,
   trashQueryKeys,
@@ -290,7 +307,12 @@ const [DefinePagination, PaginationControls] = createReusableTemplate<{
 }>();
 
 const { confirmDialog } = useDialog();
-const { items: libraries, ensure: ensureLibraries } = useLibraries();
+const {
+  items: libraries,
+  ensure: ensureLibraries,
+  reload: reloadLibraries,
+  lastError: libraryError,
+} = useLibraries();
 const { scanner } = useLibraryProgress();
 const {
   items: entries,
@@ -348,7 +370,13 @@ const filters = computed<TrashFilters>(() => ({
 }));
 const detailOpen = ref(false);
 const detail = ref<MediaFileDetail | null>(null);
-let detailLoad: { id: number; row?: MediaFileRow } | null = null;
+let detailLoad: {
+  id: number;
+  row?: MediaFileRow;
+  progress: Map<number, FileJobProgress>;
+} | null = null;
+const detailFileId = ref<number | null>(null);
+const terminalDetailRefreshes = new Set<string>();
 const rawOpen = ref(false);
 const healthChecking = ref(false);
 const transcoding = ref(false);
@@ -361,30 +389,99 @@ const refreshDisabledReason = computed(() =>
     : null,
 );
 const loadDetail = async (id: number): Promise<void> => {
-  const request: NonNullable<typeof detailLoad> = { id };
+  const request: NonNullable<typeof detailLoad> = { id, progress: new Map() };
   detailLoad = request;
   try {
     const file = await loadFileDetail(id);
-    if (detailLoad === request && detailOpen.value) detail.value = { ...file, ...request.row };
-  } catch {
-    if (detailLoad === request && detailOpen.value) updateDetailOpen(false);
+    if (detailLoad === request && detailOpen.value && detailFileId.value === id) {
+      const merged = { ...file, ...request.row };
+      if (detail.value?.id === id) retainFileJobStatus(merged, detail.value);
+      if (merged.active_job_id !== null) {
+        const update = request.progress.get(merged.active_job_id);
+        if (update) applyFileProgress(merged, update);
+      }
+      detail.value = merged;
+    }
+  } catch (error) {
+    if (detailLoad === request && detailOpen.value) {
+      updateDetailOpen(false);
+      notify.error(error instanceof Error ? error.message : 'Could not load file.');
+    }
   } finally {
     if (detailLoad === request) detailLoad = null;
   }
 };
 const openDetail = (id: number): void => {
   if (mutationBusy.value) return;
+  terminalDetailRefreshes.clear();
+  detailFileId.value = id;
   detail.value = null;
   detailOpen.value = true;
   void loadDetail(id);
 };
 const stopEvents = useEvents().on((event) => {
-  if (event.type !== 'file.status' || !event.payload.file) return;
-  const file = event.payload.file;
-  if (detailLoad?.id === file.id) detailLoad.row = file;
-  if (!detailOpen.value || (detail.value?.id !== file.id && detailLoad?.id !== file.id)) return;
-  if (detail.value) Object.assign(detail.value, file);
-  if (['probed', 'probe_error'].includes(event.payload.action)) void loadDetail(file.id);
+  if (
+    event.type === 'file.status' &&
+    (event.payload.action === 'deleted' || event.payload.action === 'pruned')
+  ) {
+    if (event.payload.media_file_id === detailFileId.value) updateDetailOpen(false);
+    return;
+  }
+  if (event.type === 'job.progress') {
+    if (detailLoad) {
+      const update = event.payload;
+      const previous = detailLoad.progress.get(update.job_id);
+      if (!previous || newerJobTime(update.updated_at, previous.updated_at))
+        detailLoad.progress.set(update.job_id, update);
+    }
+    if (detailOpen.value && detail.value) applyFileProgress(detail.value, event.payload);
+    return;
+  }
+  if (event.type === 'file.status' && event.payload.file) {
+    const file = { ...event.payload.file };
+    if (detailLoad?.id === file.id) detailLoad.row = file;
+    if (!detailOpen.value || file.id !== detailFileId.value) return;
+    if (detail.value) {
+      retainFileJobStatus(file, detail.value);
+      if (detail.value.active_job_id !== null && detail.value.active_job_updated_at !== null)
+        applyFileProgress(file, {
+          job_id: detail.value.active_job_id,
+          progress: detail.value.active_job_progress,
+          updated_at: detail.value.active_job_updated_at,
+        });
+      Object.assign(detail.value, file);
+    }
+    if (['probed', 'probe_error'].includes(event.payload.action)) void loadDetail(file.id);
+    return;
+  }
+  if (event.type === 'job.status' && detailOpen.value && detail.value) {
+    if (!('job' in event.payload)) {
+      applyQueuedFileJob(detail.value, event.payload);
+      return;
+    }
+    const job = event.payload.job;
+    if (job.file?.id !== detail.value.id) return;
+    retainFileJobStatus(detail.value, job);
+    detail.value.jobs = [
+      {
+        id: job.id,
+        kind: job.kind,
+        status: job.status,
+        error: job.error,
+        created_at: job.created_at,
+      },
+      ...detail.value.jobs.filter((item) => item.id !== job.id),
+    ].sort((a, b) => b.id - a.id);
+    if (['succeeded', 'failed', 'cancelled', 'skipped'].includes(job.status)) {
+      const key = `${job.id}:${job.status}`;
+      if (!terminalDetailRefreshes.has(key)) {
+        terminalDetailRefreshes.add(key);
+        void loadDetail(detail.value.id);
+      }
+    }
+  }
+  if (event.type === 'job.deleted' && detail.value)
+    detail.value.jobs = detail.value.jobs.filter((job) => job.id !== event.payload.job_id);
 });
 onBeforeUnmount(() => {
   stopEvents();
@@ -393,6 +490,7 @@ onBeforeUnmount(() => {
 const updateDetailOpen = (open: boolean): void => {
   detailOpen.value = open;
   if (open) return;
+  detailFileId.value = null;
   detailLoad = null;
   detail.value = null;
   rawOpen.value = false;
@@ -431,6 +529,9 @@ const fileName = (path: string): string => path.split(/[\\/]/).at(-1) || path;
 const loadTrash = async (): Promise<void> => {
   if (mutationBusy.value) return;
   await load(filters.value).catch(() => {});
+};
+const refreshTrash = async (): Promise<void> => {
+  await Promise.all([loadTrash(), reloadLibraries()]);
 };
 
 const clearSelection = (): void => {
@@ -487,6 +588,15 @@ const deleteEntry = async (entry: TrashEntry): Promise<void> => {
     deletingId.value = null;
   }
 };
+const entryActions = (entry: TrashEntry): DropdownMenuItem[] => [
+  {
+    label: 'Delete',
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    disabled: actionsBlocked.value,
+    onSelect: () => deleteEntry(entry),
+  },
+];
 
 const deleteSelected = async (): Promise<void> => {
   if (actionsBlocked.value || !selected.value.size) return;
@@ -605,6 +715,13 @@ const emptyTrash = async (): Promise<void> => {
 };
 
 let mounted = false;
+watch([total, offset, loading, mutationBusy], async () => {
+  if (!mounted || busy.value || lastError.value) return;
+  if (offset.value > 0 && offset.value >= total.value) {
+    const lastOffset = Math.max(0, Math.ceil(total.value / limit.value) - 1) * limit.value;
+    await updateQuery({ offset: String(lastOffset) });
+  }
+});
 watch(
   () => route.query,
   async (current, previous) => {

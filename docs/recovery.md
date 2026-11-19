@@ -1,29 +1,24 @@
 # Recovery and backups
 
-Use trash to undo a conversion, workspace cleanup to remove temporary files, and backups to recover an
-instance or media you've lost. These serve different purposes. Keeping an original in trash isn't a
-replacement for a backup on separate storage.
+Trash can undo a conversion. It doesn't replace a backup on separate storage.
 
 ## Retain originals
 
-Set **trash mode** in each library before processing:
+Set **Trash mode** in each library before processing:
 
-| Mode        | What happens to replaced originals                             |
-| ----------- | -------------------------------------------------------------- |
-| `all`       | Keep every original, including files changed only by remuxing  |
-| `transcode` | Keep originals when video or audio is re-encoded               |
-| `none`      | Discard the original after the replacement passes verification |
+| Mode        | What happens to replaced originals                              |
+| ----------- | --------------------------------------------------------------- |
+| `all`       | Keep every original, including files changed only by remuxing   |
+| `transcode` | Keep originals when video or audio is re-encoded                |
+| `none`      | Discard the original after the replacement passes verification   |
 
-Start with `all` when trying a flow. Set **trash retention days** long enough to inspect the results.
+Start with `all` when trying a flow. Set **Trash retention days** long enough to inspect the results.
 After that period, Millwright deletes expired originals automatically.
 
 Conversions need space for the input copy, output, and any original you're keeping. If storage is tight,
 review trash and unused workspaces rather than deleting working files by hand.
 
 ## Restore an original
-
-Open **trash**, find the file, and choose **restore**. The dialog shows where the original will go.
-If a file already exists there, you can choose to replace it and move that existing file to trash too.
 
 Leave **Sync restored file to disk (fsync)** enabled unless you accept the risk of losing an unsynced
 copy after a crash or power failure.
@@ -32,8 +27,7 @@ copy after a crash or power failure.
 > **Replace existing destination** without **Move destination file to trash** permanently discards the
 > file currently at that path.
 
-A restored file isn't automatically converted again by the restore action. If restore reports a conflict,
-inspect the existing file before choosing replacement options or retrying.
+A restore doesn't queue another conversion.
 
 Trash remains available after deleting a library. **Empty trash** deletes every entry, including ones
 hidden by your current filters. Deleting selected entries is permanent too.
@@ -43,9 +37,7 @@ To restore from a terminal, use `millwright trash restore ENTRY_ID`. See
 
 ## Workspace cleanup
 
-**Workspaces** shows the temporary files left by processing jobs. Use **Prune selected** for selected
-eligible rows, or **Prune unused** to remove unused workspaces across the instance. The latter isn't
-limited to the current page or filters.
+**Prune unused** on **Workspaces** applies across the instance, regardless of page or filters.
 
 Millwright skips files that are still in use. If a workspace remains protected after a failure, inspect
 the job and any surviving node process before trying to free it. Deleting the directory yourself can
@@ -56,13 +48,9 @@ clean the workspace, so use the appropriate control for each.
 
 ## Configuration backups
 
-Use **System operations -> Export configuration backup** to save settings you can reuse or restore later.
-Choose a password of at least eight characters and keep it with your backup records. The downloaded
-`.mwbackup` file is encrypted.
-
-It includes library definitions, flows, notification targets, incoming webhooks, node settings, plugins,
-and server configuration. It also includes credentials from the exported configuration, so keep the
-backup and its password private.
+**System operations -> Export configuration backup** saves an encrypted `.mwbackup` file. It includes
+library definitions, flows, notification targets, incoming webhooks, node settings, plugins, and server
+configuration. Exports can contain credentials. Keep the file and its password private.
 
 It does **not** include your media, trash files, accounts, file index, or job history. Back up Compose
 files, environment settings, external secret files, and each node's configuration and state separately.
@@ -70,12 +58,9 @@ Node state includes the issued credentials in `node-credentials.json`.
 
 ### Restore configuration
 
-Choose **Import configuration backup**, select the file, and enter its password. Review the preview
-and choose which parts to restore before applying it.
-
-Check library paths, flows, node settings, and webhook path replacements afterward. Restored libraries
-are paused and uploaded plugins are disabled so you can review them before resuming. Changes to server
-startup configuration need a restart.
+Review the import preview before applying a configuration backup. Restored libraries are paused and
+uploaded plugins are disabled. Check library paths and webhook path replacements before resuming.
+Changes to server startup configuration need a restart.
 
 If a restore fails partway through, inspect the current settings before retrying. Some selected items
 may already have been restored.

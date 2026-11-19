@@ -13,6 +13,8 @@ const types = new Map([
   ['rate', 'float'],
   ['codec', 'str'],
   ['enabled', 'bool'],
+  ['languages', 'list[str]'],
+  ['indices', 'list[int]'],
 ]);
 
 test('converts declared operands', () => {
@@ -58,7 +60,7 @@ test('preserves untouched literals', () => {
 
 test('validates typed operands', () => {
   for (const op of ['eq', 'ne'] as const) {
-    for (const key of ['depth', 'rate', 'enabled']) {
+    for (const key of ['depth', 'rate', 'enabled', 'languages', 'indices']) {
       const condition = {
         mode: 'all' as const,
         rows: [{ uid: 1, key, op, value: 'invalid' }],
@@ -66,6 +68,30 @@ test('validates typed operands', () => {
       };
       expect(conditionProblem('step', condition, types)).not.toBe('');
     }
+  }
+});
+
+test('edits list operands', () => {
+  const condition = conditionFromWhen({ languages: ['eng'], indices: { ne: [1] } });
+  condition.rows[0]!.value = '["eng","fra"]';
+  condition.rows[1]!.value = '[2,3]';
+  expect(conditionProblem('step', condition, types)).toBe('');
+  expect(conditionToWhen(condition, types)).toEqual({
+    languages: ['eng', 'fra'],
+    indices: { ne: [2, 3] },
+  });
+});
+
+test('rejects invalid lists', () => {
+  for (const [key, value] of [
+    ['languages', '"eng"'],
+    ['languages', '[1]'],
+    ['indices', '[1.5]'],
+    ['indices', '["1"]'],
+  ]) {
+    const condition = conditionFromWhen({ [key!]: [] });
+    condition.rows[0]!.value = value!;
+    expect(conditionProblem('step', condition, types)).not.toBe('');
   }
 });
 

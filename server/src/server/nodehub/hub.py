@@ -55,6 +55,7 @@ from common.workspace import DEFAULT_MIN_FREE_GB, resolve_workspace_path, worksp
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import delete, func, or_, select, tuple_, update
 
+from server.core.db import postgres_disconnect_reason
 from server.events import EventBus, publish_job_status
 from server.finalization import (
     FinalizationError,
@@ -4245,8 +4246,12 @@ class NodeHub:
                 self._wake.clear()
                 try:
                     await self.dispatch_once()
-                except Exception:
-                    LOG.exception("dispatch pass failed")
+                except Exception as exc:
+                    reason = postgres_disconnect_reason(exc)
+                    if reason is None:
+                        LOG.exception("Job dispatch pass failed.")
+                    else:
+                        LOG.warning("Job dispatch will retry. PostgreSQL: %s", reason)
         except asyncio.CancelledError:
             pass
 
@@ -4256,8 +4261,12 @@ class NodeHub:
                 await asyncio.sleep(self.sweep_interval_s)
                 try:
                     await self.sweep_once()
-                except Exception:
-                    LOG.exception("sweep pass failed")
+                except Exception as exc:
+                    reason = postgres_disconnect_reason(exc)
+                    if reason is None:
+                        LOG.exception("Job sweep pass failed.")
+                    else:
+                        LOG.warning("Job sweep will retry. PostgreSQL: %s", reason)
         except asyncio.CancelledError:
             pass
 

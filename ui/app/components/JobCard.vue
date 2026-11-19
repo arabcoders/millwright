@@ -1,89 +1,73 @@
 <template>
   <article
-    class="mw-card @container/job-card flex h-full min-w-0 flex-col gap-3 p-4"
-    :class="selected ? 'ring-2 ring-primary' : ''"
+    class="@container/job-row grid min-w-0 gap-3 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_auto]"
+    :class="{ 'bg-primary/5': selected }"
   >
-    <div class="flex items-start gap-3">
-      <UCheckbox
-        v-if="selectable"
-        class="shrink-0 self-center"
-        :model-value="selected"
-        :aria-label="`Select job #${job.id}`"
-        :disabled="busy"
-        @update:model-value="$emit('select', $event)"
-      />
+    <div class="flex min-w-0 items-start gap-3">
+      <StatusIndicator :info="indicator">
+        <JobProgressRing
+          v-if="isActive(job.status)"
+          layout="icon"
+          :status="job.status"
+          :percent="progressPercent(job.progress)"
+          :cooldown-started-at="job.cooldown_started_at"
+          :cooldown-until="job.hold_until"
+          :label="indicator.label"
+        />
+      </StatusIndicator>
       <h2 class="min-w-0 flex-1">
-        <UTooltip v-if="job.file" :text="job.file.path">
+        <UTooltip
+          v-if="job.file"
+          :text="job.file.path"
+          :content="{ align: 'start' }"
+          :ui="{ text: 'mask-it' }"
+        >
           <button
             type="button"
-            class="w-full min-w-0 text-left text-sm font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+            class="w-full min-w-0 text-left text-base font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+            :aria-label="`Open job #${job.id} for ${fileName(job.file.path)}`"
             @click="$emit('open')"
           >
-            <span v-if="directory" class="block truncate text-xs font-normal text-dimmed"
+            <span class="mask-it line-clamp-2 wrap-anywhere">{{ fileName(job.file.path) }}</span>
+            <span
+              v-if="directory"
+              class="mask-it mt-1 block truncate text-xs font-normal text-dimmed"
               >./{{ directory }}</span
             >
-            <span class="line-clamp-2 min-h-10 break-all">{{ fileName(job.file.path) }}</span>
           </button>
         </UTooltip>
         <button
           v-else
           type="button"
-          class="min-h-10 w-full min-w-0 text-left text-sm font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+          class="w-full min-w-0 text-left text-base font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+          :aria-label="`Open job #${job.id}`"
           @click="$emit('open')"
         >
           File unavailable
         </button>
       </h2>
-      <JobProgressRing
-        v-if="isActive(job.status)"
-        :status="job.status"
-        :percent="progressPercent(job.progress)"
-        :cooldown-started-at="job.cooldown_started_at"
-        :cooldown-until="job.hold_until"
-        :label="`${statusInfo(job.kind, 'kind').label} job progress`"
-        :color="job.kind === 'healthcheck' ? 'success' : 'primary'"
-      />
-      <div
-        v-else
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg"
-        :class="
-          job.status === 'failed' || healthResult === 'Corrupt'
-            ? 'bg-error/10 text-error'
-            : job.kind === 'healthcheck'
-              ? 'bg-success/10 text-success'
-              : 'bg-primary/10 text-primary'
-        "
-      >
-        <UIcon :name="statusInfo(job.kind, 'kind').icon" class="size-5" />
-      </div>
     </div>
-    <div class="flex flex-wrap items-center gap-1.5">
-      <UTooltip :text="libraryName">
-        <UBadge
-          color="neutral"
-          variant="subtle"
-          size="sm"
-          icon="i-lucide-folder-tree"
-          class="max-w-full"
-        >
-          <span class="truncate">{{ libraryName }}</span>
-        </UBadge>
+    <div
+      class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-toned xl:col-span-2"
+    >
+      <span class="tabular-nums">#{{ job.id }}</span>
+      <UTooltip :text="libraryName" :ui="{ text: 'mask-it' }">
+        <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+          <UIcon name="i-lucide-folder-tree" class="size-3.5 shrink-0" aria-hidden="true" />
+          <span class="mask-it truncate">{{ libraryName }}</span>
+        </span>
       </UTooltip>
       <StatusBadge :status="job.kind" group="kind" />
       <StatusBadge :status="job.status" />
       <UTooltip
         v-if="job.node_name || job.node_id !== null"
         :text="`Node: ${job.node_name ?? job.node_id}`"
+        :ui="{ text: 'mask-it' }"
       >
-        <UBadge
-          color="neutral"
-          variant="subtle"
-          size="sm"
-          icon="i-lucide-server"
-          class="max-w-full"
-        >
-          <span class="truncate">{{ job.node_name ?? job.node_id }}</span>
-        </UBadge>
+        <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+          <UIcon name="i-lucide-server" class="size-3.5 shrink-0" aria-hidden="true" />
+          <span class="mask-it truncate">{{ job.node_name ?? job.node_id }}</span>
+        </span>
       </UTooltip>
       <UBadge
         v-if="healthResult"
@@ -96,10 +80,10 @@
     </div>
     <dl
       v-if="!compact"
-      class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs @min-[22rem]/job-card:grid-cols-3"
+      class="grid min-w-0 grid-cols-2 gap-x-8 gap-y-3 text-sm @min-[32rem]/job-row:grid-cols-3 @min-[48rem]/job-row:grid-cols-4 @min-[64rem]/job-row:grid-cols-6 xl:col-span-2"
     >
       <div v-for="row in metadata" :key="row.key" class="min-w-0">
-        <dt class="text-dimmed">{{ row.label }}</dt>
+        <dt class="text-xs text-muted">{{ row.label }}</dt>
         <dd class="mt-0.5 flex flex-wrap items-center gap-1" :class="row.color">
           <UTooltip
             :text="row.tooltip ?? undefined"
@@ -125,7 +109,7 @@
         </dd>
       </div>
       <div v-if="processingSeconds !== null">
-        <dt class="text-dimmed">
+        <dt class="text-xs text-muted">
           {{ job.finished_at ? 'Processing duration' : 'Elapsed' }}
         </dt>
         <dd class="mt-0.5 text-toned tabular-nums">
@@ -136,17 +120,17 @@
         </dd>
       </div>
       <div v-if="isActive(job.status) && progressStage(job.progress)">
-        <dt class="text-dimmed">Stage</dt>
+        <dt class="text-xs text-muted">Stage</dt>
         <dd class="mt-0.5 text-toned">{{ progressStage(job.progress) }}</dd>
       </div>
       <div v-if="healthErrors !== null">
-        <dt class="text-dimmed">Detected errors</dt>
+        <dt class="text-xs text-muted">Detected errors</dt>
         <dd class="mt-0.5" :class="healthErrors > 0 ? 'text-error' : 'text-toned'">
           {{ healthErrors }}
         </dd>
       </div>
       <div>
-        <dt class="text-dimmed">Created</dt>
+        <dt class="text-xs text-muted">Created</dt>
         <dd class="mt-0.5 text-toned">
           <UTooltip :text="formatDate(job.created_at, 'detail')">
             <time :datetime="toIsoString(job.created_at)">{{
@@ -156,7 +140,7 @@
         </dd>
       </div>
       <div>
-        <dt class="text-dimmed">Updated</dt>
+        <dt class="text-xs text-muted">Updated</dt>
         <dd class="mt-0.5 text-toned">
           <UTooltip :text="formatDate(job.updated_at, 'detail')">
             <time :datetime="toIsoString(job.updated_at)">{{
@@ -166,7 +150,7 @@
         </dd>
       </div>
       <div v-if="job.kind === 'transcode' && estimatedEnd">
-        <dt class="text-dimmed">Estimated finish</dt>
+        <dt class="text-xs text-muted">Estimated finish</dt>
         <dd class="mt-0.5 text-toned">
           <UTooltip :text="formatDate(estimatedEnd, 'detail')">
             <time :datetime="toIsoString(estimatedEnd)">{{
@@ -181,6 +165,7 @@
       color="info"
       variant="soft"
       icon="i-lucide-info"
+      class="xl:col-span-2"
       :ui="{
         root: 'p-2 gap-2',
         icon: 'size-4',
@@ -189,7 +174,7 @@
     >
       <template #description><ReasonDisplay :reason="reason" /></template>
     </UAlert>
-    <div v-if="job.error || job.warning" class="space-y-2">
+    <div v-if="job.error || job.warning" class="space-y-2 xl:col-span-2">
       <button
         v-if="job.error"
         type="button"
@@ -198,7 +183,7 @@
         @click="$emit('open')"
       >
         <UIcon name="i-lucide-circle-alert" class="mt-0.5 size-4 shrink-0" />
-        <span class="whitespace-pre-wrap break-all">{{ job.error }}</span>
+        <span class="mask-it whitespace-pre-wrap break-all">{{ job.error }}</span>
       </button>
       <button
         v-if="job.warning"
@@ -208,10 +193,21 @@
         @click="$emit('open')"
       >
         <UIcon name="i-lucide-triangle-alert" class="mt-0.5 size-4 shrink-0" />
-        <span class="whitespace-pre-wrap break-all">{{ job.warning }}</span>
+        <span class="mask-it whitespace-pre-wrap break-all">{{ job.warning }}</span>
       </button>
     </div>
-    <div class="mt-auto flex flex-wrap items-center justify-end gap-2" @click.stop>
+    <div
+      class="flex flex-wrap items-center justify-end gap-1.5 xl:col-start-2 xl:row-start-1 xl:self-start"
+      @click.stop
+    >
+      <UCheckbox
+        v-if="selectable"
+        class="shrink-0"
+        :model-value="selected"
+        :aria-label="`Select job #${job.id}`"
+        :disabled="busy"
+        @update:model-value="$emit('select', $event)"
+      />
       <UButton
         v-if="job.file"
         color="neutral"
@@ -230,6 +226,7 @@
         size="sm"
         icon="i-lucide-file-video"
         :loading="fileLoading"
+        :disabled="busy"
         @click="$emit('open-file', job.file.id)"
         >View file</UButton
       >
@@ -257,31 +254,23 @@
         @click="$emit('retry')"
         >Requeue</UButton
       >
-      <UButton
-        v-if="canJobAction(job.status, 'delete')"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        icon="i-lucide-trash-2"
-        aria-label="Delete job"
-        :loading="busy"
-        :disabled="busy"
-        @click="$emit('delete')"
-        >Delete</UButton
+      <UDropdownMenu
+        v-if="actionItems.length"
+        :items="actionItems"
+        :modal="false"
+        :content="{ align: 'end' }"
       >
-      <UTooltip v-if="canJobAction(job.status, 'bump')" text="Move to top">
         <UButton
           color="neutral"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          icon="i-lucide-arrow-up-narrow-wide"
-          aria-label="Move job to top"
+          icon="i-lucide-ellipsis"
+          square
+          :aria-label="`Actions for job #${job.id}`"
           :loading="busy"
           :disabled="busy"
-          @click="$emit('bump')"
-          >Move to top</UButton
-        >
-      </UTooltip>
+        />
+      </UDropdownMenu>
     </div>
   </article>
 </template>
@@ -289,6 +278,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useNow } from '@vueuse/core';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import StatusBadge from '~/components/StatusBadge.vue';
 import ReasonDisplay from '~/components/ReasonDisplay.vue';
 import { formatTime } from '~/utils';
@@ -297,7 +287,7 @@ import { elapsedSeconds, formatDate, toIsoString } from '~/utils/date';
 import { relativeDirectory } from '~/utils/location';
 import { formatRelativeTime } from '~/utils/relativeTime';
 import { estimatedJobCompletion, progressPercent, progressStage } from '~/utils/progress';
-import { statusInfo } from '~/utils/status';
+import { jobIndicatorInfo } from '~/utils/status';
 import { canJobAction, jobReason } from '~/utils/jobList';
 import type { JobRow, JobStatus, LibraryRow } from '~/types/api';
 import { ACTIVE_JOB_STATUSES } from '~/types/api';
@@ -320,7 +310,7 @@ const props = withDefaults(
     compact: false,
   },
 );
-defineEmits<{
+const emit = defineEmits<{
   open: [];
   play: [];
   'open-file': [id: number];
@@ -335,6 +325,25 @@ const library = computed(() =>
   props.libraries.find((library) => library.id === props.job.library_id),
 );
 const libraryName = computed(() => library.value?.name ?? 'Library unavailable');
+const actionItems = computed<DropdownMenuItem[]>(() => {
+  const items: DropdownMenuItem[] = [];
+  if (canJobAction(props.job.status, 'bump'))
+    items.push({
+      label: 'Move to top',
+      icon: 'i-lucide-arrow-up-narrow-wide',
+      disabled: props.busy,
+      onSelect: () => emit('bump'),
+    });
+  if (canJobAction(props.job.status, 'delete'))
+    items.push({
+      label: 'Delete',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      disabled: props.busy,
+      onSelect: () => emit('delete'),
+    });
+  return items;
+});
 const directory = computed(() =>
   props.job.file && library.value
     ? relativeDirectory(props.job.file.path, library.value.roots)
@@ -359,6 +368,9 @@ const healthResult = computed(() => {
   const healthy = props.job.latest_attempt?.health?.['healthy'];
   return healthy === true ? 'Healthy' : healthy === false ? 'Corrupt' : null;
 });
+const indicator = computed(() =>
+  jobIndicatorInfo(props.job, props.job.latest_attempt?.health?.['healthy']),
+);
 const healthErrors = computed(() => {
   const count = props.job.latest_attempt?.health?.['error_count'];
   return healthResult.value && typeof count === 'number' && Number.isFinite(count) && count >= 0

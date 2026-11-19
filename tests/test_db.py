@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 
 import pytest
 from alembic import command
 from psycopg import AsyncConnection
 from sqlalchemy import event, insert, inspect, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import URL
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from server.core.db import (
     check_db_revision,
     create_engine_and_session,
     migration_config,
+    postgres_disconnect_reason,
     prepare_db,
 )
 from server.models import Job, Library, MediaFile, ProbeRow, SessionRow, User, utcnow
@@ -116,6 +119,43 @@ async def test_stale_connection_replaced() -> None:
             async with engine.connect() as connection:
                 assert await connection.scalar(text("SELECT pg_backend_pid()")) != previous
                 assert await connection.scalar(text("SELECT 1")) == 1
+        finally:
+            await asyncio.wait_for(engine.dispose(), 5)
+
+
+@pytest.mark.asyncio
+async def test_interrupted_connection_recovers() -> None:
+    with database_url_context("interrupted-connection", migrated=False) as url:
+        engine, _ = create_engine_and_session(url)
+        try:
+            async with engine.connect() as connection, engine.connect() as admin:
+                pid = await connection.scalar(text("SELECT pg_backend_pid()"))
+                assert await admin.scalar(text("SELECT pg_terminate_backend(:pid, 1000)"), {"pid": pid})
+                with pytest.raises(OperationalError) as interrupted:
+                    await connection.scalar(text("SELECT 1"))
+                assert "terminating connection" in (postgres_disconnect_reason(interrupted.value) or "")
+
+            async with engine.connect() as connection:
+                assert await connection.scalar(text("SELECT 1")) == 1
+                with pytest.raises(OperationalError) as cancelled:
+                    await connection.execute(text("DO $$ BEGIN RAISE SQLSTATE '57014'; END $$"))
+                assert postgres_disconnect_reason(cancelled.value) is None
+        finally:
+            await asyncio.wait_for(engine.dispose(), 5)
+
+
+@pytest.mark.asyncio
+async def test_refused_connection_reason() -> None:
+    # Reserve a port without listening so the connection fails at the TCP boundary.
+    with socket.socket() as endpoint:
+        endpoint.bind(("127.0.0.1", 0))
+        host, port = endpoint.getsockname()
+        engine, _ = create_engine_and_session(URL.create("postgresql+psycopg", host=host, port=port))
+        try:
+            with pytest.raises(OperationalError) as refused:
+                async with engine.connect():
+                    pytest.fail("Connected to a port with no listener.")
+            assert "Connection refused" in (postgres_disconnect_reason(refused.value) or "")
         finally:
             await asyncio.wait_for(engine.dispose(), 5)
 

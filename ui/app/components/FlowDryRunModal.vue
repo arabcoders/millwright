@@ -17,48 +17,85 @@
   >
     <template #body>
       <div :class="fullscreen ? 'flex h-full min-h-0 flex-col gap-5' : 'space-y-5'">
-        <div class="flex min-w-0 items-start gap-3">
-          <span class="mw-detail-icon size-10 shrink-0">
-            <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
-          </span>
-          <div class="min-w-0">
-            <UTooltip :text="fileName(filePath)">
-              <h2 class="truncate text-lg font-semibold text-highlighted">
-                <button
-                  v-if="onOpenFile"
-                  type="button"
-                  class="max-w-full truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
-                  :aria-label="`Open details for ${fileName(filePath)}`"
-                  @click="$emit('open-file')"
-                >
-                  {{ fileName(filePath) }}
-                </button>
-                <span v-else>{{ fileName(filePath) }}</span>
-              </h2>
-            </UTooltip>
-            <UTooltip :text="filePath">
-              <p class="truncate text-sm text-toned">{{ location }}</p>
-            </UTooltip>
-            <p v-if="facts" class="truncate text-xs text-dimmed">{{ facts }}</p>
+        <div class="mw-card-padded-lg space-y-5">
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="mw-detail-icon size-10 shrink-0">
+              <UIcon name="i-lucide-file-video" class="size-5" aria-hidden="true" />
+            </span>
+            <div class="min-w-0">
+              <UTooltip :text="fileName(filePath)">
+                <h2 class="truncate text-lg font-semibold text-highlighted">
+                  <button
+                    v-if="onOpenFile"
+                    type="button"
+                    class="max-w-full truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                    :aria-label="`Open details for ${fileName(filePath)}`"
+                    @click="$emit('open-file')"
+                  >
+                    {{ fileName(filePath) }}
+                  </button>
+                  <span v-else>{{ fileName(filePath) }}</span>
+                </h2>
+              </UTooltip>
+              <UTooltip :text="filePath">
+                <p class="truncate text-sm text-toned">{{ location }}</p>
+              </UTooltip>
+              <p v-if="facts" class="truncate text-xs text-dimmed">{{ facts }}</p>
+            </div>
           </div>
+          <UFormField label="Flow" help="Select a flow to evaluate.">
+            <UFieldGroup class="w-full">
+              <USelectMenu
+                v-model="selectedFlowId"
+                :items="flowItems"
+                value-key="value"
+                placeholder="Pick a flow"
+                :disabled="flowsLoading"
+                class="min-w-0 flex-1"
+              />
+              <UButton
+                v-if="onRefresh"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-refresh-cw"
+                :loading="flowsLoading"
+                :disabled="flowsLoading"
+                @click="$emit('refresh')"
+                >Refresh</UButton
+              >
+            </UFieldGroup>
+          </UFormField>
         </div>
-        <UFormField label="Flow" help="Select a flow to evaluate.">
-          <USelectMenu
-            v-model="selectedFlowId"
-            :items="flowItems"
-            value-key="value"
-            placeholder="Pick a flow"
-            class="w-full"
-          />
-        </UFormField>
+        <p v-if="flowsLoading" role="status" class="text-sm text-toned">Loading saved flows.</p>
+        <UEmpty
+          v-else-if="!flows.length && !flowError"
+          size="sm"
+          variant="naked"
+          icon="i-lucide-workflow"
+          title="No saved flows"
+          description="Create a flow on the Flows page before starting a dry run."
+        />
         <UAlert
-          v-if="error"
+          v-if="flowError || error"
           color="error"
           variant="soft"
           icon="i-lucide-circle-alert"
-          title="Dry run failed"
-          :description="error"
-        />
+          :title="flowError ? 'Could not load saved flows' : 'Dry run failed'"
+          :description="flowError || error"
+          :ui="{ description: 'whitespace-pre-wrap wrap-anywhere' }"
+        >
+          <template v-if="flowError && onRefresh" #actions>
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-refresh-cw"
+              :loading="flowsLoading"
+              :disabled="flowsLoading"
+              @click="$emit('refresh')"
+              >Retry</UButton
+            >
+          </template>
+        </UAlert>
         <template v-if="flowRow">
           <DecisionTraceFlow
             :key="flowRow.id"
@@ -71,7 +108,7 @@
             <template #overlay>
               <div
                 v-if="result"
-                class="pointer-events-none absolute right-3 bottom-3 z-10 max-w-[calc(100%-1.5rem)] rounded-md bg-elevated shadow-sm"
+                class="pointer-events-none absolute right-3 bottom-3 z-10 max-w-[calc(100%-1.5rem)] rounded-md bg-(--mw-floating-bg) shadow-sm backdrop-blur-md"
               >
                 <UTooltip
                   :text="result.reason ? formatReason(result.reason) : undefined"
@@ -134,7 +171,6 @@
                   sticky="header"
                   tabindex="0"
                   class="mt-2 max-h-80 overscroll-contain"
-                  :ui="{ tbody: '[&>tr]:transition-colors [&>tr:hover]:bg-elevated/60' }"
                 >
                   <template #title-cell="{ row }">
                     <UTooltip v-if="row.original.title" :text="row.original.title">
@@ -157,9 +193,7 @@
           </section>
           <div v-if="argvPreview">
             <p class="mb-1 text-xs font-semibold text-toned">Generated FFmpeg argv</p>
-            <pre class="overflow-x-auto rounded-lg bg-elevated p-3 text-xs text-toned">{{
-              argvPreview
-            }}</pre>
+            <pre class="mw-terminal overflow-x-auto font-mono text-xs">{{ argvPreview }}</pre>
           </div>
         </template>
       </div>
@@ -177,6 +211,7 @@
           {{ fullscreen ? 'Exit fullscreen' : 'Fullscreen' }}
         </UButton>
         <UButton
+          v-if="flowRow && !flowError && !flowsLoading"
           type="button"
           color="primary"
           icon="i-lucide-play"
@@ -210,9 +245,12 @@ const props = defineProps<{
   running: boolean;
   result: DryRunResult | null;
   error: string;
+  flowError: string;
+  flowsLoading: boolean;
   argvPreview: string;
   plugins: PluginRow[];
   onOpenFile?: () => void;
+  onRefresh?: () => void;
 }>();
 const fullscreen = useStorage('flow_dry_run_fullscreen', false);
 const selectedFlowId = defineModel<number | undefined>('selectedFlowId', { default: undefined });
@@ -252,6 +290,7 @@ defineEmits<{
   'update:open': [open: boolean];
   'open-file': [];
   run: [];
+  refresh: [];
   'after:leave': [];
 }>();
 </script>
