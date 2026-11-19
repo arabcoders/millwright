@@ -50,15 +50,18 @@
                 />
               </StatusIndicator>
               <div class="min-w-0">
-                <h2 class="wrap-anywhere text-lg font-semibold text-highlighted">
+                <h2
+                  class="wrap-anywhere text-lg font-semibold text-highlighted"
+                  :class="{ 'mask-it': detail.file }"
+                >
                   {{ detail.file ? fileName(detail.file.path) : 'File unavailable' }}
                 </h2>
                 <p v-if="imported" class="text-xs text-toned">Imported job (read-only)</p>
-                <UTooltip v-if="detail.file" :text="detail.file.path"
-                  ><p class="wrap-anywhere text-sm text-toned">
+                <UTooltip v-if="detail.file" :text="detail.file.path" :ui="{ text: 'mask-it' }">
+                  <p class="mask-it wrap-anywhere text-sm text-toned">
                     {{ parentPath(detail.file.path) }}
-                  </p></UTooltip
-                >
+                  </p>
+                </UTooltip>
               </div>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
@@ -116,8 +119,8 @@
               aria-label="Job attempt"
               class="w-full min-w-0"
               :ui="{
-                value: 'wrap-anywhere whitespace-normal text-start',
-                itemLabel: 'wrap-anywhere whitespace-normal',
+                value: 'mask-it wrap-anywhere whitespace-normal text-start',
+                itemLabel: 'mask-it wrap-anywhere whitespace-normal',
               }"
             />
           </div>
@@ -162,7 +165,17 @@
               "
               icon="i-lucide-server"
               value-wrap
-            />
+            >
+              <template #value="{ value }">
+                <bdi
+                  :class="{
+                    'mask-it': selectedAttempt?.node_name || selectedAttempt?.node_id != null,
+                  }"
+                >
+                  {{ value }}
+                </bdi>
+              </template>
+            </StatCard>
           </div>
           <p v-if="detailActive && progressStage(detail.progress)" class="text-sm text-toned">
             {{ progressStage(detail.progress) }}
@@ -234,6 +247,7 @@
           icon="i-lucide-triangle-alert"
           title="Waiting"
           :description="detail.warning"
+          :ui="{ description: 'mask-it' }"
         />
         <UAlert
           v-if="detail.error"
@@ -242,6 +256,7 @@
           icon="i-lucide-circle-alert"
           title="Job error"
           :description="detail.error"
+          :ui="{ description: 'mask-it' }"
         />
         <UAlert
           v-if="
@@ -254,6 +269,7 @@
           icon="i-lucide-circle-alert"
           :title="`Attempt ${selectedAttempt.attempt_number} error`"
           :description="selectedAttempt.error"
+          :ui="{ description: 'mask-it' }"
         />
         <section class="border-t border-default pt-5">
           <dl class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-toned">
@@ -369,7 +385,7 @@
                   entry.step ?? entry.node
                 }}</span>
                 <ReasonDisplay v-if="entry.reason" :reason="entry.reason" class="w-full" />
-                <span v-if="entry.error" class="text-xs text-error">{{ entry.error }}</span>
+                <span v-if="entry.error" class="mask-it text-xs text-error">{{ entry.error }}</span>
               </li>
             </ol>
           </div>
@@ -391,7 +407,7 @@
             >
           </div>
           <pre
-            class="mw-terminal p-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-toned"
+            class="mask-it mw-terminal p-3 font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-toned"
             >{{ argvText }}</pre>
         </section>
         <section
@@ -424,8 +440,8 @@
                 action.kind
               }}</span
               ><span v-if="action.phase" class="text-xs text-toned">{{ action.phase }}</span
-              ><span v-if="action.error" class="text-error">{{ action.error }}</span
-              ><span v-if="action.artifacts.length" class="text-xs text-toned">
+              ><span v-if="action.error" class="mask-it text-error">{{ action.error }}</span
+              ><span v-if="action.artifacts.length" class="mask-it text-xs text-toned">
                 {{ action.artifacts.join(', ') }}
               </span>
             </li>
@@ -446,9 +462,9 @@
               class="flex min-w-0 flex-wrap items-center gap-2 py-3 wrap-anywhere"
             >
               <StatusBadge :status="delivery.status" group="notification" />
-              <span>{{ delivery.target_name }}</span>
+              <span class="mask-it">{{ delivery.target_name }}</span>
               <span class="text-xs text-toned">{{ delivery.attempts }} attempts</span>
-              <span v-if="delivery.error" class="text-error">{{ delivery.error }}</span>
+              <span v-if="delivery.error" class="mask-it text-error">{{ delivery.error }}</span>
             </li>
           </ul>
         </section>
@@ -571,7 +587,7 @@
                     <span class="font-medium text-highlighted">{{ humanEvent(event.type) }}</span>
                     <span
                       v-if="eventSummary(event)"
-                      class="min-w-0 flex-1 wrap-anywhere text-toned"
+                      class="mask-it min-w-0 flex-1 wrap-anywhere text-toned"
                       >{{ eventSummary(event) }}</span
                     >
                     <span v-if="event.attempt_id" class="shrink-0 text-toned"
@@ -588,7 +604,7 @@
                 </ol>
                 <pre
                   v-if="stage.lines.length"
-                  class="mt-1 overflow-x-auto bg-elevated/20 px-2 py-1 font-mono text-xs leading-relaxed"
+                  class="mask-it mt-1 overflow-x-auto bg-elevated/20 px-2 py-1 font-mono text-xs leading-relaxed"
                   :class="logWrap ? 'whitespace-pre-wrap wrap-break-word' : 'whitespace-pre'"
                   >{{ stage.lines.join('\n') }}</pre>
               </section>

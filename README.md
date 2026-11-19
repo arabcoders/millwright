@@ -4,13 +4,13 @@ Millwright is a self-hosted [FFmpeg](https://ffmpeg.org/) automation tool. Conve
 apply rules to a library to change codecs, containers, audio tracks, and subtitles.
 
 > [!WARNING]
-> Millwright is in beta. I've tested NVIDIA, Intel QSV, and software encoders on my own library.
-> I haven't tested AMD encoders.
+> I've tested NVIDIA, Intel QSV, and software encoders on my own library AMD encoders are not tested.
 
 ### If you like my work, you might also like my other projects:
 
-* [YTPTube](https://github.com/arabcoders/ytptube): Media download manager, automation interface, and media library preparation layer for yt-dlp.
-* [WatchState](https://github.com/arabcoders/watchstate): Self-hosted service to sync your media servers without relying on 3rd-party external services.
+* [WatchState](https://github.com/arabcoders/watchstate): Sync your media servers without relying on 3rd parties.
+* [YTPTube](https://github.com/arabcoders/ytptube): Media downloader, automation, and library manager for yt-dlp.
+* [DCompose](https://github.com/arabcoders/dcompose): Manage your servers/nodes compose stacks from one WebUI.
 
 ## Screenshots
 
@@ -32,8 +32,7 @@ Add a **Library** and preview a **Flow** to see which files it would change. **N
 on the server or on other machines. Millwright checks the output before replacing the original.
 
 > [!WARNING]
-> [Keep originals in Trash](docs/recovery.md#retain-originals) while trying a new flow. Keep a separate
-> backup of media you can't replace.
+> [Keep originals in Trash](docs/recovery.md#retain-originals) while trying a new flow.
 
 ## What you can do
 
@@ -51,23 +50,17 @@ on the server or on other machines. Millwright checks the output before replacin
 Follow the [installation guide](docs/installation.md) to run the installer, claim a node, and add
 your first library. See the [documentation index](docs/README.md) for setup guides and references.
 
-## Security
-
-> [!IMPORTANT]
-> Every account and API key holder can replace library files. See the [security policy](SECURITY.md)
-> before giving others access.
-
 ## Project Policy
 
-Millwright is built for my own use. Get approval before starting a contribution. Unsolicited pull
-requests will be declined. See [Contributing](CONTRIBUTING.md).
-
-I use AI-assisted tools when I find them useful and don't plan to change that.
+Millwright is built for my own needs and use cases first. Discuss contributions with me before starting any work that i 
+may decline to accept. Read [CONTRIBUTING.md](CONTRIBUTING.md). I use AI tools in this project. You're welcome to use the 
+project if it works for you. However, if you object to that, then this project is not good fit for you. Build your own 
+using technologies you approve of.
 
 ## Community
 
-For short questions, join the [Discord server](https://discord.gg/G3GpVR8xpb). Millwright is maintained as a solo
+For short questions, join the [Discord server](https://discord.gg/G3GpVR8xpb). Millwright is maintained as a solo 
 project, so replies may take some time.
 
 If you want to support the work financially, please donate to a children's charity such as
-[Make-A-Wish](https://worldwish.org) international instead.
+[Make-A-Wish international](https://worldwish.org) instead.

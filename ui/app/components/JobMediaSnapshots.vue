@@ -83,7 +83,7 @@
                   >
                 </template>
                 <template #content>
-                  <pre class="mw-terminal mt-2 max-h-72 overflow-auto font-mono text-xs">{{
+                  <pre class="mask-it mw-terminal mt-2 max-h-72 overflow-auto font-mono text-xs">{{
                     JSON.stringify(side.probe, null, 2)
                   }}</pre>
                 </template>
@@ -184,7 +184,7 @@ const streamColumns: TableColumn<ProbeStream>[] = [
     meta: { class: { td: 'whitespace-nowrap wrap-normal' } },
   },
   { accessorKey: 'language', header: 'Language', size: 96 },
-  { accessorKey: 'title', header: 'Title', size: 288 },
+  { accessorKey: 'title', header: 'Title', size: 288, meta: { class: { td: 'mask-it' } } },
   {
     id: 'resolution',
     header: 'Resolution',

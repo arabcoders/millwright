@@ -3,6 +3,10 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
 
+.mask-it {
+  --mask-it: 0;
+}
+
 @layer base {
   html,
   body,

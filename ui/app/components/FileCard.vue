@@ -8,7 +8,7 @@
         <JobProgressRing v-if="progress" v-bind="progress" layout="icon" :label="indicator.label" />
       </StatusIndicator>
       <h2 class="min-w-0 flex-1">
-        <UTooltip :text="file.path" :content="{ align: 'start' }">
+        <UTooltip :text="file.path" :content="{ align: 'start' }" :ui="{ text: 'mask-it' }">
           <button
             type="button"
             class="w-full min-w-0 text-left text-base font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
@@ -16,8 +16,10 @@
             :disabled="busy"
             @click="$emit('open')"
           >
-            <span class="line-clamp-2 wrap-anywhere">{{ fileName(file.path) }}</span>
-            <span v-if="directory" class="mt-1 block truncate text-xs font-normal text-dimmed"
+            <span class="mask-it line-clamp-2 wrap-anywhere">{{ fileName(file.path) }}</span>
+            <span
+              v-if="directory"
+              class="mask-it mt-1 block truncate text-xs font-normal text-dimmed"
               >./{{ directory }}</span
             >
           </button>
@@ -83,10 +85,10 @@
     <div
       class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-toned xl:col-span-2"
     >
-      <UTooltip :text="libraryName">
+      <UTooltip :text="libraryName" :ui="{ text: 'mask-it' }">
         <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
           <UIcon name="i-lucide-folder-tree" class="size-3.5 shrink-0" aria-hidden="true" />
-          <span class="truncate">{{ libraryName }}</span>
+          <span class="mask-it truncate">{{ libraryName }}</span>
         </span>
       </UTooltip>
       <StatusBadge

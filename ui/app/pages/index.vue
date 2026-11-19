@@ -67,7 +67,7 @@
               group="discovery"
               class="shrink-0"
             />
-            <span v-if="scannerLibrary" class="truncate">{{ scannerLibrary }}</span>
+            <span v-if="scannerLibrary" class="mask-it truncate">{{ scannerLibrary }}</span>
           </span>
         </template>
       </StatCard>
@@ -119,7 +119,7 @@
             class="max-w-full truncate text-start hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
             @click="selectNode(node)"
           >
-            <bdi>{{ node.display_name }}</bdi>
+            <bdi class="mask-it">{{ node.display_name }}</bdi>
           </button>
         </template>
         <template #value>

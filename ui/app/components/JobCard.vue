@@ -16,15 +16,22 @@
         />
       </StatusIndicator>
       <h2 class="min-w-0 flex-1">
-        <UTooltip v-if="job.file" :text="job.file.path" :content="{ align: 'start' }">
+        <UTooltip
+          v-if="job.file"
+          :text="job.file.path"
+          :content="{ align: 'start' }"
+          :ui="{ text: 'mask-it' }"
+        >
           <button
             type="button"
             class="w-full min-w-0 text-left text-base font-semibold text-highlighted hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
             :aria-label="`Open job #${job.id} for ${fileName(job.file.path)}`"
             @click="$emit('open')"
           >
-            <span class="line-clamp-2 wrap-anywhere">{{ fileName(job.file.path) }}</span>
-            <span v-if="directory" class="mt-1 block truncate text-xs font-normal text-dimmed"
+            <span class="mask-it line-clamp-2 wrap-anywhere">{{ fileName(job.file.path) }}</span>
+            <span
+              v-if="directory"
+              class="mask-it mt-1 block truncate text-xs font-normal text-dimmed"
               >./{{ directory }}</span
             >
           </button>
@@ -44,10 +51,10 @@
       class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs text-toned xl:col-span-2"
     >
       <span class="tabular-nums">#{{ job.id }}</span>
-      <UTooltip :text="libraryName">
+      <UTooltip :text="libraryName" :ui="{ text: 'mask-it' }">
         <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
           <UIcon name="i-lucide-folder-tree" class="size-3.5 shrink-0" aria-hidden="true" />
-          <span class="truncate">{{ libraryName }}</span>
+          <span class="mask-it truncate">{{ libraryName }}</span>
         </span>
       </UTooltip>
       <StatusBadge :status="job.kind" group="kind" />
@@ -55,10 +62,11 @@
       <UTooltip
         v-if="job.node_name || job.node_id !== null"
         :text="`Node: ${job.node_name ?? job.node_id}`"
+        :ui="{ text: 'mask-it' }"
       >
         <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
           <UIcon name="i-lucide-server" class="size-3.5 shrink-0" aria-hidden="true" />
-          <span class="truncate">{{ job.node_name ?? job.node_id }}</span>
+          <span class="mask-it truncate">{{ job.node_name ?? job.node_id }}</span>
         </span>
       </UTooltip>
       <UBadge
@@ -175,7 +183,7 @@
         @click="$emit('open')"
       >
         <UIcon name="i-lucide-circle-alert" class="mt-0.5 size-4 shrink-0" />
-        <span class="whitespace-pre-wrap break-all">{{ job.error }}</span>
+        <span class="mask-it whitespace-pre-wrap break-all">{{ job.error }}</span>
       </button>
       <button
         v-if="job.warning"
@@ -185,7 +193,7 @@
         @click="$emit('open')"
       >
         <UIcon name="i-lucide-triangle-alert" class="mt-0.5 size-4 shrink-0" />
-        <span class="whitespace-pre-wrap break-all">{{ job.warning }}</span>
+        <span class="mask-it whitespace-pre-wrap break-all">{{ job.warning }}</span>
       </button>
     </div>
     <div
