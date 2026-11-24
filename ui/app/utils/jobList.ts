@@ -1,7 +1,7 @@
 import { ACTIVE_JOB_STATUSES, type JobRow, type JobStatus } from '../types/api';
 import type { BulkJobAction } from '../composables/useJobs';
 import type { LocationQueryRaw } from 'vue-router';
-import { LIST_PAGE_SIZES } from './listPagination';
+import { listPageSize } from './listPagination';
 import { parseStatuses, statusInfo, statusOptions } from './status';
 
 export const JOB_FILTER_ALL = '__all__';
@@ -50,8 +50,7 @@ export const jobRouteFilters = (
     const normalized = offset.replace(/^0+(?=\d)/, '');
     if (normalized !== '0') values.offset = normalized;
   }
-  if (limit && LIST_PAGE_SIZES.some((size) => String(size) === limit) && limit !== '50')
-    values.limit = limit;
+  if (limit && listPageSize(limit)) values.limit = limit;
   if (sort && jobSortOptions.some((option) => option.value === sort)) values.sort_by = sort;
   if (direction === 'asc' || direction === 'desc') values.sort_dir = direction;
   return values;
@@ -63,7 +62,7 @@ export const updateJobRoute = (
   statusesAllowed = jobStatusOptions,
 ): LocationQueryRaw => {
   const next = { ...source, ...changes };
-  if (jobQueryKeys.some((key) => key !== 'offset' && key in changes)) delete next.offset;
+  if (!('offset' in changes) && jobQueryKeys.some((key) => key in changes)) delete next.offset;
   return {
     ...Object.fromEntries(Object.entries(next).filter(([key]) => !jobQueryKeys.includes(key))),
     ...jobRouteFilters(next, statusesAllowed),

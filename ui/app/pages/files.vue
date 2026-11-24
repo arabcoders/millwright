@@ -10,8 +10,8 @@
         :total="total"
         :shown="files.length"
         :disabled="loading || actionBusy"
-        @update:limit="updateQuery({ limit: String($event) })"
-        @update:offset="updateQuery({ offset: String($event) })"
+        @update:limit="changeLimit($event, position)"
+        @update:offset="changeOffset($event, position)"
       >
         <UButton
           v-if="files.length"
@@ -116,9 +116,13 @@
       :sort-dir="sortDir"
       :sort-options="sortOptions"
       sort-label="Sort files"
+      :filters-active="filtersActive"
       :disabled="actionBusy"
       @update:sort-by="updateQuery({ sort_by: $event })"
       @update:sort-dir="updateQuery({ sort_dir: $event })"
+      @clear-filters="
+        updateQuery({ query: '', library_id: FILTER_ALL, transcode_status: '', health_status: '' })
+      "
     >
       <USelectMenu
         value-key="value"
@@ -158,7 +162,7 @@
       />
     </ListFilters>
 
-    <div class="min-w-0 space-y-4">
+    <div ref="results" class="min-w-0 scroll-mt-4 space-y-4">
       <PaginationControls position="top" />
       <div
         v-if="loading && !files.length"
@@ -234,6 +238,7 @@ import {
 import { useFileDryRun } from '~/composables/useFileDryRun';
 import { useLibraries } from '~/composables/useLibraries';
 import { useLibraryProgress } from '~/composables/useLibraryProgress';
+import { useListPagination } from '~/composables/useListPagination';
 import {
   applyFileProgress,
   applyQueuedFileJob,
@@ -243,7 +248,7 @@ import {
 } from '~/composables/stateHelpers';
 import type { BulkFileAction, MediaFileDetail, MediaFileRow } from '~/types/api';
 import { parseStatuses, statusInfo, statusOptions } from '~/utils/status';
-import { LIST_PAGE_SIZES } from '~/utils/listPagination';
+import { listPageSize } from '~/utils/listPagination';
 
 const {
   items: files,
@@ -359,7 +364,17 @@ const query = ref('');
 const libraryId = ref(FILTER_ALL);
 const transcodeStates = ref<string[]>([]);
 const healthStates = ref<string[]>([]);
-const limit = ref(50);
+const filtersActive = computed(
+  () =>
+    !!query.value.trim() ||
+    libraryId.value !== FILTER_ALL ||
+    transcodeStates.value.length > 0 ||
+    healthStates.value.length > 0,
+);
+const { limit, results, applyRouteLimit, changeLimit, changeOffset } = useListPagination(
+  'files_page_size',
+  updateQuery,
+);
 const offset = ref(0);
 const sortBy = ref('id');
 const sortDir = ref<'asc' | 'desc'>('desc');
@@ -426,12 +441,7 @@ const routeFilters = (source: Record<string, unknown>): Record<string, string> =
   if (transcode) values.transcode_status = transcode;
   if (health) values.health_status = health;
   if (pageOffset && pageOffset !== '0') values.offset = pageOffset;
-  if (
-    pageLimit &&
-    LIST_PAGE_SIZES.some((value) => String(value) === pageLimit) &&
-    pageLimit !== '50'
-  )
-    values.limit = pageLimit;
+  if (pageLimit && listPageSize(pageLimit)) values.limit = pageLimit;
   if (sort && sortOptions.some((option) => option.value === sort)) values.sort_by = sort;
   if (direction === 'asc' || direction === 'desc') values.sort_dir = direction;
   return values;
@@ -442,26 +452,18 @@ const sameManagedQuery = (
   values: Record<string, string>,
 ): boolean => managedQueryKeys.every((key) => source[key] === values[key]);
 
-const updateQuery = async (changes: Record<string, string>): Promise<void> => {
-  if (actionBusy.value) return;
+async function updateQuery(changes: Record<string, string>): Promise<boolean> {
+  if (actionBusy.value || ('offset' in changes && loading.value)) return false;
   const next = { ...route.query } as Record<string, string | undefined>;
   for (const [key, value] of Object.entries(changes)) {
     if (value && value !== FILTER_ALL) next[key] = value;
     else next[key] = undefined;
   }
-  if (
-    'query' in changes ||
-    'library_id' in changes ||
-    'transcode_status' in changes ||
-    'health_status' in changes ||
-    'limit' in changes ||
-    'sort_by' in changes ||
-    'sort_dir' in changes
-  ) {
+  if (!('offset' in changes) && managedQueryKeys.some((key) => key in changes)) {
     delete next.offset;
   }
-  await router.replace({ query: next });
-};
+  return !(await router.replace({ query: next }));
+}
 
 const loadFiles = async (): Promise<void> => {
   await loadFilesRequest({
@@ -532,7 +534,7 @@ watch(
     transcodeStates.value = values.transcode_status?.split(',') ?? [];
     healthStates.value = values.health_status?.split(',') ?? [];
     offset.value = Number(values.offset ?? 0);
-    limit.value = Number(values.limit ?? 50);
+    applyRouteLimit(values.limit);
     sortBy.value = values.sort_by ?? 'id';
     sortDir.value = (values.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';
     if (!sameManagedQuery(current, values)) {

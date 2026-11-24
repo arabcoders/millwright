@@ -20,7 +20,7 @@ test('trash defaults normalize', () => {
   expect(trashRouteFilters({})).toEqual({});
   expect(
     trashRouteFilters({ query: '  ', library_id: TRASH_FILTER_ALL, offset: '000', limit: '50' }),
-  ).toEqual({});
+  ).toEqual({ limit: '50' });
   expect(
     updateTrashRoute({ library_id: '2', offset: '50' }, { library_id: TRASH_FILTER_ALL }),
   ).toEqual({});
@@ -38,9 +38,6 @@ test('trash preserves choices', () => {
   expect(trashRouteFilters(choices)).toEqual({ ...choices, query: 'movie', offset: '100' });
   for (const { value } of trashSortOptions) {
     expect(trashRouteFilters({ sort_by: value })).toEqual({ sort_by: value });
-  }
-  for (const limit of ['50', '100', '200', '300', '500', '750', '999']) {
-    expect(trashRouteFilters({ limit })).toEqual(limit === '50' ? {} : { limit });
   }
 });
 
@@ -77,15 +74,15 @@ test('trash filters reset', () => {
   }
   expect(
     updateTrashRoute(
-      { query: 'movie', library_id: '2', sort_by: 'size_bytes', sort_dir: 'asc', limit: '999' },
-      { offset: '999' },
+      { query: 'movie', library_id: '2', sort_by: 'size_bytes', sort_dir: 'asc' },
+      { limit: '10', offset: '20' },
     ),
   ).toEqual({
     query: 'movie',
     library_id: '2',
     sort_by: 'size_bytes',
     sort_dir: 'asc',
-    limit: '999',
-    offset: '999',
+    limit: '10',
+    offset: '20',
   });
 });

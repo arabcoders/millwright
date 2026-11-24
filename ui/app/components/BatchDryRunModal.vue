@@ -244,42 +244,13 @@
               :disabled="paginationBusy"
               @update:model-value="changePage(1, $event)"
             />
-            <UFieldGroup size="sm">
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                icon="i-lucide-chevron-left"
-                aria-label="Previous page"
-                :disabled="page === 1 || paginationBusy"
-                @click="changePage(page - 1)"
-              />
-              <USelectMenu
-                :model-value="page"
-                :items="pageItems"
-                value-key="value"
-                :search-input="{ placeholder: 'Find a page...' }"
-                virtualize
-                color="neutral"
-                variant="outline"
-                size="sm"
-                class="min-w-44"
-                aria-label="Jump to dry-run page"
-                :disabled="paginationBusy"
-                @update:model-value="changePage($event)"
-              >
-                Page {{ page.toLocaleString('en') }} of {{ pageCount.toLocaleString('en') }}
-              </USelectMenu>
-              <UButton
-                color="neutral"
-                variant="outline"
-                size="sm"
-                icon="i-lucide-chevron-right"
-                aria-label="Next page"
-                :disabled="page >= pageCount || paginationBusy"
-                @click="changePage(page + 1)"
-              />
-            </UFieldGroup>
+            <PageNavigation
+              :page="page"
+              :page-count="pageCount"
+              jump-label="Jump to dry-run page"
+              :disabled="paginationBusy"
+              @change="changePage"
+            />
           </div>
         </nav>
         <div class="ml-auto flex flex-wrap justify-end gap-2">
@@ -342,6 +313,7 @@ import { useStorage } from '@vueuse/core';
 import StatusBadge from '~/components/StatusBadge.vue';
 import ReasonDisplay from '~/components/ReasonDisplay.vue';
 import FileDetailModal from '~/components/FileDetailModal.vue';
+import PageNavigation from '~/components/PageNavigation.vue';
 import { useFlows } from '~/composables/useFlows';
 import { useDialog } from '~/composables/useDialog';
 import { useBatchDryRun } from '~/composables/useBatchDryRun';
@@ -398,12 +370,6 @@ const pageCount = computed(() =>
   Math.max(1, Math.ceil((report.value?.pagination.total ?? 0) / pageSize.value)),
 );
 const statusItems = statusOptions('flow').filter((option) => option.value);
-const pageItems = computed(() =>
-  Array.from({ length: pageCount.value }, (_, index) => ({
-    label: `Page ${index + 1}`,
-    value: index + 1,
-  })),
-);
 const selectedFlowId = ref<number | undefined>(undefined);
 const confirmingCancel = ref(false);
 const results = ref<HTMLElement | null>(null);
@@ -480,7 +446,7 @@ const stopPreviews = (): void => {
   closeFileDetail(false);
 };
 const flowItems = computed(() => flows.value.map((flow) => ({ label: flow.name, value: flow.id })));
-const pageSizeItems = [50, 100, 200, 500, 1000].map((value) => ({
+const pageSizeItems = [10, 50, 100, 200, 500, 1000].map((value) => ({
   label: `${value.toLocaleString('en')} per page`,
   value,
 }));
@@ -594,8 +560,7 @@ const run = async (): Promise<void> => {
   if (props.open && !disposed && selectedFlow.value && !flowsLoading.value)
     await start(selectedFlow.value);
 };
-const changePage = async (value: number | undefined, size = pageSize.value): Promise<void> => {
-  if (value === undefined) return;
+const changePage = async (value: number, size = pageSize.value): Promise<void> => {
   const id = report.value?.id;
   const previousPage = page.value;
   const previousSize = pageSize.value;

@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue';
+import { useStorage } from '@vueuse/core';
 import { ensure_api_success, request } from '~/utils';
 import type { BatchDryRunReport, BatchDryRunScope, FlowRow } from '~/types/api';
 
@@ -12,7 +13,7 @@ export const useBatchDryRun = () => {
   const cancelling = ref(false);
   const exporting = ref(false);
   const page = ref(1);
-  const pageSize = ref(50);
+  const pageSize = useStorage('batch_dry_run_page_size', 50);
   const statuses = ref<string[]>([]);
   const active = computed(() => report.value !== null && ACTIVE.has(report.value.state));
   let scope: BatchDryRunScope | null = null;
@@ -160,7 +161,7 @@ export const useBatchDryRun = () => {
       if (token !== generation) return;
       report.value = result;
       page.value = 1;
-      if (statuses.value.length) await loadPage();
+      if (statuses.value.length || result.pagination.limit !== pageSize.value) await loadPage();
       else schedule();
     } catch (cause) {
       if (token === generation)

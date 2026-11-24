@@ -10,8 +10,8 @@
         :total="snapshot?.total ?? 0"
         :shown="rows.length"
         :disabled="busy"
-        @update:limit="updateQuery({ limit: String($event) })"
-        @update:offset="updateQuery({ offset: String($event) })"
+        @update:limit="changeLimit($event, position)"
+        @update:offset="changeOffset($event, position)"
       >
         <UTooltip
           :text="
@@ -106,9 +106,11 @@
       :sort-dir="sortDir"
       :sort-options="workspaceSortOptions"
       sort-label="Sort workspaces by"
+      :filters-active="filtersActive"
       :disabled="pruning"
       @update:sort-by="updateQuery({ sort_by: $event })"
       @update:sort-dir="updateQuery({ sort_dir: $event })"
+      @clear-filters="updateQuery({ query: '', eligibility: 'all' })"
     >
       <USelectMenu
         value-key="value"
@@ -130,28 +132,30 @@
       :title="`Workspace ${entry.workspace_id}: ${entry.outcome}`"
       :description="entry.reason ?? undefined"
     />
-    <PaginationControls position="top" />
-    <div v-if="loading && !snapshot" class="space-y-3">
-      <USkeleton v-for="index in 3" :key="index" class="h-28 rounded-lg" />
+    <div ref="results" class="scroll-mt-4 space-y-6">
+      <PaginationControls position="top" />
+      <div v-if="loading && !snapshot" class="space-y-3">
+        <USkeleton v-for="index in 3" :key="index" class="h-28 rounded-lg" />
+      </div>
+      <UEmpty
+        v-else-if="snapshot && !rows.length && !lastError"
+        :title="summary?.summary.count ? 'No workspaces match these filters.' : 'No workspaces.'"
+        :icon="summary?.summary.count ? 'i-lucide-search-x' : 'i-lucide-folder-tree'"
+      />
+      <div v-else-if="rows.length" class="mw-card divide-y divide-default" :aria-busy="loading">
+        <DeferredContent v-for="row in rows" :key="row.workspace_id" :min-height="112" keep-mounted>
+          <WorkspaceRowCard
+            :workspace="row"
+            selectable
+            :selected="selected.has(row.workspace_id)"
+            :busy="busy"
+            @select="toggle(row.workspace_id)"
+            @open="openJob"
+          />
+        </DeferredContent>
+      </div>
+      <PaginationControls position="bottom" />
     </div>
-    <UEmpty
-      v-else-if="snapshot && !rows.length && !lastError"
-      :title="summary?.summary.count ? 'No workspaces match these filters.' : 'No workspaces.'"
-      :icon="summary?.summary.count ? 'i-lucide-search-x' : 'i-lucide-folder-tree'"
-    />
-    <div v-else-if="rows.length" class="mw-card divide-y divide-default" :aria-busy="loading">
-      <DeferredContent v-for="row in rows" :key="row.workspace_id" :min-height="112" keep-mounted>
-        <WorkspaceRowCard
-          :workspace="row"
-          selectable
-          :selected="selected.has(row.workspace_id)"
-          :busy="busy"
-          @select="toggle(row.workspace_id)"
-          @open="openJob"
-        />
-      </DeferredContent>
-    </div>
-    <PaginationControls position="bottom" />
   </main>
 </template>
 
@@ -164,6 +168,7 @@ import JobDetailModal from '~/components/JobDetailModal.vue';
 import { useWorkspaces, type WorkspaceFilters } from '~/composables/useWorkspaces';
 import { useDialog } from '~/composables/useDialog';
 import { useApiErrorMessage } from '~/composables/useApiErrorMessage';
+import { useListPagination } from '~/composables/useListPagination';
 import type { WorkspacePruneResult } from '~/types/api';
 import {
   workspaceQueryKeys,
@@ -183,7 +188,11 @@ const { messageFor } = useApiErrorMessage();
 const notify = useNotification();
 const query = ref('');
 const filter = ref('all');
-const limit = ref(50);
+const filtersActive = computed(() => !!query.value.trim() || filter.value !== 'all');
+const { limit, results, applyRouteLimit, changeLimit, changeOffset } = useListPagination(
+  'workspaces_page_size',
+  updateQuery,
+);
 const offset = ref(0);
 const sortBy = ref('workspace_id');
 const sortDir = ref<'asc' | 'desc'>('desc');
@@ -319,10 +328,10 @@ const sameManagedQuery = (
   source: Record<string, unknown>,
   values: Record<string, string>,
 ): boolean => workspaceQueryKeys.every((key) => source[key] === values[key]);
-const updateQuery = async (changes: Record<string, string>): Promise<void> => {
-  if (pruning.value || ('offset' in changes && loading.value)) return;
-  await router.replace({ query: updateWorkspaceRoute(route.query, changes) });
-};
+async function updateQuery(changes: Record<string, string>): Promise<boolean> {
+  if (pruning.value || ('offset' in changes && loading.value)) return false;
+  return !(await router.replace({ query: updateWorkspaceRoute(route.query, changes) }));
+}
 let mounted = false;
 watch(
   () => route.query,
@@ -332,7 +341,7 @@ watch(
       selected.value = new Set();
     query.value = values.query ?? '';
     filter.value = values.eligibility ?? 'all';
-    limit.value = Number(values.limit ?? 50);
+    applyRouteLimit(values.limit);
     offset.value = Number(values.offset ?? 0);
     sortBy.value = values.sort_by ?? 'workspace_id';
     sortDir.value = (values.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';

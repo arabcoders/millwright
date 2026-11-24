@@ -10,8 +10,8 @@
         :total="total"
         :shown="jobs.length"
         :disabled="loading || bulkBusy"
-        @update:limit="updateQuery({ limit: String($event) })"
-        @update:offset="updateQuery({ offset: String($event) })"
+        @update:limit="changeLimit($event, position)"
+        @update:offset="changeOffset($event, position)"
       >
         <UButton
           v-if="jobs.length"
@@ -103,9 +103,11 @@
       :sort-dir="sortDir"
       :sort-options="jobSortOptions"
       sort-label="Sort jobs"
+      :filters-active="filtersActive"
       :disabled="bulkBusy"
       @update:sort-by="updateQuery({ sort_by: $event })"
       @update:sort-dir="updateQuery({ sort_dir: $event })"
+      @clear-filters="updateQuery({ query: '', kind: JOB_FILTER_ALL, status: '' })"
     >
       <USelectMenu
         value-key="value"
@@ -146,7 +148,7 @@
         >
       </template>
     </ListFilters>
-    <div class="min-w-0 space-y-4">
+    <div ref="results" class="min-w-0 scroll-mt-4 space-y-4">
       <PaginationControls position="top" />
       <div
         v-if="loading && !jobs.length"
@@ -218,6 +220,7 @@ import { useJobRequeue } from '~/composables/useJobRequeue';
 import { useLibraries } from '~/composables/useLibraries';
 import { useJobs, type BulkJobAction } from '~/composables/useJobs';
 import { useFiles } from '~/composables/useFiles';
+import { useListPagination } from '~/composables/useListPagination';
 import {
   applyFileProgress,
   applyQueuedFileJob,
@@ -254,7 +257,13 @@ const [DefinePagination, PaginationControls] = createReusableTemplate<{
 const query = ref('');
 const kind = ref(JOB_FILTER_ALL);
 const statuses = ref<string[]>([]);
-const limit = ref(50);
+const filtersActive = computed(
+  () => !!query.value.trim() || kind.value !== JOB_FILTER_ALL || statuses.value.length > 0,
+);
+const { limit, results, applyRouteLimit, changeLimit, changeOffset } = useListPagination(
+  props.dashboard ? 'dashboard_jobs_page_size' : 'jobs_page_size',
+  updateQuery,
+);
 const offset = ref(0);
 const {
   items: jobs,
@@ -569,12 +578,10 @@ const sameManagedQuery = (
   values: Record<string, string>,
 ): boolean => jobQueryKeys.every((key) => source[key] === values[key]);
 
-const updateQuery = async (changes: Record<string, string>): Promise<void> => {
-  if (bulkBusy.value || ('offset' in changes && loading.value)) return;
-  await router.replace({
-    query: updateJobRoute(route.query, changes, statusOptions),
-  });
-};
+async function updateQuery(changes: Record<string, string>): Promise<boolean> {
+  if (bulkBusy.value || ('offset' in changes && loading.value)) return false;
+  return !(await router.replace({ query: updateJobRoute(route.query, changes, statusOptions) }));
+}
 
 const loadJobs = async (): Promise<void> => {
   if (bulkBusy.value) return;
@@ -616,7 +623,7 @@ watch(
     sortBy.value = values.sort_by ?? 'created_at';
     sortDir.value = (values.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';
     offset.value = Number(values.offset ?? 0);
-    limit.value = Number(values.limit ?? 50);
+    applyRouteLimit(values.limit);
     if (!sameManagedQuery(current, values)) {
       await router.replace({
         query: updateJobRoute(current, {}, statusOptions),
