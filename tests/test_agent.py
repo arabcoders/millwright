@@ -16,8 +16,8 @@ import pytest
 from websockets.asyncio.client import ClientConnection
 from websockets.client import ClientProtocol
 from websockets.datastructures import Headers
-from websockets.exceptions import ConnectionClosedOK, InvalidStatus
-from websockets.frames import Close
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
+from websockets.frames import Close, CloseCode
 from websockets.http11 import Response
 from websockets.uri import parse_uri
 from common.actions import Action, ActionOutcome, ExtractSubtitles
@@ -1361,6 +1361,44 @@ async def test_unavailable_hub_retries(env: AgentEnv, caplog: pytest.LogCaptureF
 )
 def test_endpoint_keeps_query(value: str, expected: str) -> None:
     assert safe_endpoint(value) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("code", "base", "expected"),
+    [
+        (CloseCode.NORMAL_CLOSURE, 1.0, 1.0),
+        (CloseCode.SERVICE_RESTART, 1.0, 5.0),
+        (CloseCode.SERVICE_RESTART, 8.0, 8.0),
+    ],
+)
+async def test_websocket_reconnect_delay(
+    env: AgentEnv, monkeypatch: pytest.MonkeyPatch, code: CloseCode, base: float, expected: float
+) -> None:
+    config = make_config(env, backoff_base_s=base)
+    ws = ClientConnection(ClientProtocol(parse_uri(config.server_url)))
+    frame = Close(code, "")
+    closed = ConnectionClosedError if code == CloseCode.SERVICE_RESTART else ConnectionClosedOK
+    welcome = Welcome(timezone="UTC", active_attempts=[]).model_dump_json()
+    monkeypatch.setattr(ws, "recv", AsyncMock(side_effect=[welcome, closed(frame, frame, True)]))
+    monkeypatch.setattr(ws, "send", AsyncMock())
+    monkeypatch.setattr(ws, "close", AsyncMock())
+    conn = agent_module._WebSocketConnection(ws, config)
+    connect = AsyncMock(side_effect=[conn, ConnectionRefusedError()])
+    delays: list[float] = []
+
+    async def retry(seconds: float) -> None:
+        delays.append(seconds)
+        if len(delays) == 2:
+            agent._closed = True
+
+    agent = Agent(config, connect=connect, sleep=retry)
+    task = asyncio.create_task(agent.run())
+    try:
+        await asyncio.wait_for(task, 2)
+    finally:
+        await asyncio.wait_for(agent.aclose(), 2)
+    assert delays == [expected, base]
 
 
 @pytest.mark.asyncio

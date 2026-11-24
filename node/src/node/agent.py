@@ -56,6 +56,7 @@ from common.protocol import (
 )
 from common.protocol.messages import HealthResult
 from common.workspace import DEFAULT_HARD_SIZE_CEILING, DEFAULT_MIN_FREE_GB, resolve_workspace_path, workspace_lock
+from websockets.frames import CloseCode
 
 from node.actions import ActionsSpec, run_actions
 from node.capabilities import resource_sample
@@ -94,6 +95,7 @@ def safe_endpoint(value: str) -> str:
 
 _HANDSHAKE_TIMEOUT_S = 10.0
 _JOB_DRAIN_TIMEOUT_S = 15.0
+_RESTART_DELAY_S = 5.0
 _RECONNECT_ERROR = "Hub reconnect allowance expired."
 _REVOKED_ERROR = "Server revoked this execution attempt."
 
@@ -141,13 +143,9 @@ class _WebSocketConnection:
             payload = await self._ws.recv()
         except websockets.exceptions.ConnectionClosed as exc:
             frame = exc.rcvd or exc.sent
+            if frame is not None and frame.code == CloseCode.SERVICE_RESTART:
+                raise
             reason = (frame.reason or "No reason provided.") if frame is not None else "No close frame received."
-            if frame is not None and frame.code == 1012:
-                LOG.info(
-                    "Node hub is shutting down or restarting. Reconnecting.",
-                    extra={"operation": "node.connection.closed"},
-                )
-                return None
             LOG.info(
                 "Node hub WebSocket closed. Code: %s. Reason: %s",
                 frame.code if frame is not None else 1006,
@@ -252,6 +250,7 @@ class Agent:
                     await self._sleep(backoff)
                     backoff = min(backoff * 2, self._config.backoff_max_s)
                     continue
+                retry_delay = backoff
                 try:
                     self._welcomed = False
                     await self._session(conn)
@@ -260,14 +259,19 @@ class Agent:
                     raise
                 except websockets.exceptions.ConnectionClosed as exc:
                     frame = exc.rcvd or exc.sent
-                    reason = (
-                        "Connection dropped without a WebSocket close handshake"
-                        if exc.rcvd is None and exc.sent is None
-                        else redact(str(exc), secrets=(self._config.token,))
-                    )
-                    if frame is not None and frame.code == 1012:
-                        LOG.info("Node hub is shutting down or restarting. Reconnecting in %.1f seconds.", backoff)
+                    if frame is not None and frame.code == CloseCode.SERVICE_RESTART:
+                        retry_delay = max(backoff, _RESTART_DELAY_S)
+                        LOG.info(
+                            "Node hub is shutting down or restarting. Reconnecting in %.1f seconds.",
+                            retry_delay,
+                            extra={"operation": "node.connection.closed"},
+                        )
                     else:
+                        reason = (
+                            "Connection dropped without a WebSocket close handshake"
+                            if frame is None
+                            else redact(str(exc), secrets=(self._config.token,))
+                        )
                         LOG.warning("Node hub connection closed (%s). Reconnecting in %.1f seconds.", reason, backoff)
                 except Exception as exc:
                     LOG.error(
@@ -284,7 +288,7 @@ class Agent:
                         await asyncio.wait_for(conn.close(), _HANDSHAKE_TIMEOUT_S)
                 if self._closed:
                     break
-                await self._sleep(backoff)
+                await self._sleep(retry_delay)
                 backoff = self._config.backoff_base_s if welcomed else min(backoff * 2, self._config.backoff_max_s)
         finally:
             self._closed = True
