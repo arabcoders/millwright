@@ -11,6 +11,17 @@
       class="w-full sm:min-w-48 sm:flex-1 lg:max-w-md"
     />
     <slot />
+    <UButton
+      v-if="filtersActive"
+      color="neutral"
+      variant="outline"
+      size="sm"
+      icon="i-lucide-filter-x"
+      :disabled="disabled"
+      @click="emit('clearFilters')"
+    >
+      Clear filters
+    </UButton>
     <UDropdownMenu :items="sortItems" :content="{ align: 'end' }" :modal="false">
       <UButton
         color="neutral"
@@ -41,11 +52,13 @@ const props = defineProps<{
   sortDir: 'asc' | 'desc';
   sortOptions: Array<{ label: string; value: string }>;
   sortLabel: string;
+  filtersActive: boolean;
   disabled?: boolean;
 }>();
 const emit = defineEmits<{
   'update:sortBy': [value: string];
   'update:sortDir': [value: 'asc' | 'desc'];
+  clearFilters: [];
 }>();
 const directionIcon = computed(() =>
   props.sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down',

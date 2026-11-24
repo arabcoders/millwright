@@ -1,5 +1,5 @@
 import type { LocationQueryRaw } from 'vue-router';
-import { LIST_PAGE_SIZES } from './listPagination';
+import { listPageSize } from './listPagination';
 
 export const TRASH_FILTER_ALL = '__all__';
 export const trashSortOptions = [
@@ -35,8 +35,7 @@ export const trashRouteFilters = (source: Record<string, unknown>): Record<strin
     const normalized = offset.replace(/^0+(?=\d)/, '');
     if (normalized !== '0') values.offset = normalized;
   }
-  if (limit && LIST_PAGE_SIZES.some((size) => String(size) === limit) && limit !== '50')
-    values.limit = limit;
+  if (limit && listPageSize(limit)) values.limit = limit;
   if (sort && trashSortOptions.some((option) => option.value === sort)) values.sort_by = sort;
   if (direction === 'asc' || direction === 'desc') values.sort_dir = direction;
   return values;
@@ -47,7 +46,7 @@ export const updateTrashRoute = (
   changes: Record<string, string>,
 ): LocationQueryRaw => {
   const next = { ...source, ...changes };
-  if (trashQueryKeys.some((key) => key !== 'offset' && key in changes)) delete next.offset;
+  if (!('offset' in changes) && trashQueryKeys.some((key) => key in changes)) delete next.offset;
   return {
     ...Object.fromEntries(Object.entries(next).filter(([key]) => !trashQueryKeys.includes(key))),
     ...trashRouteFilters(next),

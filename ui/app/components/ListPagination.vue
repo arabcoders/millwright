@@ -24,43 +24,14 @@
         :disabled="disabled"
         @update:model-value="(value) => value !== undefined && emit('update:limit', value)"
       />
-      <UFieldGroup size="sm" class="min-w-0 basis-64 grow sm:basis-auto sm:grow-0">
-        <UButton
-          color="neutral"
-          variant="outline"
-          size="sm"
-          icon="i-lucide-chevron-left"
-          aria-label="Previous page"
-          :disabled="offset === 0 || disabled"
-          @click="changePage(currentPage - 1)"
-        />
-        <USelectMenu
-          :model-value="currentPage"
-          :items="pageItems"
-          value-key="value"
-          :search-input="{ placeholder: 'Find a page...' }"
-          virtualize
-          color="neutral"
-          variant="outline"
-          size="sm"
-          class="min-w-0 flex-1 sm:min-w-40"
-          :aria-label="`Jump to ${label.toLowerCase()} page`"
-          :disabled="disabled"
-          @update:model-value="changePage"
-        >
-          Page {{ currentPage.toLocaleString('en') }} of
-          {{ pageCount.toLocaleString('en') }}
-        </USelectMenu>
-        <UButton
-          color="neutral"
-          variant="outline"
-          size="sm"
-          icon="i-lucide-chevron-right"
-          aria-label="Next page"
-          :disabled="offset + limit >= total || disabled"
-          @click="changePage(currentPage + 1)"
-        />
-      </UFieldGroup>
+      <PageNavigation
+        class="basis-64 grow sm:basis-auto sm:grow-0"
+        :page="currentPage"
+        :page-count="pageCount"
+        :jump-label="`Jump to ${label.toLowerCase()} page`"
+        :disabled="disabled"
+        @change="emit('update:offset', ($event - 1) * limit)"
+      />
     </div>
     <slot name="footer" />
   </nav>
@@ -68,6 +39,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import PageNavigation from '~/components/PageNavigation.vue';
 import { LIST_PAGE_SIZES } from '~/utils/listPagination';
 
 const props = defineProps<{
@@ -89,15 +61,4 @@ const pageSizeItems: Array<{ label: string; value: number }> = LIST_PAGE_SIZES.m
 }));
 const currentPage = computed(() => Math.floor(props.offset / props.limit) + 1);
 const pageCount = computed(() => Math.max(1, Math.ceil(props.total / props.limit)));
-const pageItems = computed(() =>
-  Array.from({ length: pageCount.value }, (_, index) => ({
-    label: `Page ${index + 1}`,
-    value: index + 1,
-  })),
-);
-const changePage = (value: number | undefined): void => {
-  if (value === undefined || props.disabled) return;
-  const selected = Math.min(pageCount.value, Math.max(1, value));
-  emit('update:offset', (selected - 1) * props.limit);
-};
 </script>

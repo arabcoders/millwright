@@ -431,6 +431,8 @@ const compact = useStorage('dashboard_compact', false);
 const route = useRoute();
 const jobsLink = computed(() => {
   const filters = jobRouteFilters(route.query, dashboardJobStatusOptions);
+  delete filters.limit;
+  delete filters.offset;
   return {
     path: '/jobs',
     query: {

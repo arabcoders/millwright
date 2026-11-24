@@ -110,7 +110,7 @@ const pendingResponse = () => {
   return { promise, resolve, reject };
 };
 
-const setup = () => {
+const setup = (savedPageSize?: number) => {
   const calls: Array<{ url: string; options?: RequestInit }> = [];
   const timers = new Map<number, { callback: () => void; delay: number }>();
   let timerId = 0;
@@ -120,6 +120,8 @@ const setup = () => {
   new Function('require', 'exports', 'setTimeout', 'clearTimeout', compiled)(
     (name: string) => {
       if (name === 'vue') return { computed, ref };
+      if (name === '@vueuse/core')
+        return { useStorage: (_key: string, value: number) => ref(savedPageSize ?? value) };
       if (name === '~/utils')
         return {
           request: (url: string, options?: RequestInit) => {
@@ -224,6 +226,29 @@ test('starts selected files', async () => {
   expect(env.store.active.value).toBe(true);
   env.store.stop();
   expect(env.timers.size).toBe(0);
+});
+
+test('start restores size', async () => {
+  const env = setup(10);
+  await env.store.open(scope);
+  env.respond(async (_url, options) =>
+    Response.json(
+      options?.method === 'POST'
+        ? { ...report('preparing'), pagination: { limit: 50, offset: 0, total: 101 } }
+        : {
+            ...report('preparing'),
+            pagination: { limit: 10, offset: 0, total: 101 },
+          },
+    ),
+  );
+  await env.store.start(flow);
+  expect(env.calls.map(({ url }) => url)).toEqual([
+    '/api/libraries/7/dry-runs',
+    '/api/libraries/7/dry-runs',
+    '/api/libraries/7/dry-runs/run?limit=10&offset=0',
+  ]);
+  expect(env.store.report.value?.pagination.limit).toBe(10);
+  env.store.stop();
 });
 
 test('reopens selected report', async () => {

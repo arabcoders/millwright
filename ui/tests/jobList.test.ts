@@ -89,8 +89,8 @@ describe('Job filters', () => {
   });
 
   test('validates page sizes', () => {
-    for (const limit of ['50', '100', '200', '300', '500', '750', '999']) {
-      expect(jobRouteFilters({ limit })).toEqual(limit === '50' ? {} : { limit });
+    for (const limit of ['10', '50', '100', '200', '300', '500', '750', '999']) {
+      expect(jobRouteFilters({ limit })).toEqual({ limit });
     }
     for (const limit of ['0', '-50', '25', '400', '1000', '100.0', '0100', 'invalid', ['100']]) {
       expect(jobRouteFilters({ limit })).toEqual({});
@@ -131,13 +131,31 @@ describe('Job filters', () => {
       });
     }
     expect(
-      updateJobRoute({ status: 'queued', job: '42', limit: '999' }, { offset: '999' }),
+      updateJobRoute({ status: 'queued', job: '42' }, { limit: '10', offset: '10' }),
     ).toEqual({
       status: 'queued',
       job: '42',
-      limit: '999',
-      offset: '999',
+      limit: '10',
+      offset: '10',
     });
+  });
+
+  test('clears filters only', () => {
+    expect(
+      updateJobRoute(
+        {
+          status: 'queued',
+          query: 'movie',
+          kind: 'transcode',
+          offset: '100',
+          limit: '50',
+          sort_by: 'path',
+          sort_dir: 'asc',
+          job: '42',
+        },
+        { status: '', query: '', kind: JOB_FILTER_ALL },
+      ),
+    ).toEqual({ limit: '50', sort_by: 'path', sort_dir: 'asc', job: '42' });
   });
 
   test('normalization keeps detail', () => {
@@ -146,6 +164,7 @@ describe('Job filters', () => {
     ).toEqual({
       status: 'queued',
       offset: '50',
+      limit: '50',
       job: '42',
     });
   });

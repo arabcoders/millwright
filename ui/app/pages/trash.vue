@@ -10,8 +10,8 @@
         :total="total"
         :shown="entries.length"
         :disabled="busy"
-        @update:limit="updateQuery({ limit: String($event) })"
-        @update:offset="updateQuery({ offset: String($event) })"
+        @update:limit="changeLimit($event, position)"
+        @update:offset="changeOffset($event, position)"
       >
         <UButton
           v-if="entries.length"
@@ -91,9 +91,11 @@
       :sort-dir="sortDir"
       :sort-options="trashSortOptions"
       sort-label="Sort trash"
+      :filters-active="filtersActive"
       :disabled="mutationBusy"
       @update:sort-by="updateQuery({ sort_by: $event })"
       @update:sort-dir="updateQuery({ sort_dir: $event })"
+      @clear-filters="updateQuery({ query: '', library_id: TRASH_FILTER_ALL })"
     >
       <USelectMenu
         value-key="value"
@@ -112,7 +114,7 @@
       </template>
     </ListFilters>
 
-    <div class="space-y-3">
+    <div ref="results" class="scroll-mt-4 space-y-3">
       <PaginationControls position="top" />
       <div v-if="loading && !entries.length" class="space-y-3" aria-label="Loading trash">
         <USkeleton v-for="index in 6" :key="index" class="h-36 rounded-lg" />
@@ -275,6 +277,7 @@ import { useLibraryProgress } from '~/composables/useLibraryProgress';
 import { useEvents } from '~/composables/useEvents';
 import { useTrash, type TrashFilters } from '~/composables/useTrash';
 import { useApiErrorMessage } from '~/composables/useApiErrorMessage';
+import { useListPagination } from '~/composables/useListPagination';
 import type { MediaFileDetail, MediaFileRow, TrashEntry } from '~/types/api';
 import { formatBytes } from '~/utils';
 import { formatDate, toIsoString } from '~/utils/date';
@@ -356,7 +359,11 @@ const pageSelected = computed(
 );
 const query = ref('');
 const libraryId = ref(TRASH_FILTER_ALL);
-const limit = ref(50);
+const filtersActive = computed(() => !!query.value.trim() || libraryId.value !== TRASH_FILTER_ALL);
+const { limit, results, applyRouteLimit, changeLimit, changeOffset } = useListPagination(
+  'trash_page_size',
+  updateQuery,
+);
 const offset = ref(0);
 const sortBy = ref('trashed_at');
 const sortDir = ref<'asc' | 'desc'>('desc');
@@ -560,10 +567,10 @@ const sameManagedQuery = (
   values: Record<string, string>,
 ): boolean => trashQueryKeys.every((key) => source[key] === values[key]);
 
-const updateQuery = async (changes: Record<string, string>): Promise<void> => {
-  if (mutationBusy.value || ('offset' in changes && loading.value)) return;
-  await router.replace({ query: updateTrashRoute(route.query, changes) });
-};
+async function updateQuery(changes: Record<string, string>): Promise<boolean> {
+  if (mutationBusy.value || ('offset' in changes && loading.value)) return false;
+  return !(await router.replace({ query: updateTrashRoute(route.query, changes) }));
+}
 
 const deleteEntry = async (entry: TrashEntry): Promise<void> => {
   if (actionsBlocked.value) return;
@@ -729,7 +736,7 @@ watch(
     if (previous && !sameManagedQuery(trashRouteFilters(previous), values)) clearSelection();
     query.value = values.query ?? '';
     libraryId.value = values.library_id ?? TRASH_FILTER_ALL;
-    limit.value = Number(values.limit ?? 50);
+    applyRouteLimit(values.limit);
     offset.value = Number(values.offset ?? 0);
     sortBy.value = values.sort_by ?? 'trashed_at';
     sortDir.value = (values.sort_dir as 'asc' | 'desc' | undefined) ?? 'desc';
