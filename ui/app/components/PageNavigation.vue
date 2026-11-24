@@ -21,15 +21,23 @@
       />
 
       <template #content>
-        <div class="w-sm max-w-[calc(100vw-1rem)] space-y-3 p-3">
-          <div class="flex flex-wrap justify-center gap-1" role="group" aria-label="Nearby pages">
+        <div class="w-max max-w-[calc(100vw-1rem)] space-y-2 p-3">
+          <div
+            class="flex flex-nowrap justify-center-safe gap-1 overflow-x-auto p-1"
+            role="group"
+            aria-label="Nearby pages"
+          >
             <UButton
               v-for="number in pages"
               :key="number"
               :color="number === page ? 'primary' : 'neutral'"
               :variant="number === page ? 'soft' : 'ghost'"
               size="sm"
-              class="min-w-8 justify-center tabular-nums"
+              class="min-w-8 shrink-0 justify-center px-1 tabular-nums"
+              :class="{
+                'enabled:hover:bg-accented enabled:hover:text-highlighted focus-visible:bg-accented focus-visible:text-highlighted':
+                  number !== page,
+              }"
               :label="number.toLocaleString('en')"
               :aria-label="`Page ${number.toLocaleString('en')}`"
               :aria-current="number === page ? 'page' : undefined"
