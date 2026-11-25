@@ -139,23 +139,23 @@ test('matches shortened hashes', () => {
   expect(matchesSha(' AABBCCDD ', 'aabbccdd11223344')).toBe(true);
   expect(matchesSha('aabbccdd11223344', ' AABBCCDD ')).toBe(true);
   expect(matchesSha('aabbccdd11223344', '11223344')).toBe(false);
-  expect(
-    isInstalledGroup({ ...groups[0]!, full_sha: 'AABBCCDD', commits: [] }, ' aabbccdd11223344 '),
-  ).toBe(true);
+  expect(isInstalledGroup({ ...groups[1]!, commits: [] }, ' ABCDEF01 ')).toBe(true);
 });
 
-test('matches release commits', () => {
+test('opens containing release', () => {
   const release = {
     ...groups[1]!,
-    tag: 'nightly-build',
-    full_sha: '99887766',
-    commits: [{ ...groups[1]!.commits[0]!, full_sha: 'unknown' }],
+    full_sha: '9988776655443322',
   };
-  expect(isInstalledGroup(release, ' ABCDEF0123456789 ')).toBe(true);
+  expect(isInstalledGroup(release, ' ABCDEF0123456789 ')).toBe(false);
   expect(initialChangelogReleases([groups[0]!, release], ' ABCDEF0123456789 ')).toEqual([
     'Unreleased',
-    'nightly-build',
+    'v0.1.0-alpha.1',
   ]);
+});
+
+test('excludes unreleased heading', () => {
+  expect(isInstalledGroup(groups[0]!, 'aabbccdd')).toBe(false);
 });
 
 test('opens older matches', () => {
@@ -176,7 +176,7 @@ test('rejects unavailable hashes', () => {
     expect(matchesSha(unavailable, 'aabbccdd')).toBe(false);
     expect(matchesSha('aabbccdd', unavailable)).toBe(false);
     expect(matchesSha(unavailable, unavailable)).toBe(false);
-    expect(isInstalledGroup(groups[0]!, unavailable)).toBe(false);
+    expect(isInstalledGroup(groups[1]!, unavailable)).toBe(false);
     expect(initialChangelogReleases(groups, unavailable)).toEqual(['Unreleased']);
   }
 });
