@@ -121,8 +121,8 @@ def make_provider(
     return Provider(http=httpx.AsyncClient(transport=httpx.MockTransport(handler)), captured=captured)
 
 
-async def login(ui: httpx.AsyncClient) -> dict[str, str]:
-    resp = await ui.get("/api/auth/oidc/login")
+async def login(ui: httpx.AsyncClient, remember: bool = False) -> dict[str, str]:
+    resp = await ui.get("/api/auth/oidc/login", params={"remember_me": remember})
     assert resp.status_code == 200
     location = resp.json()["authorize_url"]
     assert location.startswith(f"{ISSUER}/auth?")
@@ -147,15 +147,20 @@ async def test_session_roundtrip(factory) -> None:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     async with factory() as db:
         row, token = await create_user_session(db, "user-1", 7, now=t0)
+        browser, browser_token = await create_user_session(db, "user-1", 7, now=t0, remember_me=False)
         await db.commit()
         assert token.startswith("mw_")
         assert row.token_hash != token
+        assert row.remember_me is True and row.expires_at == t0 + timedelta(days=7)
+        assert browser.remember_me is False and browser.expires_at == t0 + timedelta(hours=24)
 
         found = await authenticate_session(db, token, now=t0)
         assert found is not None and found.user_id == row.user_id
         assert await authenticate_session(db, "mw_bogus", now=t0) is None
         assert await authenticate_session(db, token, now=t0 + timedelta(days=6)) is not None
         assert await authenticate_session(db, token, now=t0 + timedelta(days=8)) is None
+        assert await authenticate_session(db, browser_token, now=t0 + timedelta(hours=23)) is not None
+        assert await authenticate_session(db, browser_token, now=t0 + timedelta(hours=24)) is None
 
         assert await revoke_session(db, token) is True
         assert await revoke_session(db, token) is False
@@ -179,10 +184,10 @@ def test_pending_state_single(monkeypatch) -> None:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     monkeypatch.setattr("server.core.auth.utcnow", lambda: t0)
     pending = PendingStates()
-    pending.create("state-1", "verifier", "nonce")
-    assert pending.consume("state-1") == ("verifier", "nonce")
+    pending.create("state-1", "verifier", "nonce", remember_me=False)
+    assert pending.consume("state-1") == ("verifier", "nonce", False)
     assert pending.consume("state-1") is None
-    pending.create("state-2", "verifier-2", "nonce-2")
+    pending.create("state-2", "verifier-2", "nonce-2", remember_me=False)
     assert pending.consume("state-2", now=t0 + timedelta(seconds=300)) is None
 
 
@@ -190,22 +195,22 @@ def test_pending_capacity_recovers(monkeypatch) -> None:
     now = [datetime(2026, 1, 1, tzinfo=UTC)]
     monkeypatch.setattr("server.core.auth.utcnow", lambda: now[0])
     pending = PendingStates(ttl_s=30, capacity=2)
-    pending.create("first", "verifier-1", "nonce-1")
+    pending.create("first", "verifier-1", "nonce-1", remember_me=False)
     now[0] += timedelta(seconds=10)
-    pending.create("second", "verifier-2", "nonce-2")
+    pending.create("second", "verifier-2", "nonce-2", remember_me=False)
     with pytest.raises(AuthCapacityError):
-        pending.create("rejected", "verifier-3", "nonce-3")
+        pending.create("rejected", "verifier-3", "nonce-3", remember_me=False)
     assert set(pending._states) == {"first", "second"}
 
     now[0] += timedelta(seconds=20)
-    pending.create("third", "verifier-3", "nonce-3")
+    pending.create("third", "verifier-3", "nonce-3", remember_me=False)
     assert set(pending._states) == {"second", "third"}
     assert pending.consume("first") is None
-    assert pending.consume("second") == ("verifier-2", "nonce-2")
+    assert pending.consume("second") == ("verifier-2", "nonce-2", False)
     assert pending.consume("second") is None
-    pending.create("fourth", "verifier-4", "nonce-4")
-    assert pending.consume("third") == ("verifier-3", "nonce-3")
-    assert pending.consume("fourth") == ("verifier-4", "nonce-4")
+    pending.create("fourth", "verifier-4", "nonce-4", remember_me=False)
+    assert pending.consume("third") == ("verifier-3", "nonce-3", False)
+    assert pending.consume("fourth") == ("verifier-4", "nonce-4", False)
 
 
 def test_ticket_capacity_recovers(monkeypatch) -> None:
@@ -238,10 +243,10 @@ def test_transient_purge(monkeypatch, explicit_now) -> None:
     pending = PendingStates(ttl_s=30)
     tickets = WsTickets(ttl_s=30)
     principal = Principal(user_id=1, username="operator")
-    pending.create("expired", "verifier-1", "nonce-1")
+    pending.create("expired", "verifier-1", "nonce-1", remember_me=False)
     expired = tickets.issue(principal)
     now[0] += timedelta(seconds=1)
-    pending.create("valid", "verifier-2", "nonce-2")
+    pending.create("valid", "verifier-2", "nonce-2", remember_me=False)
     valid = tickets.issue(principal)
     checked = now[0] + timedelta(seconds=29)
     if explicit_now:
@@ -255,7 +260,7 @@ def test_transient_purge(monkeypatch, explicit_now) -> None:
     assert set(tickets._tickets) == {valid}
     assert pending.consume("expired", now=checked) is None
     assert tickets.consume(expired, now=checked) is None
-    assert pending.consume("valid", now=checked) == ("verifier-2", "nonce-2")
+    assert pending.consume("valid", now=checked) == ("verifier-2", "nonce-2", False)
     assert tickets.consume(valid, now=checked) == principal
 
 
@@ -282,10 +287,10 @@ async def test_auth_idle_cleanup(factory, monkeypatch) -> None:
     )
     watchers = {row.token_hash: stack.ws_tickets.watch_session(row.token_hash) for row in (expired, boundary, active)}
     try:
-        stack.pending.create("expired", "verifier-1", "nonce-1")
+        stack.pending.create("expired", "verifier-1", "nonce-1", remember_me=False)
         stack.ws_tickets.issue(principal)
         now[0] += timedelta(seconds=1)
-        stack.pending.create("valid", "verifier-2", "nonce-2")
+        stack.pending.create("valid", "verifier-2", "nonce-2", remember_me=False)
         valid_ticket = stack.ws_tickets.issue(principal)
         now[0] = t0
         await stack.cleanup()
@@ -301,7 +306,7 @@ async def test_auth_idle_cleanup(factory, monkeypatch) -> None:
             found = await authenticate_session(db, active_token)
             assert found is not None
             assert found.user_id == active.user_id
-        assert stack.pending.consume("valid") == ("verifier-2", "nonce-2")
+        assert stack.pending.consume("valid") == ("verifier-2", "nonce-2", False)
         assert stack.ws_tickets.consume(valid_ticket) == principal
         stack.ws_tickets.revoke_session(active.token_hash)
         assert watchers[active.token_hash].is_set()
@@ -366,10 +371,11 @@ async def test_ticket_api_capacity(factory, monkeypatch) -> None:
 async def test_oidc_happy_path(factory, monkeypatch: pytest.MonkeyPatch) -> None:
     now = datetime.now(UTC)
     monkeypatch.setattr("server.core.auth.utcnow", lambda: now)
+    monkeypatch.setattr("server.api.auth.utcnow", lambda: now)
     provider = make_provider()
     app = create_app(factory, config=make_config(), http_client=provider.http)
     async with make_ui(app) as ui, provider.http:
-        response = await ui.get("/api/auth/oidc/login")
+        response = await ui.get("/api/auth/oidc/login", params={"remember_me": "true"})
         assert response.status_code == 200
         cookie = response.headers["set-cookie"]
         assert "oidc_state=" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie
@@ -380,15 +386,17 @@ async def test_oidc_happy_path(factory, monkeypatch: pytest.MonkeyPatch) -> None
         assert "oidc_state" not in ui.cookies
         token = ui.cookies["mw_session"]
         assert "HttpOnly" in resp.headers["set-cookie"] and "SameSite=lax" in resp.headers["set-cookie"]
+        assert "Max-Age=2592000" in resp.headers["set-cookie"]
         me = (await ui.get("/api/auth/me")).json()
         assert me["username"] == "operator" and me["auth_method"] == "session"
         assert (await ui.patch("/api/settings", json={"session_ttl_days": 1})).status_code == 200
-        following = await callback_after_login(ui, provider)
+        following = await callback_after_login(ui, provider, remember=True)
         assert following.status_code == 303
+        assert "Max-Age=86400" in following.headers["set-cookie"]
         async with factory() as db:
             prior = await authenticate_session(db, token)
             current = await authenticate_session(db, ui.cookies["mw_session"])
-            assert prior is not None and prior.expires_at == now + timedelta(days=7)
+            assert prior is not None and prior.expires_at == now + timedelta(days=30)
             assert current is not None and current.expires_at == now + timedelta(days=1)
             assert current.user_id == prior.user_id == me["id"]
         ticket = (await ui.post("/api/auth/ws-ticket")).json()
@@ -396,6 +404,24 @@ async def test_oidc_happy_path(factory, monkeypatch: pytest.MonkeyPatch) -> None
         logout = await ui.post("/api/auth/logout")
         assert logout.status_code == 204 and "set-cookie" not in logout.headers
         assert (await ui.get("/api/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_oidc_remember_state(factory, monkeypatch) -> None:
+    now = datetime.now(UTC)
+    monkeypatch.setattr("server.core.auth.utcnow", lambda: now)
+    monkeypatch.setattr("server.api.auth.utcnow", lambda: now)
+    provider = make_provider()
+    app = create_app(factory, config=make_config(), http_client=provider.http)
+    async with make_ui(app) as ui, provider.http:
+        response = await callback_after_login(ui, provider, remember_me=True)
+        assert response.status_code == 303
+        cookies = response.headers.get_list("set-cookie")
+        session_cookie = next(cookie for cookie in cookies if cookie.startswith("mw_session="))
+        async with factory() as db:
+            session = (await db.scalars(select(SessionRow))).one()
+        assert session.remember_me is False and session.expires_at == now + timedelta(hours=24)
+        assert "max-age" not in session_cookie.lower() and "expires=" not in session_cookie.lower()
 
 
 @pytest.mark.asyncio
@@ -523,8 +549,10 @@ async def test_post_login_handoff(factory) -> None:
         assert me.status_code == 200 and me.json()["username"] == "operator"
 
 
-async def callback_after_login(ui: httpx.AsyncClient, provider: Provider, **params) -> httpx.Response:
-    query = await login(ui)
+async def callback_after_login(
+    ui: httpx.AsyncClient, provider: Provider, *, remember: bool = False, **params
+) -> httpx.Response:
+    query = await login(ui, remember)
     if "nonce" not in params:
         provider.captured["nonce"] = query["nonce"]
     merged = {"code": "abc", "state": query["state"], **params}
@@ -692,7 +720,7 @@ async def test_auth_persisted_restart(monkeypatch) -> None:
             )
         )
         old_pending = PendingStates()
-        old_pending.create("old-state", "old-verifier", "old-nonce")
+        old_pending.create("old-state", "old-verifier", "old-nonce", remember_me=False)
         engine, reopened = create_engine_and_session(factory.kw["bind"].url)
         try:
             stack = AuthStack(

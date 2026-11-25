@@ -147,7 +147,7 @@
                 required
                 class="w-full"
             /></UFormField>
-            <UFormField label="Login session lifetime (days)" required
+            <UFormField label="Remember me duration (days)" help="Applies to new sign-ins" required
               ><UInput
                 v-model.number="draft.session_ttl_days"
                 type="number"

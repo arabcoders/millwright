@@ -77,6 +77,7 @@
               />
             </UFormField>
           </template>
+          <UCheckbox v-model="rememberMe" label="Remember me" :disabled="busy" />
           <div
             class="grid gap-3"
             :class="
@@ -169,6 +170,7 @@ const serverStatus = ref<AuthStatus | null>(null);
 const username = ref('');
 const password = ref('');
 const confirmation = ref('');
+const rememberMe = ref(false);
 const error = ref('');
 const redirecting = ref(false);
 const signingIn = ref(false);
@@ -205,7 +207,12 @@ const signIn = async (): Promise<void> => {
   }
   signingIn.value = true;
   try {
-    await auth.login(username.value, password.value, serverStatus.value.setup_required);
+    await auth.login(
+      username.value,
+      password.value,
+      serverStatus.value.setup_required,
+      rememberMe.value,
+    );
     password.value = '';
     confirmation.value = '';
     await navigateTo('/', { replace: true });
@@ -219,7 +226,7 @@ const signIn = async (): Promise<void> => {
 const signInExternal = async (): Promise<void> => {
   error.value = '';
   redirecting.value = true;
-  const result = await auth.oidcLogin();
+  const result = await auth.oidcLogin(rememberMe.value);
   if (result.ok) {
     window.location.href = result.authorize_url;
   } else {

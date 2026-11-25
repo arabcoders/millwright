@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 SESSION_PREFIX = "mw_"
 TICKET_PREFIX = "wst_"
+BROWSER_SESSION_TTL = timedelta(hours=24)
 
 
 class AuthCapacityError(Exception):
@@ -31,15 +32,21 @@ async def create_session(
     db: AsyncSession,
     user_id: int,
     ttl_days: int,
+    *,
+    remember_me: bool,
     now: datetime | None = None,
+    expires_at: datetime | None = None,
 ) -> tuple[SessionRow, str]:
     token = SESSION_PREFIX + secrets.token_urlsafe(32)
     created = now if now is not None else utcnow()
+    if expires_at is None:
+        expires_at = created + (timedelta(days=ttl_days) if remember_me else BROWSER_SESSION_TTL)
     row = SessionRow(
         token_hash=hash_token(token),
         user_id=user_id,
         created_at=created,
-        expires_at=created + timedelta(days=ttl_days),
+        expires_at=expires_at,
+        remember_me=remember_me,
     )
     db.add(row)
     await db.flush()
@@ -72,6 +79,7 @@ class _Ticket:
 class _Pending:
     verifier: str
     nonce: str
+    remember_me: bool
     expires_at: datetime
 
 
@@ -132,20 +140,22 @@ class PendingStates:
         self.capacity = capacity
         self._states: dict[str, _Pending] = {}
 
-    def create(self, state: str, verifier: str, nonce: str) -> None:
+    def create(self, state: str, verifier: str, nonce: str, *, remember_me: bool) -> None:
         now = utcnow()
         self.purge(now)
         if len(self._states) >= self.capacity:
             raise AuthCapacityError("Too many pending logins. Try again later.")
-        self._states[state] = _Pending(verifier=verifier, nonce=nonce, expires_at=now + timedelta(seconds=self.ttl_s))
+        self._states[state] = _Pending(
+            verifier=verifier, nonce=nonce, remember_me=remember_me, expires_at=now + timedelta(seconds=self.ttl_s)
+        )
 
-    def consume(self, state: str, now: datetime | None = None) -> tuple[str, str] | None:
+    def consume(self, state: str, now: datetime | None = None) -> tuple[str, str, bool] | None:
         checked = now if now is not None else utcnow()
         self.purge(checked)
         entry = self._states.pop(state, None)
         if entry is None or entry.expires_at <= checked:
             return None
-        return entry.verifier, entry.nonce
+        return entry.verifier, entry.nonce, entry.remember_me
 
     def purge(self, now: datetime | None = None) -> None:
         checked = now if now is not None else utcnow()

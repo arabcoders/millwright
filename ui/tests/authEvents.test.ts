@@ -261,6 +261,7 @@ test('setup establishes session', async () => {
     expect(JSON.parse(String(call.options.body))).toEqual({
       username: 'new-user',
       password: 'password',
+      remember_me: false,
     });
     expect(call.options.credentials).toBe('same-origin');
     expect(new Headers(call.options.headers).get('X-Millwright-Request')).toBe('1');
