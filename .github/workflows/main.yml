@@ -248,7 +248,7 @@ jobs:
                   ...repo,
                   basehead: `${baseTag}...${tag}`,
                   per_page: 100,
-                })
+                }, ({ data }) => data.commits)
               : await github.paginate(github.rest.repos.listCommits, {
                   ...repo,
                   sha: tag,
