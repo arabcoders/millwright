@@ -51,7 +51,7 @@ def api_client(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
     return httpx.AsyncClient(*args, headers=headers, **kwargs)
 
 
-async def create_user_session(db, username, ttl_days, now=None):
+async def create_user_session(db, username, ttl_days, now=None, *, remember_me=True):
     from server.core.auth import create_session, hash_password
     from server.models import User
 
@@ -60,7 +60,7 @@ async def create_user_session(db, username, ttl_days, now=None):
         user = User(username=username, password_hash=hash_password("test-password"))
         db.add(user)
         await db.flush()
-    return await create_session(db, user.id, ttl_days, now=now)
+    return await create_session(db, user.id, ttl_days, remember_me=remember_me, now=now)
 
 
 async def probe_media(fs: LibraryFS, media_id: int) -> ProbeResult:

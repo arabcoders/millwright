@@ -103,10 +103,15 @@ export const useAuth = () => {
     return response.json();
   };
 
-  const login = async (username: string, password: string, setup = false): Promise<void> => {
+  const login = async (
+    username: string,
+    password: string,
+    setup = false,
+    rememberMe = false,
+  ): Promise<void> => {
     const response = await request(setup ? '/api/auth/setup' : '/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, remember_me: rememberMe }),
     });
     await ensure_api_success(response);
     const me = (await response.json()) as MeResponse;
@@ -135,9 +140,9 @@ export const useAuth = () => {
     announceChange();
   };
 
-  const oidcLogin = async (): Promise<OidcLoginResponse> => {
+  const oidcLogin = async (rememberMe = false): Promise<OidcLoginResponse> => {
     try {
-      const response = await request('/api/auth/oidc/login');
+      const response = await request(`/api/auth/oidc/login?remember_me=${rememberMe}`);
       await ensure_api_success(response);
       const { authorize_url } = (await response.json()) as { authorize_url: string };
       return { ok: true, authorize_url };

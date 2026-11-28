@@ -71,7 +71,10 @@ export default defineNuxtConfig({
     head: {
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1.0, maximum-scale=1.0' },
+        {
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover',
+        },
         { name: 'theme-color', content: '#020817' },
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
@@ -105,6 +108,10 @@ export default defineNuxtConfig({
   },
   nitro: {
     sourceMap: false === isProd,
+    prerender: {
+      // The `/` route already writes `index.html`.
+      ignore: ['/index.html'],
+    },
     externals: {
       inline: ['h3'],
     },

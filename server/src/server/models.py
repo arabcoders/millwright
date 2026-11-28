@@ -369,6 +369,7 @@ class SessionRow(Base):
     token_hash: Mapped[str] = mapped_column(String, unique=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", name="sessions_user_id_fkey"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    remember_me: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
 # Missing rows mean enabled. Disabled plugins are not loaded.

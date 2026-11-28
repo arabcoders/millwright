@@ -165,6 +165,7 @@
                     }"
                   />
                   <div class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col gap-4">
+                    <NewVersion />
                     <UAlert
                       v-if="systemLoaded && !dateTimezone"
                       color="error"
@@ -311,6 +312,7 @@ import { useMediaQuery, useMounted, useStorage } from '@vueuse/core';
 import { useAuth } from '~/composables/useAuth';
 import { useBackground } from '~/composables/useBackground';
 import AppRoot from '~/components/AppRoot.vue';
+import NewVersion from '~/components/NewVersion.vue';
 import ThemeButton from '~/components/ThemeButton.vue';
 import { formatPageTitle, to_api_error, uri } from '~/utils';
 import { getSidebarSwipeMode } from '~/utils/sidebarSwipe';

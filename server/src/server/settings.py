@@ -50,7 +50,7 @@ class OperationalSettings(BaseModel):
     mkv_stats_location: ExecutionLocation = ExecutionLocation.LOCAL
     min_free_gb: float = Field(default=DEFAULT_MIN_FREE_GB, ge=0, allow_inf_nan=False)
     job_retention_days: int = Field(default=30, ge=0)
-    session_ttl_days: int = Field(default=7, ge=1)
+    session_ttl_days: int = Field(default=30, ge=1)
     scanner: ScannerConfig = Field(default_factory=ScannerConfig)
     playback: PlaybackConfig = Field(default_factory=PlaybackConfig)
 

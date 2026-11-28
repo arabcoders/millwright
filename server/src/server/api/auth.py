@@ -232,6 +232,7 @@ def check_browser_request(request: Request) -> None:
 class LoginBody(BaseModel):
     username: str = Field(min_length=1, max_length=100, pattern=r"^\S(?:.*\S)?$")
     password: str = Field(min_length=1, max_length=1024, repr=False)
+    remember_me: bool = False
 
 
 class PasswordChangeBody(BaseModel):
@@ -239,11 +240,17 @@ class PasswordChangeBody(BaseModel):
     password: str = Field(min_length=1, max_length=1024, repr=False)
 
 
-def _set_session(response: Response, request: Request, token: str, days: int) -> None:
+def _set_session(response: Response, request: Request, token: str, session: SessionRow) -> None:
+    max_age = None
+    expires = None
+    if session.remember_me:
+        max_age = max(0, int((session.expires_at - utcnow()).total_seconds()))
+        expires = session.expires_at
     response.set_cookie(
         SESSION_COOKIE,
         token,
-        max_age=days * 86400,
+        max_age=max_age,
+        expires=expires,
         httponly=True,
         samesite="lax",
         secure=request.url.scheme == "https",
@@ -335,10 +342,15 @@ def auth_router(stack: AuthStack) -> APIRouter:
             user = User(username=body.username, password_hash=password_hash)
             db.add(user)
             await db.flush()
-            _, token = await create_session(db, user.id, request.app.state.settings.current.session_ttl_days)
+            session, token = await create_session(
+                db,
+                user.id,
+                request.app.state.settings.current.session_ttl_days,
+                remember_me=body.remember_me,
+            )
             await db.commit()
         response = JSONResponse({"id": user.id, "username": user.username, "auth_method": "session"})
-        _set_session(response, request, token, request.app.state.settings.current.session_ttl_days)
+        _set_session(response, request, token, session)
         return response
 
     @router.post("/login", summary="Sign in with a username and password")
@@ -364,10 +376,15 @@ def auth_router(stack: AuthStack) -> APIRouter:
             current = await db.scalar(select(User).where(User.id == user.id).with_for_update())
             if current is None or current.password_hash != old_hash:
                 raise HTTPException(401, "Invalid username or password.")
-            _, token = await create_session(db, current.id, request.app.state.settings.current.session_ttl_days)
+            session, token = await create_session(
+                db,
+                current.id,
+                request.app.state.settings.current.session_ttl_days,
+                remember_me=body.remember_me,
+            )
             await db.commit()
         response = JSONResponse({"id": current.id, "username": current.username, "auth_method": "session"})
-        _set_session(response, request, token, request.app.state.settings.current.session_ttl_days)
+        _set_session(response, request, token, session)
         return response
 
     @router.post("/change-password", summary="Change your password")
@@ -390,7 +407,8 @@ def auth_router(stack: AuthStack) -> APIRouter:
                 if not valid:
                     raise HTTPException(403, "Current password is incorrect.")
                 password_hash = await drain(asyncio.create_task(asyncio.to_thread(hash_password, body.password)))
-            if await authenticate_session(db, request.cookies[SESSION_COOKIE]) is None:
+            rotating = await authenticate_session(db, request.cookies[SESSION_COOKIE])
+            if rotating is None:
                 raise HTTPException(401, "Invalid or expired session.")
             user.password_hash = password_hash
             hashes = list(
@@ -398,10 +416,16 @@ def auth_router(stack: AuthStack) -> APIRouter:
                     delete(SessionRow).where(SessionRow.user_id == user.id).returning(SessionRow.token_hash)
                 )
             )
-            _, token = await create_session(db, user.id, request.app.state.settings.current.session_ttl_days)
+            session, token = await create_session(
+                db,
+                user.id,
+                request.app.state.settings.current.session_ttl_days,
+                remember_me=rotating.remember_me,
+                expires_at=rotating.expires_at,
+            )
             await _commit_and_revoke(request, db, hashes)
         response = JSONResponse({"id": user.id, "username": user.username, "auth_method": "session"})
-        _set_session(response, request, token, request.app.state.settings.current.session_ttl_days)
+        _set_session(response, request, token, session)
         return response
 
     @router.post("/reset-password", status_code=204, summary="Reset an account password")
@@ -423,7 +447,7 @@ def auth_router(stack: AuthStack) -> APIRouter:
         return Response(status_code=204)
 
     @router.get("/oidc/login", summary="Start an OIDC login")
-    async def oidc_login() -> Response:
+    async def oidc_login(remember_me: Annotated[bool, Query()] = False) -> Response:
         if stack.oidc is None:
             return JSONResponse(status_code=404, content={"error": "OIDC is not configured."})
         if not stack.oidc.config.username:
@@ -441,7 +465,7 @@ def auth_router(stack: AuthStack) -> APIRouter:
             )
         redirect_url, state, nonce, verifier = await stack.oidc.begin()
         try:
-            stack.pending.create(state, verifier, nonce)
+            stack.pending.create(state, verifier, nonce, remember_me=remember_me)
         except AuthCapacityError as exc:
             return JSONResponse(status_code=429, content={"error": str(exc)})
         secure = config.auth.oidc is not None and config.auth.oidc.redirect_uri.startswith("https://")
@@ -488,7 +512,7 @@ def auth_router(stack: AuthStack) -> APIRouter:
             return JSONResponse(status_code=400, content={"error": "unknown or expired state"})
         if not code:
             return JSONResponse(status_code=400, content={"error": "missing code"})
-        verifier, nonce = pending
+        verifier, nonce, remember_me = pending
         try:
             await stack.oidc.finish(code, verifier, nonce)
         except (OidcError, httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
@@ -504,11 +528,16 @@ def auth_router(stack: AuthStack) -> APIRouter:
                     else "Set auth.oidc.username to an existing Millwright username."
                 )
                 return JSONResponse(status_code=503, content={"error": message})
-            _, token = await create_session(db, user.id, request.app.state.settings.current.session_ttl_days)
+            session, token = await create_session(
+                db,
+                user.id,
+                request.app.state.settings.current.session_ttl_days,
+                remember_me=remember_me,
+            )
             await db.commit()
         target = config.auth.oidc.post_login_url if config.auth.oidc is not None else None
         response = RedirectResponse(target or "/", status_code=303)
-        _set_session(response, request, token, request.app.state.settings.current.session_ttl_days)
+        _set_session(response, request, token, session)
         return response
 
     @router.get("/me", summary="Show the current session")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -42,10 +42,10 @@ async def test_setup_concurrency(database_factory, monkeypatch) -> None:
     issuing, release = asyncio.Event(), asyncio.Event()
     tasks = []
 
-    async def delayed_session(db, user_id, ttl_days):
+    async def delayed_session(db, user_id, ttl_days, *, remember_me):
         issuing.set()
         await release.wait()
-        return await create_session(db, user_id, ttl_days)
+        return await create_session(db, user_id, ttl_days, remember_me=remember_me)
 
     monkeypatch.setattr("server.api.auth.create_session", delayed_session)
     async with browser(app) as first, browser(app) as second:
@@ -132,6 +132,92 @@ async def test_local_login_protection(database_factory) -> None:
         assert (await client.post("/api/auth/logout", headers=KEY)).status_code == 400
         assert (await client.post("/api/auth/logout", headers={"Sec-Fetch-Site": "none"})).status_code == 204
         assert (await client.get("/api/auth/me")).status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("remember_me", "lifetime"),
+    [(False, timedelta(hours=24)), (True, timedelta(days=30))],
+)
+async def test_login_remember_selection(database_factory, monkeypatch, remember_me, lifetime) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr("server.core.auth.utcnow", lambda: now)
+    monkeypatch.setattr("server.api.auth.utcnow", lambda: now)
+    app = create_app(database_factory, config=ServerConfig(api_key="test-key"))
+    async with database_factory() as db:
+        db.add(User(username="operator", password_hash=hash_password("test-password")))
+        await db.commit()
+    async with browser(app) as client:
+        response = await client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "test-password", "remember_me": remember_me},
+        )
+        header = response.headers["set-cookie"]
+        assert response.status_code == 200
+        async with database_factory() as db:
+            session = (await db.scalars(select(SessionRow))).one()
+    assert session.remember_me is remember_me
+    assert session.expires_at == now + lifetime
+    if remember_me:
+        assert f"Max-Age={int(lifetime.total_seconds())}" in header and "expires=" in header.lower()
+    else:
+        assert "max-age" not in header.lower() and "expires=" not in header.lower()
+
+
+@pytest.mark.asyncio
+async def test_setup_remember_selection(database_factory, monkeypatch) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr("server.core.auth.utcnow", lambda: now)
+    monkeypatch.setattr("server.api.auth.utcnow", lambda: now)
+    app = create_app(database_factory, config=ServerConfig(api_key="test-key"))
+    async with browser(app) as client:
+        response = await client.post(
+            "/api/auth/setup",
+            json={"username": "operator", "password": "test-password", "remember_me": True},
+        )
+        assert response.status_code == 200
+        assert "Max-Age=2592000" in response.headers["set-cookie"]
+        async with database_factory() as db:
+            session = (await db.scalars(select(SessionRow))).one()
+    assert session.remember_me is True and session.expires_at == now + timedelta(days=30)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("remember_me", [False, True])
+async def test_change_preserves_session(database_factory, monkeypatch, remember_me) -> None:
+    now = [datetime(2026, 1, 1, tzinfo=UTC)]
+    monkeypatch.setattr("server.core.auth.utcnow", lambda: now[0])
+    monkeypatch.setattr("server.api.auth.utcnow", lambda: now[0])
+    app = create_app(database_factory, config=ServerConfig(api_key="test-key"))
+    async with database_factory() as db:
+        db.add(User(username="operator", password_hash=hash_password("test-password")))
+        await db.commit()
+    async with browser(app) as client:
+        login = await client.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "test-password", "remember_me": remember_me},
+        )
+        assert login.status_code == 200
+        async with database_factory() as db:
+            original = (await db.scalars(select(SessionRow))).one()
+        assert original.remember_me is remember_me
+        now[0] += timedelta(hours=1)
+        changed = await client.post(
+            "/api/auth/change-password",
+            json={"current_password": "test-password", "password": "new-password"},
+        )
+        assert changed.status_code == 200
+        header = changed.headers["set-cookie"]
+        async with database_factory() as db:
+            current = (await db.scalars(select(SessionRow))).one()
+        assert current.id != original.id and current.token_hash != original.token_hash
+        assert current.remember_me is remember_me
+        assert current.expires_at == original.expires_at
+        if remember_me:
+            assert "Max-Age=2588400" in header and "expires=" in header.lower()
+        else:
+            assert "max-age" not in header.lower() and "expires=" not in header.lower()
+        assert (await client.get("/api/auth/me")).status_code == 200
 
 
 @pytest.mark.asyncio
@@ -296,10 +382,10 @@ async def test_login_reset_order(database_factory, monkeypatch) -> None:
         await db.commit()
     issuing, release = asyncio.Event(), asyncio.Event()
 
-    async def delayed_session(db, user_id, ttl_days):
+    async def delayed_session(db, user_id, ttl_days, *, remember_me):
         issuing.set()
         await release.wait()
-        return await create_session(db, user_id, ttl_days)
+        return await create_session(db, user_id, ttl_days, remember_me=remember_me)
 
     monkeypatch.setattr("server.api.auth.create_session", delayed_session)
     tasks = []

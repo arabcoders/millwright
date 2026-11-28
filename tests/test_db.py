@@ -28,8 +28,25 @@ def test_baseline_migration() -> None:
         engine, _ = create_engine_and_session(url)
         try:
             config = migration_config(engine)
+            command.upgrade(config, "312c7c63441f")
+            expiry = utcnow()
+            with sync.begin() as connection:
+                user_id = connection.scalar(
+                    insert(User).values(username="existing", password_hash="existing-hash").returning(User.id)
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO sessions (user_id, token_hash, expires_at) VALUES (:user, 'existing-session', :expiry)"
+                    ),
+                    {"user": user_id, "expiry": expiry},
+                )
             command.upgrade(config, "head")
             with sync.begin() as connection:
+                assert connection.execute(
+                    select(SessionRow.remember_me, SessionRow.expires_at).where(
+                        SessionRow.token_hash == "existing-session"
+                    )
+                ).one() == (True, expiry)
                 connection.execute(
                     text(
                         "INSERT INTO nodes (name, display_name, token_hash, capabilities, state, max_concurrency, transcode_limit) "

@@ -71,16 +71,20 @@ export const matchesSha = (value: string, installed: string): boolean => {
 };
 
 export const isInstalledGroup = (group: ChangelogGroup, installedSha: string): boolean =>
-  matchesSha(group.full_sha, installedSha) ||
-  group.commits.some(
-    (commit) => matchesSha(commit.full_sha, installedSha) || matchesSha(commit.sha, installedSha),
-  );
+  group.tag !== 'Unreleased' && matchesSha(group.full_sha, installedSha);
 
 export const initialChangelogReleases = (
   groups: ChangelogGroup[],
   installedSha: string,
 ): string[] => {
-  const installedIndex = groups.findIndex((group) => isInstalledGroup(group, installedSha));
+  const installedIndex = groups.findIndex(
+    (group) =>
+      matchesSha(group.full_sha, installedSha) ||
+      group.commits.some(
+        (commit) =>
+          matchesSha(commit.full_sha, installedSha) || matchesSha(commit.sha, installedSha),
+      ),
+  );
   return groups.slice(0, Math.max(0, installedIndex) + 1).map((group) => group.tag);
 };
 
